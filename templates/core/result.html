@@ -1,0 +1,41 @@
+{% extends "core/base.html" %}
+{% block title %}Result — PetroLearn{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="done-card">
+    {% if correct %}
+    <div class="done-emoji">🔥</div>
+    <div class="done-title">Correct!</div>
+    {% else %}
+    <div class="done-emoji">💪</div>
+    <div class="done-title">Not quite!</div>
+    {% endif %}
+    <div class="done-sub">{{ feedback }}</div>
+    <div class="done-sub">You earned <strong>+{{ xp_earned }} XP</strong></div>
+    <div class="done-sub">Topic {{ topic_number }} of {{ total_topics }} complete</div>
+  </div>
+
+  {% if is_last_topic %}
+  <div class="done-card" style="margin-top:16px">
+    <div class="done-emoji">🎉</div>
+    <div class="done-title">Session Complete!</div>
+    <div class="done-sub">You completed all {{ total_topics }} topics for this week. See you next week!</div>
+  </div>
+  <a href="{% url 'dashboard' %}" class="btn btn-primary btn-full" style="margin-top:14px">Back to Dashboard →</a>
+
+  {% else %}
+  <div style="margin-top:16px">
+    <p style="margin-bottom:8px">Up next: <strong>{{ next_topic_name }}</strong></p>
+   <form method="POST" action="{% url 'next_topic' %}">
+  {% csrf_token %}
+  <input type="hidden" name="topic_session_id" value="{{ topic_session.id }}">
+  <input type="hidden" name="next_topic_index" value="{{ next_topic_index }}">
+  <button type="submit" class="btn btn-primary">Start Next Topic →</button>
+</form>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

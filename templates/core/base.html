@@ -1,0 +1,40 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}PetroLearn{% endblock %}</title>
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'core/css/main.css' %}">
+</head>
+<body>
+
+{% if user.is_authenticated %}
+<nav class="navbar">
+  <a href="{% url 'dashboard' %}" class="nav-logo">🛢️ PetroLearn</a>
+  <div class="nav-links">
+    <a href="{% url 'dashboard' %}" class="nav-link">Home</a>
+    <a href="{% url 'timetable' %}" class="nav-link">Timetable</a>
+    <a href="{% url 'leaderboard' %}" class="nav-link">Leaderboard</a>
+    <a href="{% url 'logout' %}" class="nav-link">Logout</a>
+  </div>
+</nav>
+{% endif %}
+
+{% if messages %}
+<div class="messages">
+  {% for message in messages %}
+  <div class="message {{ message.tags }}">{{ message }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<main class="main-content">
+  {% block content %}{% endblock %}
+</main>
+
+
+{% block extra_js %}{% endblock %}
+</body>
+</html>

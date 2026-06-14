@@ -1,0 +1,56 @@
+{% extends "core/base.html" %}
+{% block title %}{{ entry.course_code }} — PetroLearn{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="session-header">
+    <div class="ai-avatar">🤖</div>
+    <div>
+      <div class="session-title">{{ entry.course_title }}</div>
+      <div class="session-sub">{{ entry.course_code }} · Week {{ entry.week_number }} of {{ entry.total_weeks }} · PetroLearn AI</div>
+    </div>
+    <span class="badge badge-green live-badge">LIVE</span>
+  </div>
+
+  {% if error %}
+  <div style="color:red; padding:10px;">{{ error }}</div>
+  {% endif %}
+
+  {% if session %}
+  <div class="prog-bar" style="margin:16px 0">
+    <div class="prog-fill" style="width:{% widthratio topic_number total_topics 100 %}%"></div>
+  </div>
+  <p class="prog-label">Topic {{ topic_number }} of {{ total_topics }}: {{ topic_name }}</p>
+  {% endif %}
+
+  {% if lecture %}
+  <div class="chat-box">
+    <div class="msg ai">{{ lecture|safe }}</div>
+  </div>
+  <form method="POST" action="{% url 'quiz' topic_session.id %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary" style="margin-top:16px">Take Quiz →</button>
+  </form>
+
+  {% elif intro %}
+  <div class="chat-box">
+    <div class="msg ai">{{ intro|safe }}</div>
+  </div>
+  <form method="POST" action="{% url 'session' entry.course_code %}">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="show_lecture">
+    <input type="hidden" name="topic_session_id" value="{{ topic_session.id }}">
+    <button type="submit" class="btn btn-primary" style="margin-top:16px">Continue to Lecture →</button>
+  </form>
+
+  {% else %}
+  <form method="POST" action="{% url 'session' entry.course_code %}">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="start">
+    <button type="submit" class="btn btn-primary">Start Session</button>
+  </form>
+  {% endif %}
+
+</div>
+{% endblock %}

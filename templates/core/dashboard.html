@@ -1,0 +1,103 @@
+{% extends "core/base.html" %}
+{% block title %}Dashboard — PetroLearn{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <!-- Greeting -->
+  <div class="greeting-section">
+    <h2 class="greeting" id="greeting">Hey, {{ user.first_name }}! 👋</h2>
+    <p class="greeting-sub">
+      {% if profile.streak > 0 %}
+        You're on a 🔥 {{ profile.streak }}-day streak. Don't break it today!
+      {% else %}
+        Start a session today to begin your streak!
+      {% endif %}
+    </p>
+  </div>
+
+  <!-- Stats row -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-val">🔥 {{ profile.streak }}</div>
+      <div class="stat-lbl">Day streak</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val">{{ profile.xp }}</div>
+      <div class="stat-lbl">Total XP</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val">{{ sessions_done }}</div>
+      <div class="stat-lbl">Sessions done</div>
+    </div>
+  </div>
+
+  <!-- Today's session -->
+  {% if today_entry %}
+  <div class="today-card">
+    <h3>Today's session 📚</h3>
+    <p>{{ today_entry.course_code }} — {{ today_entry.course_title }}<br>
+    <small>{{ today_entry.day }} · {{ today_entry.time }} · Lecture + quiz · ~20 mins · +50 XP</small></p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a href="{% url 'session' today_entry.course_code %}" class="btn btn-white">Start session →</a>
+      <form method="post" action="{% url 'reschedule' today_entry.id %}" style="margin:0">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-white-outline">Reschedule</button>
+      </form>
+    </div>
+  </div>
+  {% else %}
+  <div class="today-card today-done">
+    <h3>All sessions done for today! 🎉</h3>
+    <p>Great work. Come back tomorrow to keep your streak going.</p>
+  </div>
+  {% endif %}
+
+  <!-- Course list -->
+  <p class="section-label">Your courses — {{ profile.level }}L · Semester {{ profile.semester }}</p>
+  <div class="course-list">
+    {% for course in courses %}
+    <a href="{% url 'session' course.code %}" class="course-pill">
+      <div class="course-pill-left">
+        <div class="course-info">
+          <div class="course-name">{{ course.title }}</div>
+          <div class="course-code">{{ course.code }} · {{ course.units }} units</div>
+        </div>
+      </div>
+      <span class="arrow">→</span>
+    </a>
+    {% endfor %}
+  </div>
+
+  <!-- Recent sessions -->
+  {% if recent_sessions %}
+  <p class="section-label">Recent sessions</p>
+  <div class="session-list">
+    {% for s in recent_sessions %}
+    <div class="session-row">
+      <div>
+        <div class="session-course">{{ s.course_code }} — {{ s.topic }}</div>
+        <div class="session-date">{{ s.completed_at|date:"D, d M" }} · Week {{ s.week_number }}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        {% if s.passed_quiz %}
+        <span class="badge badge-green">+{{ s.xp_earned }} XP</span>
+        {% else %}
+        <span class="badge badge-amber">+{{ s.xp_earned }} XP</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const h = new Date().getHours();
+  const gr = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+  document.getElementById("greeting").textContent = gr + ", {{ user.first_name }}! " + (h < 12 ? "☀️" : h < 17 ? "👋" : "🌙");
+</script>
+{% endblock %}
