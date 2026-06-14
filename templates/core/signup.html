@@ -1,0 +1,52 @@
+{% extends "core/base.html" %}
+{% block title %}Sign Up — PetroLearn{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+  <div class="auth-card">
+    <div class="auth-hero">
+      <div class="auth-emoji">🛢️</div>
+      <h1>Join PetroLearn</h1>
+      <p>Your personal AI lecturer for Petroleum & Gas Engineering at Unilag</p>
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-row">
+        <div class="form-group">
+          <label>First name</label>
+          {{ form.first_name }}
+          {% if form.first_name.errors %}<p class="form-error">{{ form.first_name.errors.0 }}</p>{% endif %}
+        </div>
+        <div class="form-group">
+          <label>Last name</label>
+          {{ form.last_name }}
+          {% if form.last_name.errors %}<p class="form-error">{{ form.last_name.errors.0 }}</p>{% endif %}
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        {{ form.email }}
+        {% if form.email.errors %}<p class="form-error">{{ form.email.errors.0 }}</p>{% endif %}
+      </div>
+      <div class="form-group">
+        <label>Username</label>
+        {{ form.username }}
+        {% if form.username.errors %}<p class="form-error">{{ form.username.errors.0 }}</p>{% endif %}
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        {{ form.password1 }}
+        {% if form.password1.errors %}<p class="form-error">{{ form.password1.errors.0 }}</p>{% endif %}
+      </div>
+      <div class="form-group">
+        <label>Confirm password</label>
+        {{ form.password2 }}
+        {% if form.password2.errors %}<p class="form-error">{{ form.password2.errors.0 }}</p>{% endif %}
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Create my account 🚀</button>
+    </form>
+    <p class="auth-switch">Already have an account? <a href="{% url 'login' %}">Log in</a></p>
+  </div>
+</div>
+{% endblock %}

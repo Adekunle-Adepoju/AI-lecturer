@@ -1,0 +1,34 @@
+{% extends "core/base.html" %}
+{% block title %}Timetable — PetroLearn{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <h2 style="margin-bottom:4px">Your timetable 📅</h2>
+  <p class="greeting-sub" style="margin-bottom:1.5rem">{{ profile.level }}L · Semester {{ profile.semester }} · 15 weeks</p>
+
+  {% regroup timetable by day as day_list %}
+  {% for day in day_list %}
+  <p class="section-label">{{ day.grouper }}</p>
+  {% for entry in day.list %}
+  <div class="tt-row {% if entry.is_completed %}tt-done{% elif entry.is_missed %}tt-missed{% endif %}">
+    <div class="tt-time">{{ entry.time }}</div>
+    <div class="tt-info">
+      <div class="tt-course">{{ entry.course_code }} — {{ entry.course_title }}</div>
+      <div class="tt-week">Week {{ entry.week_number }} of {{ entry.total_weeks }}</div>
+    </div>
+    <div>
+      {% if entry.is_completed %}
+        <span class="badge badge-green">Done ✓</span>
+      {% elif entry.is_missed %}
+        <span class="badge badge-amber">Rescheduled</span>
+      {% else %}
+        <a href="{% url 'session' entry.course_code %}" class="badge badge-blue">Start →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  {% empty %}
+  <p style="color:var(--text-secondary)">No timetable yet. Complete onboarding first.</p>
+  {% endfor %}
+</div>
+{% endblock %}
