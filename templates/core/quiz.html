@@ -1,0 +1,35 @@
+{% extends "core/base.html" %}
+{% block title %}Quiz — {{ topic_name }}{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="session-header">
+    <div class="ai-avatar">🤖</div>
+    <div>
+      <div class="session-title">{{ entry.course_title }}</div>
+      <div class="session-sub">Topic {{ topic_number }} of {{ total_topics }}: {{ topic_name }}</div>
+    </div>
+    <span class="badge badge-amber">+50 XP</span>
+  </div>
+
+  <div class="quiz-card">
+    <div class="quiz-header">
+      <span class="quiz-icon">🎯</span>
+      <span class="quiz-label">Quick Quiz</span>
+    </div>
+    <p class="quiz-q">{{ question }}</p>
+
+    <form method="POST" action="{% url 'answer' %}">
+      {% csrf_token %}
+      <input type="hidden" name="topic_session_id" value="{{ topic_session.id }}">
+      {% for option in options %}
+      <button type="submit" name="answer_index" value="{{ forloop.counter0 }}" class="qopt">
+        {{ option }}
+      </button>
+      {% endfor %}
+    </form>
+  </div>
+
+</div>
+{% endblock %}
