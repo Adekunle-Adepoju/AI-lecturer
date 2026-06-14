@@ -1,0 +1,30 @@
+{% extends "core/base.html" %}
+{% block title %}Log In — PetroLearn{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+  <div class="auth-card">
+    <div class="auth-hero">
+      <div class="auth-emoji">🛢️</div>
+      <h1>Welcome back</h1>
+      <p>Log in to continue your learning streak</p>
+    </div>
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-group">
+        <label>Username</label>
+        {{ form.username }}
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        {{ form.password }}
+      </div>
+      {% if form.errors %}
+      <p class="form-error">Incorrect username or password. Try again.</p>
+      {% endif %}
+      <button type="submit" class="btn btn-primary btn-full">Log in →</button>
+    </form>
+    <p class="auth-switch">No account yet? <a href="{% url 'signup' %}">Sign up free</a></p>
+  </div>
+</div>
+{% endblock %}
