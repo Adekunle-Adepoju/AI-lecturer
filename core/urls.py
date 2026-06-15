@@ -14,4 +14,5 @@ urlpatterns = [
     path("leaderboard/", views.leaderboard_view, name="leaderboard"),
     path("timetable/", views.timetable_view, name="timetable"),
     path("reschedule/<int:entry_id>/", views.reschedule_session, name="reschedule"),
+    path("profile/edit/", views.profile_edit_view, name="profile_edit"),
 ]

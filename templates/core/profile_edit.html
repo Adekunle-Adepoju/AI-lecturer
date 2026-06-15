@@ -1,0 +1,42 @@
+{% extends "core/base.html" %}
+{% block title %}Edit Profile — PetroLearn{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:500px; margin:40px auto">
+  <h2 style="margin-bottom:24px">Edit Profile</h2>
+
+  {% if messages %}
+  {% for message in messages %}
+  <div style="color:green; margin-bottom:16px">{{ message }}</div>
+  {% endfor %}
+  {% endif %}
+
+  {% if form.errors %}
+  <div style="color:red; margin-bottom:16px">
+    {% for field in form %}
+      {% for error in field.errors %}
+        <p>{{ field.label }}: {{ error }}</p>
+      {% endfor %}
+    {% endfor %}
+    {% for error in form.non_field_errors %}
+      <p>{{ error }}</p>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="POST">
+    {% csrf_token %}
+    {% for field in form %}
+    <div style="margin-bottom:16px">
+      <label style="display:block; margin-bottom:6px; font-weight:600">{{ field.label }}</label>
+      {{ field }}
+    </div>
+    {% endfor %}
+    <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px">Save Changes</button>
+  </form>
+
+  <p style="margin-top:16px; font-size:13px; color:var(--text-secondary)">
+    ⚠️ Changing your level or semester will regenerate your timetable.
+  </p>
+</div>
+{% endblock %}
