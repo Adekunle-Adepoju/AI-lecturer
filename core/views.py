@@ -1,5 +1,6 @@
 import json
 import markdown
+import datetime
 from datetime import date, timedelta
 
 from django.contrib import messages
@@ -12,9 +13,12 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 from groq import Groq
 
-from .forms import SignupForm, OnboardingForm
-from .models import StudentProfile, TimetableEntry, Session, TopicSession, SlideDocument, COURSES
-from .prompt import SYSTEM_PROMPT, TOPIC_GENERATOR_PROMPT
+from .forms import SignupForm, OnboardingForm, ProfileEditForm
+from .models import (
+    StudentProfile, TimetableEntry, Session, TopicSession,
+    SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES
+)
+from .prompt import SYSTEM_PROMPT
 
 
 # ─── Groq client ───────────────────────────────────────────────────────────────
@@ -31,9 +35,25 @@ def signup_view(request):
     if request.method == "POST":
         form = SignupForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            login(request, user)
-            return redirect("onboarding")
+            try:
+                user = form.save(commit=False)
+                user.first_name = form.cleaned_data["first_name"]
+                user.last_name = form.cleaned_data["last_name"]
+                user.save()
+
+                profile = StudentProfile.objects.create(
+                    user=user,
+                    matric_number=form.cleaned_data["matric_number"],
+                    school=form.cleaned_data["school"],
+                    department=form.cleaned_data["department"],
+                    level=form.cleaned_data["level"],
+                    semester=form.cleaned_data["semester"],
+                )
+                _generate_timetable(profile)
+                login(request, user)
+                return redirect("dashboard")
+            except Exception as e:
+                form.add_error(None, f"Error creating account: {str(e)}")
     else:
         form = SignupForm()
     return render(request, "core/signup.html", {"form": form})
@@ -58,7 +78,7 @@ def logout_view(request):
     return redirect("login")
 
 
-# ─── Onboarding ────────────────────────────────────────────────────────────────
+# ─── Onboarding — kept for existing users without profile ──────────────────────
 
 @login_required
 def onboarding_view(request):
@@ -76,17 +96,39 @@ def onboarding_view(request):
         form = OnboardingForm()
     return render(request, "core/onboarding.html", {"form": form})
 
+
+# ─── Profile edit ──────────────────────────────────────────────────────────────
+
+@login_required
+def profile_edit_view(request):
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
+
+    profile = request.user.profile
+
+    if request.method == "POST":
+        form = ProfileEditForm(request.POST, instance=profile, user=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Profile updated successfully.")
+            return redirect("dashboard")
+    else:
+        form = ProfileEditForm(instance=profile, user=request.user)
+
+    return render(request, "core/profile_edit.html", {"form": form})
+
+
+# ─── Timetable generator ───────────────────────────────────────────────────────
+
 def _generate_timetable(profile):
     courses = COURSES.get(profile.level, {}).get(profile.semester, [])
     days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
-    times = ["09:00", "11:00"]
 
     TimetableEntry.objects.filter(student=profile).delete()
 
     entries = []
     for i, course in enumerate(courses):
         day = days[i % len(days)]
-        # First 5 courses get 09:00, next 5 get 11:00
         time = "09:00" if i < len(days) else "11:00"
         entries.append(TimetableEntry(
             student=profile,
@@ -97,9 +139,9 @@ def _generate_timetable(profile):
             week_number=1,
             total_weeks=15,
         ))
-
     TimetableEntry.objects.bulk_create(entries)
-    
+
+
 # ─── Dashboard ─────────────────────────────────────────────────────────────────
 
 @login_required
@@ -112,8 +154,10 @@ def dashboard_view(request):
     timetable = profile.timetable.all()
     recent_sessions = profile.sessions.all()[:5]
     leaderboard = StudentProfile.objects.select_related("user").order_by("-xp")[:10]
-    today_entry = profile.timetable.filter(is_completed=False).first()
     sessions_done = profile.sessions.count()
+
+    today = datetime.datetime.now().strftime("%a")
+    todays_courses = profile.timetable.filter(day=today, is_completed=False)
 
     return render(request, "core/dashboard.html", {
         "profile": profile,
@@ -121,43 +165,33 @@ def dashboard_view(request):
         "timetable": timetable,
         "recent_sessions": recent_sessions,
         "leaderboard": leaderboard,
-        "today_entry": today_entry,
         "sessions_done": sessions_done,
+        "todays_courses": todays_courses,
+        "today": today,
     })
-
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
 
-def _generate_topics(course_code, course_title, week, level):
-    """Ask Groq to generate 3 topics for this course/week"""
-    client = get_groq_client()
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": TOPIC_GENERATOR_PROMPT},
-            {"role": "user", "content": f"Course: {course_code} — {course_title}\nLevel: {level}L\nWeek: {week} of 15\nGenerate 3 specific topics to teach this week."},
-        ],
-    )
-    raw = response.choices[0].message.content.strip()
-    raw = raw.replace("```json", "").replace("```", "").strip()
-    topics = json.loads(raw)
+def _get_topics_for_week(course_code, week_number):
+    topics = COURSE_OUTLINES.get(course_code, {}).get(week_number, [])
+    if not topics:
+        topics = ["Core Concepts", "Key Applications", "Problem Solving"]
     return topics[:3]
 
 
 def _generate_topic_lecture(course_code, course_title, topic_name, week, level, student_name, topic_index=0, slide_text=""):
-    """Ask Groq to teach one topic in full"""
     client = get_groq_client()
     user_message = (
-    f"Student name: {student_name}\n"
-    f"Level: {level}L\n"
-    f"Course: {course_code} — {course_title}\n"
-    f"Topic to teach: {topic_name}\n"
-    f"Topic number: {topic_index + 1} of 3 in this session\n"
-    f"Week: {week} of 15\n"
-    f"STRICT INSTRUCTION: Teach ONLY '{topic_name}'. Do not teach any other topic. "
-    f"Follow the course outline strictly. This is the exact topic scheduled for this session."
-    f"{slide_text}"
-)
+        f"Student name: {student_name}\n"
+        f"Level: {level}L\n"
+        f"Course: {course_code} — {course_title}\n"
+        f"Topic to teach: {topic_name}\n"
+        f"Topic number: {topic_index + 1} of 3 in this session\n"
+        f"Week: {week} of 15\n"
+        f"STRICT INSTRUCTION: Teach ONLY '{topic_name}'. Do not teach any other topic. "
+        f"Follow the course outline strictly. This is the exact topic scheduled for this session."
+        f"{slide_text}"
+    )
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         max_tokens=8000,
@@ -170,44 +204,54 @@ def _generate_topic_lecture(course_code, course_title, topic_name, week, level, 
 
 
 def _parse_lecture(full_text):
-    """Split AI response into intro, lecture, quiz parts"""
-    if "---LECTURE---" in full_text:
-        parts = full_text.split("---LECTURE---")
-        intro_raw = parts[0].replace("---INTRO---", "").strip()
-        lecture_raw = parts[1].strip()
+    if "---INTRO---" in full_text and "---LECTURE---" in full_text:
+        intro_raw = full_text.split("---INTRO---")[1].split("---LECTURE---")[0].strip()
+        lecture_and_quiz = full_text.split("---LECTURE---")[1].strip()
     else:
-        intro_raw = full_text[:500]
-        lecture_raw = full_text
+        intro_raw = full_text[:500].strip()
+        lecture_and_quiz = full_text
 
-    quiz_parts = lecture_raw.split("Quiz time")
-    lecture_only = quiz_parts[0].strip()
-    quiz_raw = quiz_parts[1].strip() if len(quiz_parts) > 1 else ""
+    if "---QUIZ---" in lecture_and_quiz:
+        lecture_raw = lecture_and_quiz.split("---QUIZ---")[0].strip()
+        quiz_raw = lecture_and_quiz.split("---QUIZ---")[1].strip()
+    else:
+        lecture_raw = lecture_and_quiz.strip()
+        quiz_raw = ""
 
-    lines = [l.strip() for l in quiz_raw.split("\n") if l.strip()]
-    question_lines = []
-    options = []
-    for line in lines:
-        if len(line) > 1 and line[0] in "ABCD" and line[1] == ".":
-            options.append(line)
-        elif not options:
-            question_lines.append(line)
-    question = " ".join(question_lines).strip()
-
-    if not options:
-        options = ["Option A", "Option B", "Option C", "Option D"]
-
+    question = ""
+    options = ["Option A", "Option B", "Option C", "Option D"]
     correct_index = 0
-    for i, opt in enumerate(options):
-        if "✓" in opt or "(correct)" in opt.lower():
-            correct_index = i
-            options[i] = opt.replace("✓", "").replace("(correct)", "").strip()
+    explanation = ""
+
+    if quiz_raw:
+        try:
+            clean = quiz_raw.replace("```json", "").replace("```", "").strip()
+            quiz_data = json.loads(clean)
+            question = quiz_data.get("question", "")
+            options = quiz_data.get("options", options)
+            correct_index = quiz_data.get("correct_index", 0)
+            explanation = quiz_data.get("explanation", "")
+        except json.JSONDecodeError:
+            lines = [l.strip() for l in quiz_raw.split("\n") if l.strip()]
+            question_lines = []
+            parsed_options = []
+            for line in lines:
+                if len(line) > 1 and line[0] in "ABCD" and line[1] == ".":
+                    parsed_options.append(line)
+                elif not parsed_options:
+                    question_lines.append(line)
+            if question_lines:
+                question = " ".join(question_lines).strip()
+            if parsed_options:
+                options = parsed_options
 
     return {
         "intro": intro_raw,
-        "lecture": lecture_only,
+        "lecture": lecture_raw,
         "question": question,
         "options": options,
         "correct_index": correct_index,
+        "explanation": explanation,
     }
 
 
@@ -227,17 +271,7 @@ def session_view(request, course_code):
     action = request.POST.get("action")
 
     if action == "start":
-        try:
-            topics = _generate_topics(
-                course_code, entry.course_title,
-                entry.week_number, profile.level
-            )
-        except Exception as e:
-            return render(request, "core/session.html", {
-                "entry": entry,
-                "error": f"Could not generate topics: {str(e)}",
-            })
-
+        topics = _get_topics_for_week(course_code, entry.week_number)
         session = Session.objects.create(
             student=profile,
             course_code=course_code,
@@ -246,7 +280,6 @@ def session_view(request, course_code):
             topics=topics,
             current_topic_index=0,
         )
-
         return _teach_topic(request, session, entry, profile, topics[0], 0)
 
     if action == "show_lecture":
@@ -269,13 +302,9 @@ def session_view(request, course_code):
 
 
 def _teach_topic(request, session, entry, profile, topic_name, topic_index):
-    """Generate and show intro for a topic"""
-    from .models import CourseOutline
-
     slide_text = ""
     outline_text = ""
 
-    # Get slide for this week
     try:
         slide_doc = SlideDocument.objects.get(
             course_code=session.course_code,
@@ -286,7 +315,6 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
     except SlideDocument.DoesNotExist:
         pass
 
-    # Get course outline context
     try:
         outline = CourseOutline.objects.get(
             course_code=session.course_code,
@@ -324,6 +352,7 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
         quiz_question=parsed["question"],
         quiz_options=parsed["options"],
         correct_answer_index=parsed["correct_index"],
+        quiz_explanation=parsed["explanation"],
     )
 
     intro_html = markdown.markdown(parsed["intro"], extensions=["extra"])
@@ -337,6 +366,7 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
         "total_topics": len(session.topics),
         "topic_name": topic_name,
     })
+
 
 # ─── Quiz ──────────────────────────────────────────────────────────────────────
 
@@ -398,9 +428,10 @@ def answer_view(request):
     session.xp_earned += xp
     session.save()
 
+    correct_option = topic_session.quiz_options[topic_session.correct_answer_index]
     feedback = (
         "Correct! Well done! 🎉" if correct
-        else f"Not quite — the correct answer was option {topic_session.correct_answer_index + 1}. Keep going! 💪"
+        else f"Not quite — the correct answer was {correct_option}. Keep going! 💪"
     )
 
     next_index = topic_session.topic_index + 1
@@ -424,6 +455,7 @@ def answer_view(request):
         "correct": correct,
         "xp_earned": xp,
         "feedback": feedback,
+        "explanation": topic_session.quiz_explanation,
         "next_topic_index": next_index,
         "next_topic_name": session.topics[next_index] if not is_last_topic else None,
         "is_last_topic": is_last_topic,
@@ -485,3 +517,24 @@ def reschedule_session(request, entry_id):
     entry.save()
     messages.success(request, f"{entry.course_code} rescheduled to tomorrow.")
     return redirect("dashboard")
+
+
+# ─── Profile edit ──────────────────────────────────────────────────────────────
+
+@login_required
+def profile_edit_view(request):
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
+
+    profile = request.user.profile
+
+    if request.method == "POST":
+        form = ProfileEditForm(request.POST, instance=profile, user=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Profile updated successfully.")
+            return redirect("dashboard")
+    else:
+        form = ProfileEditForm(instance=profile, user=request.user)
+
+    return render(request, "core/profile_edit.html", {"form": form})
