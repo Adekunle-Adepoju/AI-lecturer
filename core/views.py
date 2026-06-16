@@ -159,6 +159,11 @@ def dashboard_view(request):
     today = datetime.datetime.now().strftime("%a")
     todays_courses = profile.timetable.filter(day=today, is_completed=False)
 
+    incomplete_sessions = {
+        s.course_code: s
+        for s in Session.objects.filter(student=profile, is_complete=False)
+    }
+
     return render(request, "core/dashboard.html", {
         "profile": profile,
         "courses": courses,
@@ -168,7 +173,9 @@ def dashboard_view(request):
         "sessions_done": sessions_done,
         "todays_courses": todays_courses,
         "today": today,
+        "incomplete_sessions": incomplete_sessions,
     })
+
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -271,6 +278,41 @@ def session_view(request, course_code):
     action = request.POST.get("action")
 
     if action == "start":
+    # Check for an incomplete session for this course/week
+        existing_session = Session.objects.filter(
+            student=profile,
+            course_code=course_code,
+            week_number=entry.week_number,
+            is_complete=False,
+        ).first()
+
+        if existing_session:
+            # Resume from where they left off
+            current_index = existing_session.current_topic_index
+            # Check if this topic already has a topic_session
+            existing_topic = existing_session.topic_sessions.filter(
+                topic_index=current_index,
+                is_complete=False,
+            ).first()
+
+            if existing_topic:
+                # Show intro again for the current incomplete topic
+                intro_html = markdown.markdown(existing_topic.intro_content, extensions=["extra"])
+                return render(request, "core/session.html", {
+                    "entry": entry,
+                    "session": existing_session,
+                    "topic_session": existing_topic,
+                    "intro": intro_html,
+                    "topic_number": current_index + 1,
+                    "total_topics": len(existing_session.topics),
+                    "topic_name": existing_topic.topic_name,
+                })
+            else:
+                # Teach the next topic
+                topic_name = existing_session.topics[current_index]
+                return _teach_topic(request, existing_session, entry, profile, topic_name, current_index)
+
+        # No existing session — start fresh
         topics = _get_topics_for_week(course_code, entry.week_number)
         session = Session.objects.create(
             student=profile,
@@ -342,6 +384,31 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
         })
 
     parsed = _parse_lecture(full_text)
+
+    # Retry once if quiz parsing failed
+    if not parsed["question"] or parsed["options"] == ["Option A", "Option B", "Option C", "Option D"]:
+        try:
+            full_text = _generate_topic_lecture(
+                session.course_code, session.course_title,
+                topic_name, session.week_number,
+                profile.level, student_name, topic_index,
+                slide_text + outline_text
+            )
+            parsed = _parse_lecture(full_text)
+        except Exception:
+            pass
+
+    # Final fallback if quiz still empty
+    if not parsed["question"]:
+        parsed["question"] = f"Which of the following best describes a key concept from the topic '{topic_name}'?"
+    if parsed["options"] == ["Option A", "Option B", "Option C", "Option D"]:
+        parsed["options"] = [
+            "A. The concept applies only in theory",
+            "B. The concept has direct practical applications",
+            "C. The concept is unrelated to engineering",
+            "D. The concept was recently discovered",
+        ]
+        parsed["correct_index"] = 1
 
     topic_session = TopicSession.objects.create(
         session=session,
@@ -538,3 +605,18 @@ def profile_edit_view(request):
         form = ProfileEditForm(instance=profile, user=request.user)
 
     return render(request, "core/profile_edit.html", {"form": form})
+
+
+@login_required
+def review_view(request, topic_session_id):
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
+
+    topic_session = get_object_or_404(TopicSession, id=topic_session_id, session__student=request.user.profile)
+    lecture_html = markdown.markdown(topic_session.lecture_content, extensions=["extra"])
+
+    return render(request, "core/review.html", {
+        "topic_session": topic_session,
+        "lecture_html": lecture_html,
+        "correct": topic_session.student_answer_index == topic_session.correct_answer_index,
+    })
