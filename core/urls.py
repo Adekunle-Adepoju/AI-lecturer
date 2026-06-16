@@ -15,4 +15,5 @@ urlpatterns = [
     path("timetable/", views.timetable_view, name="timetable"),
     path("reschedule/<int:entry_id>/", views.reschedule_session, name="reschedule"),
     path("profile/edit/", views.profile_edit_view, name="profile_edit"),
+    path("review/<int:topic_session_id>/", views.review_view, name="review"),
 ]

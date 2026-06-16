@@ -1,0 +1,74 @@
+{% extends "core/base.html" %}
+{% block title %}Review — {{ topic_session.topic_name }}{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div style="margin-bottom:20px">
+    <a href="{% url 'dashboard' %}" style="font-size:13px; color:var(--text-secondary)">← Back to dashboard</a>
+  </div>
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin-bottom:4px">{{ topic_session.topic_name }}</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">Quiz Review</p>
+
+  <div class="quiz-card">
+    <div class="quiz-header">
+      <span class="quiz-icon">📋</span>
+      <span class="quiz-label">Question</span>
+      {% if correct %}
+      <span class="badge badge-green" style="margin-left:auto">Passed ✓</span>
+      {% else %}
+      <span class="badge" style="margin-left:auto; background:var(--red-glow); color:#F08080; border:1px solid var(--red-soft)">Failed ✗</span>
+      {% endif %}
+    </div>
+
+    <p class="quiz-q">{{ topic_session.quiz_question }}</p>
+
+    {% for option in topic_session.quiz_options %}
+    <div class="qopt {% if forloop.counter0 == topic_session.correct_answer_index %}correct{% elif forloop.counter0 == topic_session.student_answer_index and not correct %}wrong{% endif %}"
+         style="cursor:default; margin-bottom:8px; pointer-events:none">
+      {{ option }}
+      {% if forloop.counter0 == topic_session.correct_answer_index %}
+      <span style="float:right; font-size:12px">✓ Correct answer</span>
+      {% elif forloop.counter0 == topic_session.student_answer_index and not correct %}
+      <span style="float:right; font-size:12px">✗ Your answer</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    {% if topic_session.quiz_explanation %}
+    <div style="margin-top:16px; padding:14px 16px; background:var(--navy); border-radius:var(--radius-md); border-left:3px solid var(--amber)">
+      <p style="font-size:13px; color:var(--text-secondary); margin:0; line-height:1.7">
+        <strong style="color:var(--amber)">Explanation:</strong> {{ topic_session.quiz_explanation }}
+      </p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Full lecture -->
+  <div style="margin-top:24px">
+    <p class="section-label">Full Lecture</p>
+    <div class="chat-box">
+      <div class="msg ai">{{ lecture_html|safe }}</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Continue session -->
+  <div style="margin-top:24px">
+    {% if not topic_session.session.is_complete %}
+      {% with next_index=topic_session.topic_index|add:1 %}
+      {% if next_index < topic_session.session.topics|length %}
+      <form method="POST" action="{% url 'next_topic' %}">
+        {% csrf_token %}
+        <input type="hidden" name="topic_session_id" value="{{ topic_session.id }}">
+        <input type="hidden" name="next_topic_index" value="{{ next_index }}">
+        <button type="submit" class="btn btn-primary btn-full">Continue to Next Topic →</button>
+      </form>
+      {% endif %}
+      {% endwith %}
+    {% endif %}
+    <a href="{% url 'dashboard' %}" class="btn btn-white-outline btn-full" style="margin-top:8px">Back to Dashboard</a>
+  </div>
+{% endblock %}

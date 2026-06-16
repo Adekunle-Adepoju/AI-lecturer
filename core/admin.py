@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import StudentProfile, TimetableEntry, Session, TopicSession, SlideDocument, CourseOutline
 from .outline_parser import _parse_course_outline
 
+
 @admin.register(StudentProfile)
 class StudentProfileAdmin(admin.ModelAdmin):
     list_display = ["user", "level", "semester", "xp", "streak", "last_session_date"]
@@ -35,6 +36,23 @@ class SlideDocumentAdmin(admin.ModelAdmin):
     list_display = ["course_code", "course_title", "level", "week_number", "uploaded_at"]
     list_filter = ["level", "course_code"]
     search_fields = ["course_code", "course_title"]
+    readonly_fields = ["extracted_text"]
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # Auto-extract text when slide is uploaded
+        if obj.file:
+            try:
+                from .slide_extractor import extract_text_from_slide
+                text = extract_text_from_slide(obj.file.path)
+                if text:
+                    obj.extracted_text = text
+                    obj.save()
+                    self.message_user(request, f"Slide text extracted successfully ({len(text)} characters).")
+                else:
+                    self.message_user(request, "File saved but no text could be extracted.", level="warning")
+            except Exception as e:
+                self.message_user(request, f"File saved but extraction failed: {str(e)}", level="warning")
 
 
 @admin.register(CourseOutline)
@@ -46,7 +64,6 @@ class CourseOutlineAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        # Auto-parse when uploaded
         try:
             _parse_course_outline(obj)
         except Exception as e:
