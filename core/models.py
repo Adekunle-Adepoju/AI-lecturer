@@ -162,13 +162,20 @@ COURSE_OUTLINES = {
 
 LEVEL_CHOICES = [("100", "100 Level"), ("200", "200 Level"), ("300", "300 Level"), ("400", "400 Level"), ("500", "500 Level")]
 SEMESTER_CHOICES = [("1", "First Semester"), ("2", "Second Semester")]
+SCHOOL_CHOICES = [
+    ("unilag", "University of Lagos"),
+]
 
-LEVEL_CHOICES = [("100", "100 Level"), ("200", "200 Level"), ("300", "300 Level"), ("400", "400 Level"), ("500", "500 Level")]
-SEMESTER_CHOICES = [("1", "First Semester"), ("2", "Second Semester")]
+DEPARTMENT_CHOICES = [
+    ("petroleum", "Petroleum & Gas Engineering"),
+]
 
 
 class StudentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
+    matric_number = models.CharField(max_length=20, blank=True)
+    school = models.CharField(max_length=50, choices=SCHOOL_CHOICES, default="unilag")
+    department = models.CharField(max_length=50, choices=DEPARTMENT_CHOICES, default="petroleum")
     level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
     semester = models.CharField(max_length=1, choices=SEMESTER_CHOICES)
     xp = models.IntegerField(default=0)
@@ -178,7 +185,6 @@ class StudentProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} — {self.level}L"
-
 
 class TimetableEntry(models.Model):
     DAYS = [("Mon", "Monday"), ("Tue", "Tuesday"), ("Wed", "Wednesday"), ("Thu", "Thursday"), ("Fri", "Friday")]
@@ -207,7 +213,7 @@ class Session(models.Model):
     course_code = models.CharField(max_length=10)
     course_title = models.CharField(max_length=100)
     week_number = models.IntegerField(default=1)
-    topics = models.JSONField(default=list)           # ["Differentiation", "Product Rule", "Chain Rule"]
+    topics = models.JSONField(default=list)
     current_topic_index = models.IntegerField(default=0)
     is_complete = models.BooleanField(default=False)
     xp_earned = models.IntegerField(default=0)
@@ -231,6 +237,7 @@ class TopicSession(models.Model):
     quiz_question = models.TextField(blank=True)
     quiz_options = models.JSONField(default=list)
     correct_answer_index = models.IntegerField(default=0)
+    quiz_explanation = models.TextField(blank=True)   # ← ADDED: shown after student answers
     student_answer_index = models.IntegerField(null=True, blank=True)
     passed_quiz = models.BooleanField(default=False)
     xp_earned = models.IntegerField(default=0)
@@ -258,7 +265,7 @@ class SlideDocument(models.Model):
 
     def __str__(self):
         return f"{self.course_code} — Week {self.week_number}"
-    
+
 
 class CourseOutline(models.Model):
     """Uploaded course outline — parsed into weekly topics"""
@@ -267,7 +274,7 @@ class CourseOutline(models.Model):
     level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
     file = models.FileField(upload_to="outlines/")
     extracted_text = models.TextField(blank=True)
-    topics_json = models.JSONField(default=dict)  # {1: ["topic1", "topic2", "topic3"], 2: [...], ...}
+    topics_json = models.JSONField(default=dict)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     parsed = models.BooleanField(default=False)
 
@@ -276,3 +283,91 @@ class CourseOutline(models.Model):
 
     def __str__(self):
         return f"{self.course_code} — Course Outline"
+
+
+class Test(models.Model):
+    """Mid-semester test — triggered at week 6"""
+    STATUS_CHOICES = [
+        ("pending", "Not Started"),
+        ("in_progress", "In Progress"),
+        ("complete", "Complete"),
+    ]
+
+    student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="tests")
+    course_code = models.CharField(max_length=10)
+    course_title = models.CharField(max_length=100)
+    week_triggered = models.IntegerField(default=6)
+    questions = models.JSONField(default=list)   # list of {question, options, correct_index, explanation}
+    answers = models.JSONField(default=list)     # list of student's chosen indices, in order
+    score = models.IntegerField(default=0)       # number correct out of 10
+    xp_earned = models.IntegerField(default=0)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="pending")
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self):
+        return f"{self.student.user.username} — {self.course_code} Test (Week {self.week_triggered})"
+
+
+class Exam(models.Model):
+    """End of semester exam — triggered at week 12"""
+    STATUS_CHOICES = [
+        ("pending", "Not Started"),
+        ("in_progress", "In Progress"),
+        ("complete", "Complete"),
+    ]
+
+    student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="exams")
+    course_code = models.CharField(max_length=10)
+    course_title = models.CharField(max_length=100)
+    week_triggered = models.IntegerField(default=12)
+    questions = models.JSONField(default=list)   # list of {question, options, correct_index, explanation}
+    answers = models.JSONField(default=list)
+    score = models.IntegerField(default=0)       # number correct out of 20
+    xp_earned = models.IntegerField(default=0)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="pending")
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self):
+        return f"{self.student.user.username} — {self.course_code} Exam (Week {self.week_triggered})"
+
+
+class Challenge(models.Model):
+    """Head-to-head quiz challenge between two students"""
+    STATUS_CHOICES = [
+        ("pending", "Pending Acceptance"),
+        ("active", "In Progress"),
+        ("complete", "Complete"),
+        ("declined", "Declined"),
+        ("expired", "Expired"),
+    ]
+
+    challenger = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="challenges_sent")
+    opponent = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="challenges_received")
+    course_code = models.CharField(max_length=10)
+    course_title = models.CharField(max_length=100)
+    questions = models.JSONField(default=list)            # 5 questions, same for both students
+    challenger_answers = models.JSONField(default=list)   # challenger's chosen indices
+    opponent_answers = models.JSONField(default=list)     # opponent's chosen indices
+    challenger_score = models.IntegerField(default=0)
+    opponent_score = models.IntegerField(default=0)
+    winner = models.ForeignKey(
+        StudentProfile, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="challenges_won"
+    )
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.challenger.user.username} vs {self.opponent.user.username} — {self.course_code}"

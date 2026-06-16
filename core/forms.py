@@ -1,33 +1,59 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
-from .models import StudentProfile, LEVEL_CHOICES, SEMESTER_CHOICES
- 
- 
+from .models import (
+    StudentProfile, LEVEL_CHOICES, SEMESTER_CHOICES,
+    SCHOOL_CHOICES, DEPARTMENT_CHOICES
+)
+
+
 class SignupForm(UserCreationForm):
-    first_name = forms.CharField(max_length=50, required=True, widget=forms.TextInput(attrs={"placeholder": "e.g. Emeka"}))
-    last_name = forms.CharField(max_length=50, required=True, widget=forms.TextInput(attrs={"placeholder": "e.g. Okafor"}))
-    email = forms.EmailField(required=True, widget=forms.EmailInput(attrs={"placeholder": "your@email.com"}))
- 
+    first_name = forms.CharField(max_length=50, required=True, label="First Name")
+    last_name = forms.CharField(max_length=50, required=True, label="Last Name")
+    matric_number = forms.CharField(max_length=20, required=True, label="Matric Number")
+    school = forms.ChoiceField(choices=SCHOOL_CHOICES, label="School")
+    department = forms.ChoiceField(choices=DEPARTMENT_CHOICES, label="Department")
+    level = forms.ChoiceField(choices=LEVEL_CHOICES, label="Level")
+    semester = forms.ChoiceField(choices=SEMESTER_CHOICES, label="Semester")
+
     class Meta:
         model = User
-        fields = ["first_name", "last_name", "username", "email", "password1", "password2"]
- 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["username"].widget.attrs["placeholder"] = "Choose a username"
-        self.fields["password1"].widget.attrs["placeholder"] = "Create a password"
-        self.fields["password2"].widget.attrs["placeholder"] = "Repeat your password"
-        for field in self.fields.values():
-            field.widget.attrs["class"] = "form-input"
- 
- 
+        fields = [
+            "first_name", "last_name", "username", "matric_number",
+            "school", "department", "level", "semester",
+            "password1", "password2"
+        ]
+
+
 class OnboardingForm(forms.ModelForm):
     class Meta:
         model = StudentProfile
         fields = ["level", "semester"]
-        widgets = {
-            "level": forms.Select(attrs={"class": "form-input"}),
-            "semester": forms.Select(attrs={"class": "form-input"}),
-        }
- 
+
+
+class ProfileEditForm(forms.ModelForm):
+    first_name = forms.CharField(max_length=50, required=True, label="First Name")
+    last_name = forms.CharField(max_length=50, required=True, label="Last Name")
+
+    class Meta:
+        model = StudentProfile
+        fields = ["matric_number", "school", "department", "level", "semester"]
+
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop("user", None)
+        super().__init__(*args, **kwargs)
+        if self.user:
+            self.fields["first_name"].initial = self.user.first_name
+            self.fields["last_name"].initial = self.user.last_name
+
+    def save(self, commit=True):
+        profile = super().save(commit=False)
+        if self.user:
+            self.user.first_name = self.cleaned_data["first_name"]
+            self.user.last_name = self.cleaned_data["last_name"]
+            self.user.save()
+        if commit:
+            profile.save()
+            from core.views import _generate_timetable
+            _generate_timetable(profile)
+        return profile

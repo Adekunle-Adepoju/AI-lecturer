@@ -5,7 +5,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}PetroLearn{% endblock %}</title>
-  {% load static %}
   <link rel="stylesheet" href="{% static 'core/css/main.css' %}">
 </head>
 <body>
@@ -13,13 +12,48 @@
 {% if user.is_authenticated %}
 <nav class="navbar">
   <a href="{% url 'dashboard' %}" class="nav-logo">🛢️ PetroLearn</a>
-  <div class="nav-links">
-    <a href="{% url 'dashboard' %}" class="nav-link">Home</a>
-    <a href="{% url 'timetable' %}" class="nav-link">Timetable</a>
-    <a href="{% url 'leaderboard' %}" class="nav-link">Leaderboard</a>
-    <a href="{% url 'logout' %}" class="nav-link">Logout</a>
-  </div>
+  <button class="hamburger" id="hamburger" aria-label="Menu">
+    <span></span>
+    <span></span>
+    <span></span>
+  </button>
 </nav>
+
+<!-- Overlay and drawer OUTSIDE nav -->
+<div class="nav-overlay" id="nav-overlay"></div>
+<div class="nav-drawer" id="nav-drawer">
+  <div class="nav-drawer-header">
+    <div class="nav-drawer-user">
+      <div class="nav-drawer-avatar">{{ user.first_name|default:user.username|first|upper }}</div>
+      <div>
+        <div class="nav-drawer-name">{{ user.first_name }} {{ user.last_name }}</div>
+        <div class="nav-drawer-meta">{{ user.username }}</div>
+      </div>
+    </div>
+    <button class="nav-drawer-close" id="nav-close">✕</button>
+  </div>
+
+  <div class="nav-drawer-links">
+    <a href="{% url 'dashboard' %}" class="nav-drawer-link">
+      <span class="nav-drawer-icon">🏠</span> Home
+    </a>
+    <a href="{% url 'timetable' %}" class="nav-drawer-link">
+      <span class="nav-drawer-icon">📅</span> Timetable
+    </a>
+    <a href="{% url 'leaderboard' %}" class="nav-drawer-link">
+      <span class="nav-drawer-icon">🏆</span> Leaderboard
+    </a>
+    <a href="{% url 'profile_edit' %}" class="nav-drawer-link">
+      <span class="nav-drawer-icon">⚙️</span> Edit Profile
+    </a>
+  </div>
+
+  <div class="nav-drawer-footer">
+    <a href="{% url 'logout' %}" class="nav-drawer-link nav-drawer-logout">
+      <span class="nav-drawer-icon">🚪</span> Logout
+    </a>
+  </div>
+</div>
 {% endif %}
 
 {% if messages %}
@@ -34,7 +68,29 @@
   {% block content %}{% endblock %}
 </main>
 
-
 {% block extra_js %}{% endblock %}
+
+<script>
+  const hamburger = document.getElementById("hamburger");
+  const drawer = document.getElementById("nav-drawer");
+  const overlay = document.getElementById("nav-overlay");
+  const closeBtn = document.getElementById("nav-close");
+
+  function openDrawer() {
+    drawer.classList.add("open");
+    overlay.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeDrawer() {
+    drawer.classList.remove("open");
+    overlay.classList.remove("open");
+    document.body.style.overflow = "";
+  }
+
+  hamburger.addEventListener("click", openDrawer);
+  closeBtn.addEventListener("click", closeDrawer);
+  overlay.addEventListener("click", closeDrawer);
+</script>
 </body>
 </html>
