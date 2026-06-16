@@ -65,7 +65,6 @@ body::before {
   z-index: 0;
 }
 
-* { position: relative; z-index: 1; }
 
 a { color: var(--amber); text-decoration: none; transition: color 0.15s; }
 a:hover { color: #fff; }
@@ -83,8 +82,36 @@ a:hover { color: #fff; }
   -webkit-backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 300;
 }
+
+.nav-drawer {
+  position: fixed !important;
+  top: 0;
+  right: -320px;
+  width: 300px;
+  height: 100vh;
+  background: var(--navy-card);
+  z-index: 401;
+  transition: right 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+}
+
+.nav-drawer.open {
+  right: 0;
+}
+
+.nav-overlay {
+  display: none;
+  position: fixed !important;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 400;
+}
+
+.nav-overlay.open { display: block; }
 
 .nav-logo {
   font-family: 'Space Grotesk', sans-serif;
@@ -127,33 +154,6 @@ a:hover { color: #fff; }
   transition: all 0.3s;
 }
 
-/* ── Overlay ─────────────────────────────────────────────────────── */
-.nav-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  z-index: 200;
-}
-
-.nav-overlay.open { display: block; }
-
-/* ── Drawer ──────────────────────────────────────────────────────── */
-.nav-drawer {
-  position: fixed;
-  top: 0;
-  right: -320px;
-  width: 300px;
-  height: 100vh;
-  background: var(--navy-card);
-  z-index: 201;
-  transition: right 0.3s ease;
-  display: flex;
-  flex-direction: column;
-  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
-}
-
-.nav-drawer.open { right: 0; }
 
 /* ── Drawer header ───────────────────────────────────────────────── */
 .nav-drawer-header {

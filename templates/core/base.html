@@ -12,50 +12,48 @@
 {% if user.is_authenticated %}
 <nav class="navbar">
   <a href="{% url 'dashboard' %}" class="nav-logo">🛢️ PetroLearn</a>
-
-  <!-- Hamburger button -->
   <button class="hamburger" id="hamburger" aria-label="Menu">
     <span></span>
     <span></span>
     <span></span>
   </button>
-
-  <!-- Slide-out menu -->
-  <div class="nav-overlay" id="nav-overlay"></div>
-  <div class="nav-drawer" id="nav-drawer">
-    <div class="nav-drawer-header">
-      <div class="nav-drawer-user">
-        <div class="nav-drawer-avatar">{{ user.first_name|default:user.username|first|upper }}</div>
-        <div>
-          <div class="nav-drawer-name">{{ user.first_name }} {{ user.last_name }}</div>
-          <div class="nav-drawer-meta">{{ user.username }}</div>
-        </div>
-      </div>
-      <button class="nav-drawer-close" id="nav-close">✕</button>
-    </div>
-
-    <div class="nav-drawer-links">
-      <a href="{% url 'dashboard' %}" class="nav-drawer-link">
-        <span class="nav-drawer-icon">🏠</span> Home
-      </a>
-      <a href="{% url 'timetable' %}" class="nav-drawer-link">
-        <span class="nav-drawer-icon">📅</span> Timetable
-      </a>
-      <a href="{% url 'leaderboard' %}" class="nav-drawer-link">
-        <span class="nav-drawer-icon">🏆</span> Leaderboard
-      </a>
-      <a href="{% url 'profile_edit' %}" class="nav-drawer-link">
-        <span class="nav-drawer-icon">⚙️</span> Edit Profile
-      </a>
-    </div>
-
-    <div class="nav-drawer-footer">
-      <a href="{% url 'logout' %}" class="nav-drawer-link nav-drawer-logout">
-        <span class="nav-drawer-icon">🚪</span> Logout
-      </a>
-    </div>
-  </div>
 </nav>
+
+<!-- Overlay and drawer OUTSIDE nav -->
+<div class="nav-overlay" id="nav-overlay"></div>
+<div class="nav-drawer" id="nav-drawer">
+  <div class="nav-drawer-header">
+    <div class="nav-drawer-user">
+      <div class="nav-drawer-avatar">{{ user.first_name|default:user.username|first|upper }}</div>
+      <div>
+        <div class="nav-drawer-name">{{ user.first_name }} {{ user.last_name }}</div>
+        <div class="nav-drawer-meta">{{ user.username }}</div>
+      </div>
+    </div>
+    <button class="nav-drawer-close" id="nav-close">✕</button>
+  </div>
+
+  <div class="nav-drawer-links">
+    <a href="{% url 'dashboard' %}" class="nav-drawer-link">
+      <span class="nav-drawer-icon">🏠</span> Home
+    </a>
+    <a href="{% url 'timetable' %}" class="nav-drawer-link">
+      <span class="nav-drawer-icon">📅</span> Timetable
+    </a>
+    <a href="{% url 'leaderboard' %}" class="nav-drawer-link">
+      <span class="nav-drawer-icon">🏆</span> Leaderboard
+    </a>
+    <a href="{% url 'profile_edit' %}" class="nav-drawer-link">
+      <span class="nav-drawer-icon">⚙️</span> Edit Profile
+    </a>
+  </div>
+
+  <div class="nav-drawer-footer">
+    <a href="{% url 'logout' %}" class="nav-drawer-link nav-drawer-logout">
+      <span class="nav-drawer-icon">🚪</span> Logout
+    </a>
+  </div>
+</div>
 {% endif %}
 
 {% if messages %}
