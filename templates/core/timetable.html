@@ -2,33 +2,80 @@
 {% block title %}Timetable — PetroLearn{% endblock %}
 
 {% block content %}
-<div class="page-container">
-  <h2 style="margin-bottom:4px">Your timetable 📅</h2>
-  <p class="greeting-sub" style="margin-bottom:1.5rem">{{ profile.level }}L · Semester {{ profile.semester }} · 15 weeks</p>
+<div class="page-container dashboard-grid-container">
 
-  {% regroup timetable by day as day_list %}
-  {% for day in day_list %}
-  <p class="section-label">{{ day.grouper }}</p>
-  {% for entry in day.list %}
-  <div class="tt-row {% if entry.is_completed %}tt-done{% elif entry.is_missed %}tt-missed{% endif %}">
-    <div class="tt-time">{{ entry.time }}</div>
-    <div class="tt-info">
-      <div class="tt-course">{{ entry.course_code }} — {{ entry.course_title }}</div>
-      <div class="tt-week">Week {{ entry.week_number }} of {{ entry.total_weeks }}</div>
+  <div class="dashboard-main-col">
+    <div class="greeting-section" style="margin-bottom: 0;">
+      <h2 style="margin-bottom:4px; font-family: 'Space Grotesk', sans-serif; font-weight: 700; letter-spacing: -0.02em;">Your timetable 📅</h2>
+      <p class="greeting-sub" style="margin-bottom:1.5rem">{{ profile.level }}L · Semester {{ profile.semester }} · 15 weeks</p>
     </div>
-    <div>
-      {% if entry.is_completed %}
-        <span class="badge badge-green">Done ✓</span>
-      {% elif entry.is_missed %}
-        <span class="badge badge-amber">Rescheduled</span>
-      {% else %}
-        <a href="{% url 'session' entry.course_code %}" class="badge badge-blue">Start →</a>
-      {% endif %}
+
+    {% regroup timetable by day as day_list %}
+    {% for day in day_list %}
+      <p class="section-label" style="animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.05s;">{{ day.grouper }}</p>
+      
+      <div class="session-list" style="animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.1s;">
+        {% for entry in day.list %}
+        <div class="tt-row {% if entry.is_completed %}tt-done{% elif entry.is_missed %}tt-missed{% endif %}" 
+             style="transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s, box-shadow 0.2s; cursor: pointer;"
+             onmouseenter="this.style.transform='translateY(-2px)'; this.style.borderColor='var(--border-accent)'; this.style.boxShadow='var(--shadow-card)';"
+             onmouseleave="this.style.transform='translateY(0)'; this.style.borderColor='var(--border)'; this.style.boxShadow='none';">
+          <div class="tt-time">{{ entry.time }}</div>
+          <div class="tt-info">
+            <div class="tt-course">{{ entry.course_code }} — {{ entry.course_title }}</div>
+            <div class="tt-week">Week {{ entry.week_number }} of {{ entry.total_weeks }}</div>
+          </div>
+          <div>
+            {% if entry.is_completed %}
+              <span class="badge badge-green">Done ✓</span>
+            {% elif entry.is_missed %}
+              <span class="badge badge-amber">Rescheduled</span>
+            {% else %}
+              <a href="{% url 'session' entry.course_code %}" class="badge badge-blue" style="display: inline-block; text-align: center; transition: transform 0.15s;" onmouseenter="this.style.transform='scale(1.05)'" onmouseleave="this.style.transform='scale(1)'">Start →</a>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      
+    {% empty %}
+      <div class="side-widget-card" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+        <p>No timetable items configured yet. Complete your profile setup to generate your learning track.</p>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="dashboard-side-col">
+    <p class="section-label" style="animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.15s;">📊 Semester Progress</p>
+    <div class="side-widget-card" style="animation-delay: 0.18s; transition: transform 0.2s; cursor: pointer;" onmouseenter="this.style.transform='translateY(-2px)'" onmouseleave="this.style.transform='translateY(0)'">
+      <div style="margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
+          <span style="color: var(--text-secondary);">Term Timeline</span>
+          <span style="font-weight: 600; color: var(--amber);">Week 1 / 15</span>
+        </div>
+        <div class="prog-bar" style="height: 6px;">
+          <div class="prog-fill" style="width: 7.1%;"></div>
+        </div>
+      </div>
+      
+      <div style="font-size: 13px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);">
+        <div style="display: flex; justify-content: space-between;">
+          <span>Academic Track:</span>
+          <strong style="color: var(--text);">{{ profile.level }} Level</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span>Current Term:</span>
+          <strong style="color: var(--text);">Semester {{ profile.semester }}</strong>
+        </div>
+      </div>
+    </div>
+
+    <p class="section-label" style="animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.22s;">⚡ Actions</p>
+    <div class="side-widget-card" style="display: flex; flex-direction: column; gap: 8px; animation-delay: 0.25s;">
+      <a href="{% url 'dashboard' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px;">🏠 Back to Dashboard</a>
+      <a href="{% url 'profile_edit' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px;">⚙️ Adjust Level Settings</a>
     </div>
   </div>
-  {% endfor %}
-  {% empty %}
-  <p style="color:var(--text-secondary)">No timetable yet. Complete onboarding first.</p>
-  {% endfor %}
+
 </div>
 {% endblock %}
