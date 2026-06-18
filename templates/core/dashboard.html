@@ -114,10 +114,10 @@
       {% if recent_sessions %}
       <div class="session-list">
         {% for s in recent_sessions %}
-        <div class="session-row" style="border: none; background: var(--navy-mid); margin-bottom: 4px;">
+        <div class="session-row" style="border: none; background: var(--navy-mid); margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 6px;">
           <div>
-            <div class="session-course" style="font-size: 13px;">{{ s.course_code }}</div>
-            <div class="session-date" style="font-size: 11px;">Wk {{ s.week_number }} · {{ s.started_at|date:"d M" }}</div>
+            <div class="session-course" style="font-size: 13px; font-weight: 600;">{{ s.course_code }}</div>
+            <div class="session-date" style="font-size: 11px; color: var(--text-secondary);">Wk {{ s.week_number }} · {{ s.started_at|date:"d M" }}</div>
           </div>
           <div>
             <span class="badge {% if s.is_complete %}badge-green{% else %}badge-amber{% endif %}" style="font-size: 10px; padding: 2px 8px;">
@@ -170,10 +170,10 @@
     const gr = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
     const emoji = h < 12 ? "☀️" : h < 17 ? "👋" : "🌙";
     
-    // Safely pull first_name from context
+    // Safely parse first_name from context
     const firstName = "{{ user.first_name|escapejs }}".trim();
     
-    // Smart sentence constructor prevents trailing comma if name is missing
+    // Formulate final greeting phrase cleanly
     if (firstName) {
       document.getElementById("greeting").textContent = `${gr}, ${firstName}! ${emoji}`;
     } else {

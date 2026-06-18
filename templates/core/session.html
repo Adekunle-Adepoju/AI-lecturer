@@ -31,7 +31,7 @@
 
   {% if session %}
   <div class="prog-bar" style="margin:16px 0">
-    <div class="prog-fill" style="width:{% widthratio topic_number total_topics 100 %}%"></div>
+    <div class="prog-fill" style="width: {% widthratio topic_number total_topics 100 %}%"></div>
   </div>
   <p class="prog-label">Topic {{ topic_number }} of {{ total_topics }}: {{ topic_name }}</p>
   {% endif %}
@@ -69,7 +69,7 @@
     {% csrf_token %}
     <button type="submit" class="btn btn-white-outline btn-full"
             onclick="return confirm('This will erase your progress for Week {{ entry.week_number }} and restart from scratch. Continue?');">
-      ↺ Restart this week from the beginning
+      ⟳ Restart this week from the beginning
     </button>
   </form>
   {% endif %}
