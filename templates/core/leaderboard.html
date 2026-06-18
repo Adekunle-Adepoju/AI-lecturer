@@ -2,33 +2,133 @@
 {% block title %}Leaderboard — PetroLearn{% endblock %}
 
 {% block content %}
-<div class="page-container">
-  <h2 style="margin-bottom:4px">Leaderboard 🏆</h2>
-  <p class="greeting-sub" style="margin-bottom:1.5rem">Petroleum & Gas Engineering · Unilag</p>
+<div class="page-container" style="max-width: 1400px; margin: 0 auto;">
+  
+  <!-- Header Banner Section -->
+  <div class="greeting-section" style="margin-bottom: 2rem; animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;">
+    <h2 style="margin-bottom:4px; font-family: 'Space Grotesk', sans-serif; font-weight: 700; letter-spacing: -0.02em;">Leaderboard 🏆</h2>
+    <p class="greeting-sub">Petroleum & Gas Engineering · Unilag</p>
+  </div>
 
-  <div class="lb-list">
-    {% for student in top_students %}
-    <div class="lb-row {% if student.user == user %}lb-me{% endif %}">
-      <div class="lb-rank">
-        {% if forloop.counter == 1 %}🥇
-        {% elif forloop.counter == 2 %}🥈
-        {% elif forloop.counter == 3 %}🥉
-        {% else %}#{{ forloop.counter }}
-        {% endif %}
-      </div>
-      <div class="lb-avatar">{{ student.user.first_name.0 }}{{ student.user.last_name.0 }}</div>
-      <div class="lb-name">
-        {{ student.user.get_full_name }}
-        {% if student.user == user %}<span class="you-tag">(you)</span>{% endif %}
-      </div>
-      <div style="text-align:right">
-        <span class="xp-badge">{{ student.xp }} XP</span>
-        <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">🔥 {{ student.streak }} streak</div>
+  <!-- Responsive Three-Column Grid Layout -->
+  <div style="display: grid; grid-template-columns: 300px 1fr 320px; gap: 24px; align-items: start;" class="leaderboard-grid">
+    
+    <!-- 1. LEFT SIDEBAR: Elite Podium Highlights -->
+    <div class="lb-side-col" style="display: flex; flex-direction: column; gap: 16px; animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.05s;">
+      <p class="section-label" style="margin-bottom: 0;">Top Performers ✨</p>
+      
+      {% for student in top_students|slice:":3" %}
+        <div class="side-widget-card" style="display: flex; align-items: center; gap: 12px; padding: 1rem; position: relative; overflow: hidden; border-left: 3px solid {% if forloop.counter == 1 %}#ffd700{% elif forloop.counter == 2 %}#c0c0c0{% else %}#cd7f32{% endif %};">
+          <div style="font-size: 24px; line-height: 1;">
+            {% if forloop.counter == 1 %}🥇{% elif forloop.counter == 2 %}🥈{% else %}🥉{% endif %}
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              {{ student.user.get_full_name }}
+            </div>
+            <div style="font-size: 11px; color: var(--text-secondary);">🔥 {{ student.streak }} Day Streak</div>
+          </div>
+          <span class="xp-badge" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); font-size: 11px; padding: 4px 8px;">{{ student.xp }} XP</span>
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- 2. CENTRAL COLUMN: Main Rankings List -->
+    <div class="lb-main-col" style="animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.1s;">
+      <p class="section-label">Current Standings</p>
+      <div class="lb-list" style="display: flex; flex-direction: column; gap: 10px;">
+        {% for student in top_students %}
+        <div class="lb-row {% if student.user == user %}lb-me{% endif %}" 
+             style="transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s, box-shadow 0.2s; margin-bottom: 0;"
+             onmouseenter="this.style.transform='translateY(-2px)'; this.style.borderColor='var(--border-accent)';"
+             onmouseleave="this.style.transform='translateY(0)'; this.style.borderColor='var(--border)';">
+          
+          <div class="lb-rank" style="font-weight: 600; width: 40px;">
+            {% if forloop.counter == 1 %}🥇
+            {% elif forloop.counter == 2 %}🥈
+            {% elif forloop.counter == 3 %}🥉
+            {% else %}#{{ forloop.counter }}
+            {% endif %}
+          </div>
+          
+          <div class="lb-avatar" style="font-family: 'Space Grotesk', sans-serif; font-weight: 600;">
+            {{ student.user.first_name.0 }}{{ student.user.last_name.0 }}
+          </div>
+          
+          <div class="lb-name" style="font-weight: 500;">
+  {% if student.user.get_full_name %}
+    {{ student.user.get_full_name }}
+  {% else %}
+    Anonymous Academic
+  {% endif %}
+  {% if student.user == user %}<span class="you-tag" style="margin-left: 6px;">(you)</span>{% endif %}
+</div>
+          
+          <div style="text-align:right">
+            <span class="xp-badge">{{ student.xp }} XP</span>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">🔥 {{ student.streak }} streak</div>
+          </div>
+        </div>
+        {% empty %}
+        <div class="side-widget-card" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+          <p style="margin-bottom: 0;">No students active this semester yet. Complete a learning track session to claim the top spot! 🚀</p>
+        </div>
+        {% endfor %}
       </div>
     </div>
-    {% empty %}
-    <p style="color:var(--text-secondary);text-align:center;padding:2rem">No students yet. Be the first! 🚀</p>
-    {% endfor %}
+
+    <!-- 3. RIGHT SIDEBAR: Your Dynamic Profile Performance -->
+    <div class="lb-side-col" style="display: flex; flex-direction: column; gap: 16px; animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.15s;">
+      <p class="section-label" style="margin-bottom: 0;">Your Standing 📊</p>
+      <div class="side-widget-card" style="padding: 1.25rem;">
+        
+        <!-- Loop parameters to find logged-in user context metrics -->
+        {% for student in top_students %}
+          {% if student.user == user %}
+            <div style="text-align: center; padding: 0.5rem 0 1rem 0; border-bottom: 1px solid var(--border); margin-bottom: 1rem;">
+              <div style="font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Current Rank</div>
+              <div style="font-family: 'Space Grotesk', sans-serif; font-size: 36px; font-weight: 700; color: var(--amber); margin: 4px 0;">
+                #{{ forloop.counter }}
+              </div>
+              <div style="font-size: 13px; color: var(--text);">{{ student.xp }} Accumulated XP</div>
+            </div>
+          {% endif %}
+        {% endfor %}
+
+        <div style="font-size: 13px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; color: var(--text-secondary);">
+            <span>Department:</span>
+            <strong style="color: var(--text);">Petroleum & Gas</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; color: var(--text-secondary);">
+            <span>Active Pool:</span>
+            <strong style="color: var(--text);">Unilag Chapter</strong>
+          </div>
+        </div>
+      </div>
+
+      <p class="section-label" style="margin-bottom: 0;">Navigation ⚡</p>
+      <div class="side-widget-card" style="display: flex; flex-direction: column; gap: 8px; padding: 12px;">
+        <a href="{% url 'dashboard' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px; padding: 10px 14px;">🏠 Core Dashboard</a>
+        <a href="{% url 'timetable' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px; padding: 10px 14px;">📅 Session Timetable</a>
+      </div>
+    </div>
+
   </div>
 </div>
+
+<!-- Mobile layout fallback support styles directly inside block -->
+<style>
+  @media (max-width: 1100px) {
+    .leaderboard-grid {
+      grid-template-columns: 1fr !important;
+    }
+    .lb-side-col {
+      order: 2;
+    }
+    .lb-main-col {
+      order: 1;
+    }
+  }
+</style>
 {% endblock %}
