@@ -1,6 +1,5 @@
 import json
 import markdown
-import datetime
 import random
 from datetime import date, timedelta
 
@@ -33,30 +32,17 @@ def get_groq_client():
 def signup_view(request):
     if request.user.is_authenticated:
         return redirect("dashboard")
-    if request.method == "POST":
-        form = SignupForm(request.POST)
+    if request.method == 'POST':
+        form = SignupForm(request.POST)  # Fixed NameError placeholder here
         if form.is_valid():
-            try:
-                user = form.save(commit=False)
-                user.first_name = form.cleaned_data["first_name"]
-                user.last_name = form.cleaned_data["last_name"]
-                user.save()
-                profile = StudentProfile.objects.create(
-                    user=user,
-                    matric_number=form.cleaned_data["matric_number"],
-                    school=form.cleaned_data["school"],
-                    department=form.cleaned_data["department"],
-                    level=form.cleaned_data["level"],
-                    semester=form.cleaned_data["semester"],
-                )
-                _generate_timetable(profile)
-                login(request, user)
-                return redirect("dashboard")
-            except Exception as e:
-                form.add_error(None, f"Error creating account: {str(e)}")
+            user = form.save()
+            login(request, user)  # Log user in straight after a successful signup
+            return redirect('dashboard')
+        else:
+            print("SIGNUP ERRORS:", form.errors)
     else:
         form = SignupForm()
-    return render(request, "core/signup.html", {"form": form})
+    return render(request, 'core/signup.html', {'form': form})
 
 
 def login_view(request):
@@ -132,7 +118,8 @@ def dashboard_view(request):
     recent_sessions = profile.sessions.all()[:5]
     leaderboard = StudentProfile.objects.select_related("user").order_by("-xp")[:10]
     sessions_done = profile.sessions.count()
-    today = datetime.datetime.now().strftime("%a")
+    
+    today = timezone.now().strftime("%a")  # Safe cross-platform timezone management
     todays_courses = profile.timetable.filter(day=today, is_completed=False)
     incomplete_sessions = {
         s.course_code: s
@@ -152,7 +139,7 @@ def dashboard_view(request):
     })
 
 
-# ─── Helpers ───────────────────────────────────────────────────────────────────
+# ─── Helpers ───────────────────--------------------------------───────────────
 
 def _get_topics_for_week(course_code, level, week_number):
     try:
@@ -168,6 +155,7 @@ def _get_topics_for_week(course_code, level, week_number):
     except SlideDocument.DoesNotExist:
         pass
 
+    # Fallback — hardcoded outline
     topics = COURSE_OUTLINES.get(course_code, {}).get(week_number, [])
     if not topics:
         topics = ["Core Concepts", "Key Applications", "Problem Solving"]
@@ -175,19 +163,24 @@ def _get_topics_for_week(course_code, level, week_number):
 
 
 def _get_past_questions_for_topic(course_code, level, topic_name, limit=3):
+    """Fetch past questions relevant to this topic, for blending into quizzes"""
     from .models import PastQuestion
     relevant = []
     past_qs = PastQuestion.objects.filter(course_code=course_code, level=level, parsed=True)
+    
     for pq in past_qs:
         for q in pq.parsed_questions:
             hint = q.get("topic_hint", "").lower()
             if any(word.lower() in hint for word in topic_name.split()):
                 relevant.append(q)
+                
+    # If no topic match, just grab random ones from the course as general style reference
     if not relevant:
         all_questions = []
         for pq in past_qs:
             all_questions.extend(pq.parsed_questions)
         relevant = all_questions
+        
     random.shuffle(relevant)
     return relevant[:limit]
 
@@ -261,6 +254,7 @@ def _parse_lecture(full_text):
             correct_index = quiz_data.get("correct_index", 0)
             explanation = quiz_data.get("explanation", "")
         except json.JSONDecodeError:
+            # Fallback: try regex to pull out the question and options manually
             q_match = re.search(r'"question"\s*:\s*"(.*?)"\s*,\s*"options"', clean, re.DOTALL)
             if q_match:
                 question = q_match.group(1).strip()
@@ -408,6 +402,7 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
 
     parsed = _parse_lecture(full_text)
 
+    # Retry once if quiz parsing failed
     if not parsed["question"] or parsed["options"] == ["Option A", "Option B", "Option C", "Option D"]:
         try:
             full_text = _generate_topic_lecture(
@@ -696,5 +691,6 @@ def restart_session_view(request, course_code, week_number):
     entry.is_completed = False
     entry.save()
 
-    messages.success(request, f"{course_code} Week {week_number} has been restarted.")
-    return redirect("session", course_code=course_code)
+    messages.success(request, f"{course_code} Week {week_number} has been restarted from the beginning.")
+    # Fixed redirect pattern mapping lookup parameter
+    return redirect("session", course_code)

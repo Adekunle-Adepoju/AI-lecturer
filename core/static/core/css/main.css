@@ -1278,34 +1278,3 @@ hr {
   padding: 13px 16px;
   font-size: 15px;
   font-family: inherit;
-  resize: none;
-  max-height: 160px;
-  line-height: 1.6;
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.chat-input-wrap textarea::placeholder { color: var(--text-muted); }
-.chat-input-wrap textarea:focus {
-  border-color: var(--amber);
-  box-shadow: 0 0 0 3px var(--amber-glow);
-}
-
-.chat-input-wrap .btn-primary {
-  height: 48px;
-  padding: 0 20px;
-  border-radius: var(--radius-lg);
-  flex-shrink: 0;
-}
-
-@media (max-width: 480px) {
-  .form-row { grid-template-columns: 1fr; }
-}
-
-/* ── Reduced motion ──────────────────────────────────────────────── */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
