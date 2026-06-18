@@ -75,6 +75,8 @@
 /* ── Reset & base ────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+@import url('https://fonts.googleapis.com/css2?family=Mona+Sans:ital,wght@0,200..900;1,200..900&display=swap');
+
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
 html { scroll-behavior: smooth; }
 
@@ -95,6 +97,97 @@ select {
               color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
               box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+
+
+
+/* Fullscreen Loader Overlay */
+#petrolearn-loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #0b1329; /* Deep navy background */
+  z-index: 99999; /* Ensures it sits above everything */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+.loader-content {
+  text-align: center;
+}
+
+/* Robot Icon Animation */
+.loader-avatar {
+  font-size: 40px;
+  display: inline-block;
+  animation: float-bot 2s ease-in-out infinite;
+  margin-bottom: 12px;
+}
+
+/* Shimmering Text Reveal Effect */
+.loader-logo {
+  font-family: 'Inter', sans-serif;
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: 2px;
+  margin: 0 0 16px 0;
+  color: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(to right, #ffffff 20%, #ffb703 40%, #ffffff 60%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: text-shimmer 2.5s linear infinite;
+}
+
+/* Subtle Progress Accent Line */
+.loader-bar-container {
+  width: 140px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.loader-bar-fill {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #ffb703, #fb8500);
+  transform: translateX(-100%);
+  animation: load-progress 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Keyframe Animations */
+@keyframes text-shimmer {
+  to {
+    background-position: 200% center;
+  }
+}
+
+@keyframes float-bot {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes load-progress {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Class to cleanly fade out the screen */
+#petrolearn-loader.fade-out {
+  opacity: 0;
+  visibility: hidden;
+}
+
+
+
+
 
 /* ── Entrance Animations (Page Load) ────────────────────────────── */
 @keyframes fadeInUp {
@@ -571,7 +664,7 @@ select option { background: var(--navy-card); }
 .greeting-section { margin-bottom: 1.5rem; }
 
 .greeting {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'mona sans', sans-serif;
   font-size: 26px;
   font-weight: 700;
   margin-bottom: 4px;
