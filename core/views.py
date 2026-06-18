@@ -2,6 +2,7 @@ import json
 import markdown
 import datetime
 from datetime import date, timedelta
+import random
 
 from django.contrib import messages
 from django.contrib.auth import login, logout
@@ -179,7 +180,25 @@ def dashboard_view(request):
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
 
-def _get_topics_for_week(course_code, week_number):
+def _get_topics_for_week(course_code, level, week_number):
+    """Get 3 topics for this week — prefer slide-extracted topics, fall back to hardcoded outline"""
+    from .models import SlideDocument
+
+    try:
+        slide = SlideDocument.objects.get(course_code=course_code, level=level, parsed=True)
+        if slide.extracted_topics:
+            start = (week_number - 1) * 3
+            end = start + 3
+            topics = slide.extracted_topics[start:end]
+            if topics:
+                return topics
+            # If we've run past the slide's topic list, repeat the last 3 as review
+            if len(slide.extracted_topics) >= 3:
+                return slide.extracted_topics[-3:]
+    except SlideDocument.DoesNotExist:
+        pass
+
+    # Fallback — hardcoded outline
     topics = COURSE_OUTLINES.get(course_code, {}).get(week_number, [])
     if not topics:
         topics = ["Core Concepts", "Key Applications", "Problem Solving"]
@@ -188,6 +207,14 @@ def _get_topics_for_week(course_code, week_number):
 
 def _generate_topic_lecture(course_code, course_title, topic_name, week, level, student_name, topic_index=0, slide_text=""):
     client = get_groq_client()
+
+    past_questions = _get_past_questions_for_topic(course_code, level, topic_name, limit=2)
+    past_q_text = ""
+    if past_questions:
+        past_q_text = "\n\nREFERENCE PAST QUESTIONS (use similar style/difficulty for your quiz, but don't copy verbatim):\n"
+        for pq in past_questions:
+            past_q_text += f"- {pq.get('question', '')}\n"
+
     user_message = (
         f"Student name: {student_name}\n"
         f"Level: {level}L\n"
@@ -198,6 +225,7 @@ def _generate_topic_lecture(course_code, course_title, topic_name, week, level, 
         f"STRICT INSTRUCTION: Teach ONLY '{topic_name}'. Do not teach any other topic. "
         f"Follow the course outline strictly. This is the exact topic scheduled for this session."
         f"{slide_text}"
+        f"{past_q_text}"
     )
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -231,26 +259,44 @@ def _parse_lecture(full_text):
     explanation = ""
 
     if quiz_raw:
+        clean = quiz_raw.replace("```json", "").replace("```", "").strip()
+
+        # Fix common JSON-breaking escape sequences from the model
+        clean = clean.replace("\\*", "*").replace("\\%", "%")
+
+        # Try to isolate just the JSON object in case of stray text
+        start = clean.find("{")
+        end = clean.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            clean = clean[start:end + 1]
+
         try:
-            clean = quiz_raw.replace("```json", "").replace("```", "").strip()
             quiz_data = json.loads(clean)
             question = quiz_data.get("question", "")
             options = quiz_data.get("options", options)
             correct_index = quiz_data.get("correct_index", 0)
             explanation = quiz_data.get("explanation", "")
         except json.JSONDecodeError:
-            lines = [l.strip() for l in quiz_raw.split("\n") if l.strip()]
-            question_lines = []
-            parsed_options = []
-            for line in lines:
-                if len(line) > 1 and line[0] in "ABCD" and line[1] == ".":
-                    parsed_options.append(line)
-                elif not parsed_options:
-                    question_lines.append(line)
-            if question_lines:
-                question = " ".join(question_lines).strip()
-            if parsed_options:
-                options = parsed_options
+            # Fallback: try regex to pull out the question and options manually
+            import re
+            q_match = re.search(r'"question"\s*:\s*"(.*?)"\s*,\s*"options"', clean, re.DOTALL)
+            if q_match:
+                question = q_match.group(1).strip()
+
+            opt_match = re.search(r'"options"\s*:\s*\[(.*?)\]', clean, re.DOTALL)
+            if opt_match:
+                raw_opts = opt_match.group(1)
+                found_opts = re.findall(r'"(.*?)"', raw_opts)
+                if found_opts:
+                    options = found_opts
+
+            idx_match = re.search(r'"correct_index"\s*:\s*(\d+)', clean)
+            if idx_match:
+                correct_index = int(idx_match.group(1))
+
+            exp_match = re.search(r'"explanation"\s*:\s*"(.*?)"\s*\}', clean, re.DOTALL)
+            if exp_match:
+                explanation = exp_match.group(1).strip()
 
     return {
         "intro": intro_raw,
@@ -260,7 +306,6 @@ def _parse_lecture(full_text):
         "correct_index": correct_index,
         "explanation": explanation,
     }
-
 
 # ─── Session ───────────────────────────────────────────────────────────────────
 
@@ -278,7 +323,6 @@ def session_view(request, course_code):
     action = request.POST.get("action")
 
     if action == "start":
-    # Check for an incomplete session for this course/week
         existing_session = Session.objects.filter(
             student=profile,
             course_code=course_code,
@@ -287,16 +331,13 @@ def session_view(request, course_code):
         ).first()
 
         if existing_session:
-            # Resume from where they left off
             current_index = existing_session.current_topic_index
-            # Check if this topic already has a topic_session
             existing_topic = existing_session.topic_sessions.filter(
                 topic_index=current_index,
                 is_complete=False,
             ).first()
 
             if existing_topic:
-                # Show intro again for the current incomplete topic
                 intro_html = markdown.markdown(existing_topic.intro_content, extensions=["extra"])
                 return render(request, "core/session.html", {
                     "entry": entry,
@@ -308,12 +349,10 @@ def session_view(request, course_code):
                     "topic_name": existing_topic.topic_name,
                 })
             else:
-                # Teach the next topic
                 topic_name = existing_session.topics[current_index]
                 return _teach_topic(request, existing_session, entry, profile, topic_name, current_index)
 
-        # No existing session — start fresh
-        topics = _get_topics_for_week(course_code, entry.week_number)
+        topics = _get_topics_for_week(course_code, profile.level, entry.week_number)
         session = Session.objects.create(
             student=profile,
             course_code=course_code,
@@ -323,6 +362,7 @@ def session_view(request, course_code):
             current_topic_index=0,
         )
         return _teach_topic(request, session, entry, profile, topics[0], 0)
+       
 
     if action == "show_lecture":
         topic_session_id = request.POST.get("topic_session_id")
@@ -350,10 +390,10 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
     try:
         slide_doc = SlideDocument.objects.get(
             course_code=session.course_code,
-            week_number=session.week_number
+            level=profile.level
         )
         if slide_doc.extracted_text:
-            slide_text = f"\n\nLECTURER SLIDES FOR THIS WEEK:\n{slide_doc.extracted_text[:4000]}"
+            slide_text = f"\n\nLECTURER SLIDES (full course reference — focus only on content relevant to this topic):\n{slide_doc.extracted_text[:6000]}"
     except SlideDocument.DoesNotExist:
         pass
 
@@ -382,6 +422,7 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
             "entry": entry,
             "error": f"Could not load lecture: {str(e)}",
         })
+
 
     parsed = _parse_lecture(full_text)
 
@@ -620,3 +661,56 @@ def review_view(request, topic_session_id):
         "lecture_html": lecture_html,
         "correct": topic_session.student_answer_index == topic_session.correct_answer_index,
     })
+
+@login_required
+def history_view(request):
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
+
+    profile = request.user.profile
+
+    # Get all completed topic sessions, grouped by course
+    topic_sessions = TopicSession.objects.filter(
+        session__student=profile,
+        is_complete=True
+    ).select_related("session").order_by("-session__started_at", "topic_index")
+
+    # Group by course code
+    history_by_course = {}
+    for ts in topic_sessions:
+        code = ts.session.course_code
+        title = ts.session.course_title
+        if code not in history_by_course:
+            history_by_course[code] = {
+                "course_title": title,
+                "topics": []
+            }
+        history_by_course[code]["topics"].append(ts)
+
+    return render(request, "core/history.html", {
+        "history_by_course": history_by_course,
+    })
+
+
+def _get_past_questions_for_topic(course_code, level, topic_name, limit=3):
+    """Fetch past questions relevant to this topic, for blending into quizzes"""
+    from .models import PastQuestion
+
+    relevant = []
+    past_qs = PastQuestion.objects.filter(course_code=course_code, level=level, parsed=True)
+
+    for pq in past_qs:
+        for q in pq.parsed_questions:
+            hint = q.get("topic_hint", "").lower()
+            if any(word.lower() in hint for word in topic_name.split()):
+                relevant.append(q)
+
+    # If no topic match, just grab random ones from the course as general style reference
+    if not relevant:
+        all_questions = []
+        for pq in past_qs:
+            all_questions.extend(pq.parsed_questions)
+        relevant = all_questions
+
+    random.shuffle(relevant)
+    return relevant[:limit]
