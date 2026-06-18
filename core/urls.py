@@ -17,4 +17,5 @@ urlpatterns = [
     path("profile/edit/", views.profile_edit_view, name="profile_edit"),
     path("review/<int:topic_session_id>/", views.review_view, name="review"),
     path("history/", views.history_view, name="history"),
+    path("session/<str:course_code>/restart/<int:week_number>/", views.restart_session_view, name="restart_session"),
 ]
