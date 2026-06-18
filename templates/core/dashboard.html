@@ -2,6 +2,30 @@
 {% block title %}Dashboard — PetroLearn{% endblock %}
 
 {% block content %}
+
+<head>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mona+Sans:ital,wght@0,200..900;1,200..900&display=swap" rel="stylesheet">
+
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+</head>
+
+<div id="petrolearn-loader">
+  
+  <div class="loader-content">
+    <span class="loader-avatar">🤖</span>
+    <h1 class="loader-logo">PetroLearn</h1>
+    <div class="loader-bar-container">
+      <div class="loader-bar-fill"></div>
+      
+    </div>
+  </div>
+</div>
+
 <div class="page-container dashboard-grid-container">
 
   <div class="dashboard-main-col">
@@ -117,6 +141,25 @@
     </div>
   </div>
 
+  <button id="backToTopBtn" class="btn btn-white-outline" title="Go to top" style="
+  display: none; 
+  position: fixed; 
+  bottom: 24px; 
+  right: 24px; 
+  z-index: 99; 
+  min-width: auto; 
+  padding: 10px 14px; 
+  border-radius: 50%; 
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+  cursor: pointer;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+">
+  ↑
+</button>
+
+
+
+
 </div>
 {% endblock %}
 
@@ -137,5 +180,26 @@
       document.getElementById("greeting").textContent = `${gr}! ${emoji}`;
     }
   })();
+</script>
+
+<script>
+  const topBtn = document.getElementById("backToTopBtn");
+
+  // Show the button when the user scrolls down 300px from the top
+  window.onscroll = function() {
+    if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
+      topBtn.style.display = "block";
+    } else {
+      topBtn.style.display = "none";
+    }
+  };
+
+  // Smooth scroll back to the top when clicked
+  topBtn.addEventListener("click", function() {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth"
+    });
+  });
 </script>
 {% endblock %}

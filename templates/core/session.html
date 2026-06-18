@@ -4,6 +4,18 @@
 {% block content %}
 <div class="page-container">
 
+  <div id="petrolearn-loader">
+  
+  <div class="loader-content">
+    <span class="loader-avatar">🤖</span>
+    <h1 class="loader-logo">PetroLearn</h1>
+    <div class="loader-bar-container">
+      <div class="loader-bar-fill"></div>
+      
+    </div>
+  </div>
+</div>
+
   <div class="session-header">
     <div class="ai-avatar">🤖</div>
     <div>
@@ -62,5 +74,42 @@
   </form>
   {% endif %}
 
+  <button id="backToTopBtn" class="btn btn-white-outline" title="Go to top" style="
+  display: none; 
+  position: fixed; 
+  bottom: 24px; 
+  right: 24px; 
+  z-index: 99; 
+  min-width: auto; 
+  padding: 10px 14px; 
+  border-radius: 50%; 
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+  cursor: pointer;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+">
+  ↑
+</button>
+
 </div>
+
+<script>
+  const topBtn = document.getElementById("backToTopBtn");
+
+  // Show the button when the user scrolls down 300px from the top
+  window.onscroll = function() {
+    if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
+      topBtn.style.display = "block";
+    } else {
+      topBtn.style.display = "none";
+    }
+  };
+
+  // Smooth scroll back to the top when clicked
+  topBtn.addEventListener("click", function() {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth"
+    });
+  });
+</script>
 {% endblock %}

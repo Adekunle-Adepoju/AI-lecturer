@@ -19,7 +19,41 @@
       }
     })();
   </script>
+
+
+
+
+<script>
+  window.addEventListener("load", function() {
+    const loader = document.getElementById("petrolearn-loader");
+    
+    // Smoothly fade out the preloader
+    if (loader) {
+      // Small artificial delay (e.g., 400ms) can be added here if your local server is too instantaneous 
+      // to let users appreciate the text animation.
+      loader.classList.add("fade-out");
+    }
+  });
+</script>
+<script>
+  window.addEventListener("load", function() {
+    const loader = document.getElementById("petrolearn-loader");
+    
+    if (loader) {
+      // 2000 milliseconds = 2 seconds. 
+      // Change this number to make it display shorter or longer!
+      setTimeout(function() {
+        loader.classList.add("fade-out");
+      }, 2000); 
+    }
+  });
+</script>
+
+
 </head>
+
+
+
 <body>
 
 {% if user.is_authenticated %}
@@ -78,6 +112,8 @@
 </div>
 {% endif %}
 
+
+
 {% if messages %}
 <div class="messages">
   {% for message in messages %}
@@ -85,6 +121,22 @@
   {% endfor %}
 </div>
 {% endif %}
+
+<button id="backToTopBtn" class="btn btn-white-outline" title="Go to top" style="
+  display: none; 
+  position: fixed; 
+  bottom: 24px; 
+  right: 24px; 
+  z-index: 99; 
+  min-width: auto; 
+  padding: 10px 14px; 
+  border-radius: 50%; 
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+  cursor: pointer;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+">
+  ↑
+</button>
 
 <main class="main-content">
   {% block content %}{% endblock %}
@@ -150,6 +202,27 @@
         updateToggleButton(targetTheme);
       });
     }
+  });
+</script>
+
+<script>
+  const topBtn = document.getElementById("backToTopBtn");
+
+  // Show the button when the user scrolls down 300px from the top
+  window.onscroll = function() {
+    if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
+      topBtn.style.display = "block";
+    } else {
+      topBtn.style.display = "none";
+    }
+  };
+
+  // Smooth scroll back to the top when clicked
+  topBtn.addEventListener("click", function() {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth"
+    });
   });
 </script>
 </body>
