@@ -1,7 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 
-
+# ── Academic Reference Maps ─────────────────────────────────────────
 COURSES = {
     "300": {
         "1": [
@@ -162,13 +163,8 @@ COURSE_OUTLINES = {
 
 LEVEL_CHOICES = [("100", "100 Level"), ("200", "200 Level"), ("300", "300 Level"), ("400", "400 Level"), ("500", "500 Level")]
 SEMESTER_CHOICES = [("1", "First Semester"), ("2", "Second Semester")]
-SCHOOL_CHOICES = [
-    ("unilag", "University of Lagos"),
-]
-
-DEPARTMENT_CHOICES = [
-    ("petroleum", "Petroleum & Gas Engineering"),
-]
+SCHOOL_CHOICES = [("unilag", "University of Lagos")]
+DEPARTMENT_CHOICES = [("petroleum", "Petroleum & Gas Engineering")]
 
 
 class StudentProfile(models.Model):
@@ -185,6 +181,7 @@ class StudentProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} — {self.level}L"
+
 
 class TimetableEntry(models.Model):
     DAYS = [("Mon", "Monday"), ("Tue", "Tuesday"), ("Wed", "Wednesday"), ("Thu", "Thursday"), ("Fri", "Friday")]
@@ -208,7 +205,6 @@ class TimetableEntry(models.Model):
 
 
 class Session(models.Model):
-    """One full day session — contains multiple topics"""
     student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="sessions")
     course_code = models.CharField(max_length=10)
     course_title = models.CharField(max_length=100)
@@ -228,7 +224,6 @@ class Session(models.Model):
 
 
 class TopicSession(models.Model):
-    """One topic within a session — has its own lecture and quiz"""
     session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name="topic_sessions")
     topic_name = models.CharField(max_length=200)
     topic_index = models.IntegerField(default=0)
@@ -237,7 +232,7 @@ class TopicSession(models.Model):
     quiz_question = models.TextField(blank=True)
     quiz_options = models.JSONField(default=list)
     correct_answer_index = models.IntegerField(default=0)
-    quiz_explanation = models.TextField(blank=True)   # ← ADDED: shown after student answers
+    quiz_explanation = models.TextField(blank=True)
     student_answer_index = models.IntegerField(null=True, blank=True)
     passed_quiz = models.BooleanField(default=False)
     xp_earned = models.IntegerField(default=0)
@@ -253,20 +248,16 @@ class TopicSession(models.Model):
 class SlideDocument(models.Model):
     course_code = models.CharField(max_length=10)
     course_title = models.CharField(max_length=100)
-    # Both week-based and level-based slide documents are supported.
-    # week_number is optional so a SlideDocument can either represent
-    # a specific week of slides or a general slide document for a level.
     week_number = models.IntegerField(null=True, blank=True)
     level = models.CharField(max_length=3, choices=LEVEL_CHOICES, null=True, blank=True)
     file = models.FileField(upload_to="slides/")
     extracted_text = models.TextField(blank=True)
-    extracted_topics = models.JSONField(default=list)   # flat list of topics pulled from slides
+    extracted_topics = models.JSONField(default=list)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     parsed = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["course_code", "week_number"]
-        # ensure uniqueness across the combination of course, level and week if present
         unique_together = ["course_code", "level", "week_number"]
 
     def __str__(self):
@@ -276,8 +267,8 @@ class SlideDocument(models.Model):
             return f"{self.course_code} — Slide Document ({self.level})"
         return f"{self.course_code} — Slide Document"
 
+
 class CourseOutline(models.Model):
-    """Uploaded course outline — parsed into weekly topics"""
     course_code = models.CharField(max_length=10)
     course_title = models.CharField(max_length=100)
     level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
@@ -292,16 +283,15 @@ class CourseOutline(models.Model):
 
     def __str__(self):
         return f"{self.course_code} — Course Outline"
-    
+
 
 class PastQuestion(models.Model):
-    """Uploaded past exam/test questions — parsed into structured Q&A"""
     course_code = models.CharField(max_length=10)
     course_title = models.CharField(max_length=100)
     level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
     file = models.FileField(upload_to="past_questions/")
     extracted_text = models.TextField(blank=True)
-    parsed_questions = models.JSONField(default=list)  # [{question, options, correct_index, explanation, topic_hint}]
+    parsed_questions = models.JSONField(default=list)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     parsed = models.BooleanField(default=False)
 
@@ -313,7 +303,6 @@ class PastQuestion(models.Model):
 
 
 class Test(models.Model):
-    """Mid-semester test — triggered at week 6"""
     STATUS_CHOICES = [
         ("pending", "Not Started"),
         ("in_progress", "In Progress"),
@@ -324,9 +313,9 @@ class Test(models.Model):
     course_code = models.CharField(max_length=10)
     course_title = models.CharField(max_length=100)
     week_triggered = models.IntegerField(default=6)
-    questions = models.JSONField(default=list)   # list of {question, options, correct_index, explanation}
-    answers = models.JSONField(default=list)     # list of student's chosen indices, in order
-    score = models.IntegerField(default=0)       # number correct out of 10
+    questions = models.JSONField(default=list)
+    answers = models.JSONField(default=list)
+    score = models.IntegerField(default=0)
     xp_earned = models.IntegerField(default=0)
     status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="pending")
     started_at = models.DateTimeField(auto_now_add=True)
@@ -340,7 +329,6 @@ class Test(models.Model):
 
 
 class Exam(models.Model):
-    """End of semester exam — triggered at week 12"""
     STATUS_CHOICES = [
         ("pending", "Not Started"),
         ("in_progress", "In Progress"),
@@ -351,9 +339,9 @@ class Exam(models.Model):
     course_code = models.CharField(max_length=10)
     course_title = models.CharField(max_length=100)
     week_triggered = models.IntegerField(default=12)
-    questions = models.JSONField(default=list)   # list of {question, options, correct_index, explanation}
+    questions = models.JSONField(default=list)
     answers = models.JSONField(default=list)
-    score = models.IntegerField(default=0)       # number correct out of 20
+    score = models.IntegerField(default=0)
     xp_earned = models.IntegerField(default=0)
     status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="pending")
     started_at = models.DateTimeField(auto_now_add=True)
@@ -367,7 +355,6 @@ class Exam(models.Model):
 
 
 class Challenge(models.Model):
-    """Head-to-head quiz challenge between two students"""
     STATUS_CHOICES = [
         ("pending", "Pending Acceptance"),
         ("active", "In Progress"),
@@ -376,13 +363,14 @@ class Challenge(models.Model):
         ("expired", "Expired"),
     ]
 
+    # Changed on_delete to CASCADE to maintain relational database integrity if an active profile is dropped
     challenger = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="challenges_sent")
     opponent = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="challenges_received")
     course_code = models.CharField(max_length=10)
     course_title = models.CharField(max_length=100)
-    questions = models.JSONField(default=list)            # 5 questions, same for both students
-    challenger_answers = models.JSONField(default=list)   # challenger's chosen indices
-    opponent_answers = models.JSONField(default=list)     # opponent's chosen indices
+    questions = models.JSONField(default=list)
+    challenger_answers = models.JSONField(default=list)
+    opponent_answers = models.JSONField(default=list)
     challenger_score = models.IntegerField(default=0)
     opponent_score = models.IntegerField(default=0)
     winner = models.ForeignKey(
