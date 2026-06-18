@@ -12,6 +12,7 @@
 
     <form method="post">
       {% csrf_token %}
+      
       <div class="form-row">
         <div class="form-group">
           <label>First name</label>
@@ -24,26 +25,62 @@
           {% if form.last_name.errors %}<p class="form-error">{{ form.last_name.errors.0 }}</p>{% endif %}
         </div>
       </div>
+
       <div class="form-group">
         <label>Email</label>
         {{ form.email }}
         {% if form.email.errors %}<p class="form-error">{{ form.email.errors.0 }}</p>{% endif %}
       </div>
+
       <div class="form-group">
         <label>Username</label>
         {{ form.username }}
         {% if form.username.errors %}<p class="form-error">{{ form.username.errors.0 }}</p>{% endif %}
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Matric Number</label>
+          {{ form.matric_number }}
+          {% if form.matric_number.errors %}<p class="form-error">{{ form.matric_number.errors.0 }}</p>{% endif %}
+        </div>
+        <div class="form-group">
+          <label>University / School</label>
+          {{ form.school }}
+          {% if form.school.errors %}<p class="form-error">{{ form.school.errors.0 }}</p>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Department</label>
+        {{ form.department }}
+        {% if form.department.errors %}<p class="form-error">{{ form.department.errors.0 }}</p>{% endif %}
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Level</label>
+          {{ form.level }}
+          {% if form.level.errors %}<p class="form-error">{{ form.level.errors.0 }}</p>{% endif %}
+        </div>
+        <div class="form-group">
+          <label>Semester</label>
+          {{ form.semester }}
+          {% if form.semester.errors %}<p class="form-error">{{ form.semester.errors.0 }}</p>{% endif %}
+        </div>
       </div>
       <div class="form-group">
         <label>Password</label>
         {{ form.password1 }}
         {% if form.password1.errors %}<p class="form-error">{{ form.password1.errors.0 }}</p>{% endif %}
       </div>
+
       <div class="form-group">
         <label>Confirm password</label>
         {{ form.password2 }}
         {% if form.password2.errors %}<p class="form-error">{{ form.password2.errors.0 }}</p>{% endif %}
       </div>
+
       <button type="submit" class="btn btn-primary btn-full">Create my account 🚀</button>
     </form>
     <p class="auth-switch">Already have an account? <a href="{% url 'login' %}">Log in</a></p>
