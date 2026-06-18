@@ -1046,3 +1046,23 @@ hr {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Callout boxes inside lecture ── */
+.msg.ai blockquote {
+  border-left: 3px solid var(--amber);
+  padding: 12px 16px;
+  margin: 1rem 0;
+  background: var(--navy);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.msg.ai blockquote strong {
+  color: var(--amber);
+}
+
+/* Different colors based on content - detected via emoji at start */
+.msg.ai blockquote:has(p:first-child) {
+  position: relative;
+}

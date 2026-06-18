@@ -253,19 +253,19 @@ class TopicSession(models.Model):
 class SlideDocument(models.Model):
     course_code = models.CharField(max_length=10)
     course_title = models.CharField(max_length=100)
-    week_number = models.IntegerField()
     level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
     file = models.FileField(upload_to="slides/")
     extracted_text = models.TextField(blank=True)
+    extracted_topics = models.JSONField(default=list)   # full flat list of topics pulled from slide
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    parsed = models.BooleanField(default=False)
 
     class Meta:
-        ordering = ["course_code", "week_number"]
-        unique_together = ["course_code", "week_number"]
+        ordering = ["course_code"]
+        unique_together = ["course_code", "level"]
 
     def __str__(self):
-        return f"{self.course_code} — Week {self.week_number}"
-
+        return f"{self.course_code} — Slide Document"
 
 class CourseOutline(models.Model):
     """Uploaded course outline — parsed into weekly topics"""
@@ -283,6 +283,23 @@ class CourseOutline(models.Model):
 
     def __str__(self):
         return f"{self.course_code} — Course Outline"
+    
+class PastQuestion(models.Model):
+    """Uploaded past exam/test questions — parsed into structured Q&A"""
+    course_code = models.CharField(max_length=10)
+    course_title = models.CharField(max_length=100)
+    level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
+    file = models.FileField(upload_to="past_questions/")
+    extracted_text = models.TextField(blank=True)
+    parsed_questions = models.JSONField(default=list)  # [{question, options, correct_index, explanation, topic_hint}]
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    parsed = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["course_code", "-uploaded_at"]
+
+    def __str__(self):
+        return f"{self.course_code} — Past Questions ({self.uploaded_at.strftime('%Y')})"
 
 
 class Test(models.Model):

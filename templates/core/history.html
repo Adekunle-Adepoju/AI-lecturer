@@ -1,0 +1,45 @@
+{% extends "core/base.html" %}
+{% block title %}History — PetroLearn{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin-bottom:4px">📚 Lecture History</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">All your completed topics, organized by course</p>
+
+  {% if history_by_course %}
+    {% for code, data in history_by_course.items %}
+    <div style="margin-bottom:28px">
+      <p class="section-label">{{ code }} — {{ data.course_title }}</p>
+      <div class="course-list">
+        {% for topic in data.topics %}
+        <a href="{% url 'review' topic.id %}" class="course-pill">
+          <div class="course-pill-left">
+            <div class="course-info">
+              <div class="course-name">{{ topic.topic_name }}</div>
+              <div class="course-code">
+                Week {{ topic.session.week_number }} · Topic {{ topic.topic_index|add:1 }}
+                {% if topic.passed_quiz %}
+                  · <span style="color:var(--green-text)">Passed ✓</span>
+                {% else %}
+                  · <span style="color:#F08080">Failed ✗</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          <span class="arrow">→</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="done-card">
+      <div class="done-emoji">📖</div>
+      <div class="done-title">No lectures yet</div>
+      <div class="done-sub">Complete your first topic to see it here.</div>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}
