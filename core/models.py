@@ -253,35 +253,28 @@ class TopicSession(models.Model):
 class SlideDocument(models.Model):
     course_code = models.CharField(max_length=10)
     course_title = models.CharField(max_length=100)
-<<<<<<< HEAD
-    week_number = models.IntegerField()
-    level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
+    # Both week-based and level-based slide documents are supported.
+    # week_number is optional so a SlideDocument can either represent
+    # a specific week of slides or a general slide document for a level.
+    week_number = models.IntegerField(null=True, blank=True)
+    level = models.CharField(max_length=3, choices=LEVEL_CHOICES, null=True, blank=True)
     file = models.FileField(upload_to="slides/")
     extracted_text = models.TextField(blank=True)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["course_code", "week_number"]
-        unique_together = ["course_code", "week_number"]
-
-    def __str__(self):
-        return f"{self.course_code} — Week {self.week_number}"
-
-=======
-    level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
-    file = models.FileField(upload_to="slides/")
-    extracted_text = models.TextField(blank=True)
-    extracted_topics = models.JSONField(default=list)   # full flat list of topics pulled from slide
+    extracted_topics = models.JSONField(default=list)   # flat list of topics pulled from slides
     uploaded_at = models.DateTimeField(auto_now_add=True)
     parsed = models.BooleanField(default=False)
 
     class Meta:
-        ordering = ["course_code"]
-        unique_together = ["course_code", "level"]
+        ordering = ["course_code", "week_number"]
+        # ensure uniqueness across the combination of course, level and week if present
+        unique_together = ["course_code", "level", "week_number"]
 
     def __str__(self):
+        if self.week_number:
+            return f"{self.course_code} — Week {self.week_number}"
+        if self.level:
+            return f"{self.course_code} — Slide Document ({self.level})"
         return f"{self.course_code} — Slide Document"
->>>>>>> 63092e89ef9db556e340fe3f2c2ee7e587f6078f
 
 class CourseOutline(models.Model):
     """Uploaded course outline — parsed into weekly topics"""
@@ -299,9 +292,8 @@ class CourseOutline(models.Model):
 
     def __str__(self):
         return f"{self.course_code} — Course Outline"
-<<<<<<< HEAD
-=======
     
+
 class PastQuestion(models.Model):
     """Uploaded past exam/test questions — parsed into structured Q&A"""
     course_code = models.CharField(max_length=10)
@@ -318,7 +310,6 @@ class PastQuestion(models.Model):
 
     def __str__(self):
         return f"{self.course_code} — Past Questions ({self.uploaded_at.strftime('%Y')})"
->>>>>>> 63092e89ef9db556e340fe3f2c2ee7e587f6078f
 
 
 class Test(models.Model):
