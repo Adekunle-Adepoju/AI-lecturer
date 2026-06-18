@@ -714,3 +714,37 @@ def _get_past_questions_for_topic(course_code, level, topic_name, limit=3):
 
     random.shuffle(relevant)
     return relevant[:limit]
+
+# ─── Restart session ──────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def restart_session_view(request, course_code, week_number):
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
+
+    profile = request.user.profile
+    entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
+
+    # Find the session for that specific week (completed or not)
+    session = Session.objects.filter(
+        student=profile,
+        course_code=course_code,
+        week_number=week_number,
+    ).first()
+
+    if session:
+        # Claw back XP earned in this session so it doesn't double up
+        profile.xp = max(0, profile.xp - session.xp_earned)
+        profile.save()
+
+        # Deleting the session cascades and deletes its TopicSessions too
+        session.delete()
+
+    # Roll the timetable entry back to this week and mark it not completed
+    entry.week_number = week_number
+    entry.is_completed = False
+    entry.save()
+
+    messages.success(request, f"{course_code} Week {week_number} has been restarted from the beginning.")
+    return redirect("session", course_code=course_code)
