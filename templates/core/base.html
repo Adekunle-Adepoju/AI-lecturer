@@ -6,6 +6,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}PetroLearn{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'core/css/main.css' %}">
+
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('petrolearn-theme');
+      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      
+      if (savedTheme === 'light' || (!savedTheme && !systemPrefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
 </head>
 <body>
 
@@ -19,7 +32,6 @@
   </button>
 </nav>
 
-<!-- Overlay and drawer OUTSIDE nav -->
 <div class="nav-overlay" id="nav-overlay"></div>
 <div class="nav-drawer" id="nav-drawer">
   <div class="nav-drawer-header">
@@ -43,11 +55,19 @@
     <a href="{% url 'leaderboard' %}" class="nav-drawer-link">
       <span class="nav-drawer-icon">🏆</span> Leaderboard
     </a>
+    <a href="{% url 'history' %}" class="nav-drawer-link">
+      <span class="nav-drawer-icon">📚</span> History
+    </a>
     <a href="{% url 'profile_edit' %}" class="nav-drawer-link">
       <span class="nav-drawer-icon">⚙️</span> Edit Profile
-      <a href="{% url 'history' %}" class="nav-drawer-link">
-  <span class="nav-drawer-icon">📚</span> History
     </a>
+
+    <div class="theme-toggle-container">
+      <span class="theme-toggle-label">Appearance</span>
+      <button id="theme-toggle-btn" class="btn btn-white-outline" style="height: 34px; padding: 0 12px; font-size: 13px;">
+        <span id="theme-icon">🌙</span> <span id="theme-text">Dark</span>
+      </button>
+    </div>
   </div>
 
   <div class="nav-drawer-footer">
@@ -73,26 +93,64 @@
 {% block extra_js %}{% endblock %}
 
 <script>
+  // ── Drawer Handling Logic ──────────────────────────────────────────
   const hamburger = document.getElementById("hamburger");
   const drawer = document.getElementById("nav-drawer");
   const overlay = document.getElementById("nav-overlay");
   const closeBtn = document.getElementById("nav-close");
 
   function openDrawer() {
-    drawer.classList.add("open");
-    overlay.classList.add("open");
-    document.body.style.overflow = "hidden";
+    if(drawer && overlay) {
+      drawer.classList.add("open");
+      overlay.classList.add("open");
+      document.body.style.overflow = "hidden";
+    }
   }
 
   function closeDrawer() {
-    drawer.classList.remove("open");
-    overlay.classList.remove("open");
-    document.body.style.overflow = "";
+    if(drawer && overlay) {
+      drawer.classList.remove("open");
+      overlay.classList.remove("open");
+      document.body.style.overflow = "";
+    }
   }
 
-  hamburger.addEventListener("click", openDrawer);
-  closeBtn.addEventListener("click", closeDrawer);
-  overlay.addEventListener("click", closeDrawer);
+  if (hamburger) hamburger.addEventListener("click", openDrawer);
+  if (closeBtn) closeBtn.addEventListener("click", closeDrawer);
+  if (overlay) overlay.addEventListener("click", closeDrawer);
+
+  // ── Theme Switch Engine Logic ──────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    const toggleBtn = document.getElementById('theme-toggle-btn');
+    const themeIcon = document.getElementById('theme-icon');
+    const themeText = document.getElementById('theme-text');
+
+    function updateToggleButton(theme) {
+      if (!toggleBtn || !themeIcon || !themeText) return;
+      if (theme === 'light') {
+        themeIcon.textContent = '☀️';
+        themeText.textContent = 'Light';
+      } else {
+        themeIcon.textContent = '🌙';
+        themeText.textContent = 'Dark';
+      }
+    }
+
+    // Set initial text state inside drawer button based on early head selection
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    updateToggleButton(currentTheme);
+
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        const activeTheme = document.documentElement.getAttribute('data-theme');
+        const targetTheme = activeTheme === 'dark' ? 'light' : 'dark';
+        
+        document.documentElement.setAttribute('data-theme', targetTheme);
+        localStorage.setItem('petrolearn-theme', targetTheme);
+        updateToggleButton(targetTheme);
+      });
+    }
+  });
 </script>
 </body>
 </html>
