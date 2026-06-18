@@ -2,12 +2,9 @@
 {% block title %}Dashboard — PetroLearn{% endblock %}
 
 {% block content %}
-<!-- Extended container for a wider layout layout -->
 <div class="page-container dashboard-grid-container">
 
-  <!-- LEFT/MAIN COLUMN -->
   <div class="dashboard-main-col">
-    <!-- Greeting Section -->
     <div class="greeting-section">
       <h2 class="greeting" id="greeting">Hey! 👋</h2>
       <p class="greeting-sub">
@@ -19,7 +16,6 @@
       </p>
     </div>
 
-    <!-- Stats Grid Metric Row -->
     <div class="stats-row">
       <div class="stat-card">
         <div class="stat-val">🔥 {{ profile.streak }}</div>
@@ -66,13 +62,12 @@
       </div>
       {% endfor %}
     {% else %}
-    <div class="today-card today-done">
-      <h3>All sessions done for today! 🎉</h3>
-      <p>Great work. Come back tomorrow to keep your streak going.</p>
-    </div>
+      <div class="today-card today-done">
+        <h3>All sessions done for today! 🎉</h3>
+        <p>Great work. Come back tomorrow to keep your streak going.</p>
+      </div>
     {% endif %}
 
-    <!-- Your Courses Section -->
     <p class="section-label">Your courses — {{ profile.level }}L · Semester {{ profile.semester }}</p>
     <div class="course-list">
       {% for course in courses %}
@@ -89,7 +84,6 @@
     </div>
   </div>
 
-  <!-- RIGHT SIDEBAR COLUMN -->
   <div class="dashboard-side-col">
     <p class="section-label">⚡ Session History</p>
     <div class="side-widget-card">
@@ -116,7 +110,6 @@
       {% endif %}
     </div>
     
-    <!-- Quick Performance Summary Box -->
     <p class="section-label">⚙️ Quick Links</p>
     <div class="side-widget-card" style="display: flex; flex-direction: column; gap: 8px;">
        <a href="{% url 'timetable' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px;">📅 Review Full Timetable</a>

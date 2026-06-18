@@ -75,16 +75,10 @@
 /* ── Reset & base ────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* Replace your existing @import line with this one: */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
 html { scroll-behavior: smooth; }
 
-
-
-
-
 /* ── Global Theme Transition ─────────────────────────────────────── */
-/* Smoothes color swapping on data-theme toggles */
 body, 
 .navbar, 
 .nav-drawer, 
@@ -114,52 +108,22 @@ select {
   }
 }
 
-/* Stagger targets */
-.greeting-section {
-  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.stats-row {
-  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 0.05s;
-}
-
-.section-label {
-  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 0.1s;
-}
-
-.today-card {
-  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 0.12s;
-}
-
-.course-list {
-  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 0.15s;
-}
-
-.session-list {
-  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 0.18s;
-}
+.greeting-section { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.stats-row { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.05s; }
+.section-label { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.1s; }
+.today-card { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.12s; }
+.course-list { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.15s; }
+.session-list { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.18s; }
 
 /* ── Interactive State Enhancements ──────────────────────────────── */
-
-/* Stat Cards micro-interaction */
-.stat-card {
-  cursor: pointer;
-}
+.stat-card { cursor: pointer; }
 .stat-card:hover {
   transform: translateY(-3px);
   border-color: var(--amber-dark);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
 }
-.stat-card:active {
-  transform: translateY(-1px);
-}
+.stat-card:active { transform: translateY(-1px); }
 
-/* Today Card micro-interaction */
 .today-card {
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
               box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
@@ -171,46 +135,30 @@ select {
   box-shadow: 0 8px 24px rgba(245, 166, 35, 0.12), var(--shadow-glow-amber);
 }
 
-/* Course Pill Scale tweak (Updating your existing rule) */
 .course-pill {
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
               background-color 0.2s, border-color 0.2s, box-shadow 0.2s !important;
 }
-.course-pill:active {
-  transform: translateY(0);
-}
-
-
-
-
-
-
-
+.course-pill:active { transform: translateY(0); }
 
 /* ── Multi-Column Grid System ───────────────────────────────────── */
-
-/* Target page layout adjustment specific to dashboard view */
 .dashboard-grid-container {
-  max-width: 1040px !important; /* Overriding narrow 680px to accommodate left & right blocks */
+  max-width: 1040px !important;
   display: grid;
   grid-template-columns: 1fr 320px;
   gap: 2rem;
   align-items: start;
 }
 
-.dashboard-main-col {
-  min-width: 0; /* Prevents flex/grid clipping items */
-}
-
+.dashboard-main-col { min-width: 0; }
 .dashboard-side-col {
   position: sticky;
-  top: 80px; /* Aligns comfortably with header during window scrolling */
+  top: 80px;
   display: flex;
   flex-direction: column;
   gap: 0px;
 }
 
-/* Sidebar decorative box cards */
 .side-widget-card {
   background: var(--navy-card);
   border: 1px solid var(--border);
@@ -221,42 +169,25 @@ select {
   animation-delay: 0.2s;
 }
 
-/* Adjust layout label spacing inside the sidebar stack */
-.dashboard-side-col .section-label {
-  margin-top: 1.5rem;
-}
-.dashboard-side-col .section-label:first-child {
-  margin-top: 2.25rem;
-}
+.dashboard-side-col .section-label { margin-top: 1.5rem; }
+.dashboard-side-col .section-label:first-child { margin-top: 2.25rem; }
 
 /* ── Tablet & Mobile Adjustments ─────────────────────────────────── */
 @media (max-width: 900px) {
   .dashboard-grid-container {
-    grid-template-columns: 1fr; /* Drop side columns into a clean unified block on smaller displays */
+    grid-template-columns: 1fr;
     gap: 0;
   }
-  
-  .dashboard-side-col {
-    position: static;
-  }
+  .dashboard-side-col { position: static; }
 }
 
-
-
-
-
-/* ── Responsive Screen Viewports (Updated for Mobile Layout Fixes) ── */
 @media (max-width: 640px) {
-  .stats-row { 
-    grid-template-columns: repeat(3, 1fr); 
-    gap: 8px; 
-  }
+  .stats-row { grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .stat-card { padding: 12px 6px; }
   .stat-val { font-size: 20px; }
   .page-container { padding: 1.5rem 1rem; }
   .greeting { font-size: 22px; }
 
-  /* FIX: Adjust the modern card layout to stack beautifully on phone viewports */
   .today-card {
     flex-direction: column !important;
     align-items: flex-start !important;
@@ -264,41 +195,23 @@ select {
     padding: 1.25rem !important;
   }
 
-  /* Force the metadata block to wrap cleanly instead of fragmenting text links */
-  .today-card style, 
   .today-card div:first-child div:last-child {
     flex-wrap: wrap;
     line-height: 1.5;
   }
 
-  /* Make button containers span fully across the bottom of the card block */
   .today-card div:last-child {
     width: 100%;
-    margin-left: 0 !important; /* Resets the desktop left margin push */
+    margin-left: 0 !important;
     justify-content: flex-start;
   }
 
-  /* Ensure the reschedule form can expand side-by-side or cleanly adapt */
-  .today-card form {
-    flex: 1;
-  }
-  
-  .today-card .btn {
-    flex: 1;
-    text-align: center;
-    justify-content: center;
-  }
+  .today-card form { flex: 1; }
+  .today-card .btn { flex: 1; text-align: center; justify-content: center; }
 }
 
-
-
-
-
-
-
-
 body {
-  font-family: 'poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--navy);
   color: var(--text);
   font-size: 15px;
@@ -644,13 +557,7 @@ select option { background: var(--navy-card); }
 }
 
 .auth-hero p { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
-
-.auth-switch {
-  font-size: 13px;
-  color: var(--text-secondary);
-  text-align: center;
-  margin-top: 18px;
-}
+.auth-switch { font-size: 13px; color: var(--text-secondary); text-align: center; margin-top: 18px; }
 
 .auth-card form {
   background: var(--navy-card);
@@ -1092,7 +999,6 @@ select option { background: var(--navy-card); }
 }
 
 .lb-me .lb-avatar { border-color: rgba(245,166,35,0.4); }
-
 .lb-name { flex: 1; font-size: 14px; font-weight: 600; color: var(--text); }
 .you-tag { font-size: 12px; color: var(--text-muted); font-weight: 400; margin-left: 5px; }
 
@@ -1151,9 +1057,9 @@ select option { background: var(--navy-card); }
 }
 
 @keyframes fup {
-  0%   { opacity: 0; transform: translateY(10px); }
-  15%  { opacity: 1; transform: translateY(0); }
-  80%  { opacity: 1; }
+  0%    { opacity: 0; transform: translateY(10px); }
+  15%   { opacity: 1; transform: translateY(0); }
+  80%   { opacity: 1; }
   100% { opacity: 0; transform: translateY(-8px); }
 }
 
@@ -1220,6 +1126,7 @@ hr {
 .msg.ai li { margin-bottom: 0.5rem; line-height: 1.75; }
 .msg.ai li::marker { color: var(--amber); }
 
+/* ── Callout boxes inside lecture ── */
 .msg.ai blockquote {
   border-left: 3px solid var(--amber);
   padding: 12px 16px;
@@ -1231,6 +1138,7 @@ hr {
 }
 
 .msg.ai blockquote strong { color: var(--amber); }
+.msg.ai blockquote:has(p:first-child) { position: relative; }
 
 .msg.ai code {
   background: var(--navy);
@@ -1285,7 +1193,6 @@ hr {
 }
 
 .chat-input-wrap textarea::placeholder { color: var(--text-muted); }
-
 .chat-input-wrap textarea:focus {
   border-color: var(--amber);
   box-shadow: 0 0 0 3px var(--amber-glow);
@@ -1296,15 +1203,6 @@ hr {
   padding: 0 20px;
   border-radius: var(--radius-lg);
   flex-shrink: 0;
-}
-
-/* ── Mobile ──────────────────────────────────────────────────────── */
-@media (max-width: 640px) {
-  .stats-row { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .stat-card { padding: 12px 6px; }
-  .stat-val { font-size: 20px; }
-  .page-container { padding: 1.5rem 1rem; }
-  .greeting { font-size: 22px; }
 }
 
 @media (max-width: 480px) {

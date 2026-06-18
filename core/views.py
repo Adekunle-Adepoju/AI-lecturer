@@ -1,8 +1,8 @@
 import json
 import markdown
 import datetime
-from datetime import date, timedelta
 import random
+from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth import login, logout
@@ -41,7 +41,6 @@ def signup_view(request):
                 user.first_name = form.cleaned_data["first_name"]
                 user.last_name = form.cleaned_data["last_name"]
                 user.save()
-
                 profile = StudentProfile.objects.create(
                     user=user,
                     matric_number=form.cleaned_data["matric_number"],
@@ -79,7 +78,7 @@ def logout_view(request):
     return redirect("login")
 
 
-# ─── Onboarding — kept for existing users without profile ──────────────────────
+# ─── Onboarding ────────────────────────────────────────────────────────────────
 
 @login_required
 def onboarding_view(request):
@@ -98,35 +97,12 @@ def onboarding_view(request):
     return render(request, "core/onboarding.html", {"form": form})
 
 
-# ─── Profile edit ──────────────────────────────────────────────────────────────
-
-@login_required
-def profile_edit_view(request):
-    if not hasattr(request.user, "profile"):
-        return redirect("onboarding")
-
-    profile = request.user.profile
-
-    if request.method == "POST":
-        form = ProfileEditForm(request.POST, instance=profile, user=request.user)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "Profile updated successfully.")
-            return redirect("dashboard")
-    else:
-        form = ProfileEditForm(instance=profile, user=request.user)
-
-    return render(request, "core/profile_edit.html", {"form": form})
-
-
 # ─── Timetable generator ───────────────────────────────────────────────────────
 
 def _generate_timetable(profile):
     courses = COURSES.get(profile.level, {}).get(profile.semester, [])
     days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
-
     TimetableEntry.objects.filter(student=profile).delete()
-
     entries = []
     for i, course in enumerate(courses):
         day = days[i % len(days)]
@@ -156,10 +132,8 @@ def dashboard_view(request):
     recent_sessions = profile.sessions.all()[:5]
     leaderboard = StudentProfile.objects.select_related("user").order_by("-xp")[:10]
     sessions_done = profile.sessions.count()
-
     today = datetime.datetime.now().strftime("%a")
     todays_courses = profile.timetable.filter(day=today, is_completed=False)
-
     incomplete_sessions = {
         s.course_code: s
         for s in Session.objects.filter(student=profile, is_complete=False)
@@ -181,9 +155,6 @@ def dashboard_view(request):
 # ─── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_topics_for_week(course_code, level, week_number):
-    """Get 3 topics for this week — prefer slide-extracted topics, fall back to hardcoded outline"""
-    from .models import SlideDocument
-
     try:
         slide = SlideDocument.objects.get(course_code=course_code, level=level, parsed=True)
         if slide.extracted_topics:
@@ -192,22 +163,37 @@ def _get_topics_for_week(course_code, level, week_number):
             topics = slide.extracted_topics[start:end]
             if topics:
                 return topics
-            # If we've run past the slide's topic list, repeat the last 3 as review
             if len(slide.extracted_topics) >= 3:
                 return slide.extracted_topics[-3:]
     except SlideDocument.DoesNotExist:
         pass
 
-    # Fallback — hardcoded outline
     topics = COURSE_OUTLINES.get(course_code, {}).get(week_number, [])
     if not topics:
         topics = ["Core Concepts", "Key Applications", "Problem Solving"]
     return topics[:3]
 
 
+def _get_past_questions_for_topic(course_code, level, topic_name, limit=3):
+    from .models import PastQuestion
+    relevant = []
+    past_qs = PastQuestion.objects.filter(course_code=course_code, level=level, parsed=True)
+    for pq in past_qs:
+        for q in pq.parsed_questions:
+            hint = q.get("topic_hint", "").lower()
+            if any(word.lower() in hint for word in topic_name.split()):
+                relevant.append(q)
+    if not relevant:
+        all_questions = []
+        for pq in past_qs:
+            all_questions.extend(pq.parsed_questions)
+        relevant = all_questions
+    random.shuffle(relevant)
+    return relevant[:limit]
+
+
 def _generate_topic_lecture(course_code, course_title, topic_name, week, level, student_name, topic_index=0, slide_text=""):
     client = get_groq_client()
-
     past_questions = _get_past_questions_for_topic(course_code, level, topic_name, limit=2)
     past_q_text = ""
     if past_questions:
@@ -239,6 +225,8 @@ def _generate_topic_lecture(course_code, course_title, topic_name, week, level, 
 
 
 def _parse_lecture(full_text):
+    import re
+
     if "---INTRO---" in full_text and "---LECTURE---" in full_text:
         intro_raw = full_text.split("---INTRO---")[1].split("---LECTURE---")[0].strip()
         lecture_and_quiz = full_text.split("---LECTURE---")[1].strip()
@@ -260,11 +248,7 @@ def _parse_lecture(full_text):
 
     if quiz_raw:
         clean = quiz_raw.replace("```json", "").replace("```", "").strip()
-
-        # Fix common JSON-breaking escape sequences from the model
         clean = clean.replace("\\*", "*").replace("\\%", "%")
-
-        # Try to isolate just the JSON object in case of stray text
         start = clean.find("{")
         end = clean.rfind("}")
         if start != -1 and end != -1 and end > start:
@@ -277,8 +261,6 @@ def _parse_lecture(full_text):
             correct_index = quiz_data.get("correct_index", 0)
             explanation = quiz_data.get("explanation", "")
         except json.JSONDecodeError:
-            # Fallback: try regex to pull out the question and options manually
-            import re
             q_match = re.search(r'"question"\s*:\s*"(.*?)"\s*,\s*"options"', clean, re.DOTALL)
             if q_match:
                 question = q_match.group(1).strip()
@@ -306,6 +288,7 @@ def _parse_lecture(full_text):
         "correct_index": correct_index,
         "explanation": explanation,
     }
+
 
 # ─── Session ───────────────────────────────────────────────────────────────────
 
@@ -362,7 +345,6 @@ def session_view(request, course_code):
             current_topic_index=0,
         )
         return _teach_topic(request, session, entry, profile, topics[0], 0)
-       
 
     if action == "show_lecture":
         topic_session_id = request.POST.get("topic_session_id")
@@ -390,10 +372,11 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
     try:
         slide_doc = SlideDocument.objects.get(
             course_code=session.course_code,
-            level=profile.level
+            level=profile.level,
+            week_number=session.week_number,
         )
         if slide_doc.extracted_text:
-            slide_text = f"\n\nLECTURER SLIDES (full course reference — focus only on content relevant to this topic):\n{slide_doc.extracted_text[:6000]}"
+            slide_text = f"\n\nLECTURER SLIDES (focus only on content relevant to this topic):\n{slide_doc.extracted_text[:6000]}"
     except SlideDocument.DoesNotExist:
         pass
 
@@ -401,7 +384,7 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
         outline = CourseOutline.objects.get(
             course_code=session.course_code,
             level=profile.level,
-            parsed=True
+            parsed=True,
         )
         if outline.extracted_text:
             outline_text = f"\n\nCOURSE OUTLINE REFERENCE:\n{outline.extracted_text[:2000]}"
@@ -423,10 +406,8 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
             "error": f"Could not load lecture: {str(e)}",
         })
 
-
     parsed = _parse_lecture(full_text)
 
-    # Retry once if quiz parsing failed
     if not parsed["question"] or parsed["options"] == ["Option A", "Option B", "Option C", "Option D"]:
         try:
             full_text = _generate_topic_lecture(
@@ -439,9 +420,8 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
         except Exception:
             pass
 
-    # Final fallback if quiz still empty
     if not parsed["question"]:
-        parsed["question"] = f"Which of the following best describes a key concept from the topic '{topic_name}'?"
+        parsed["question"] = f"Which of the following best describes a key concept from '{topic_name}'?"
     if parsed["options"] == ["Option A", "Option B", "Option C", "Option D"]:
         parsed["options"] = [
             "A. The concept applies only in theory",
@@ -551,7 +531,6 @@ def answer_view(request):
         session.current_topic_index = total_topics
         session.completed_at = timezone.now()
         session.save()
-
         entry.is_completed = True
         entry.week_number += 1
         entry.save()
@@ -648,6 +627,8 @@ def profile_edit_view(request):
     return render(request, "core/profile_edit.html", {"form": form})
 
 
+# ─── Review ────────────────────────────────────────────────────────────────────
+
 @login_required
 def review_view(request, topic_session_id):
     if not hasattr(request.user, "profile"):
@@ -662,29 +643,26 @@ def review_view(request, topic_session_id):
         "correct": topic_session.student_answer_index == topic_session.correct_answer_index,
     })
 
+
+# ─── History ───────────────────────────────────────────────────────────────────
+
 @login_required
 def history_view(request):
     if not hasattr(request.user, "profile"):
         return redirect("onboarding")
 
     profile = request.user.profile
-
-    # Get all completed topic sessions, grouped by course
     topic_sessions = TopicSession.objects.filter(
         session__student=profile,
         is_complete=True
     ).select_related("session").order_by("-session__started_at", "topic_index")
 
-    # Group by course code
     history_by_course = {}
     for ts in topic_sessions:
         code = ts.session.course_code
         title = ts.session.course_title
         if code not in history_by_course:
-            history_by_course[code] = {
-                "course_title": title,
-                "topics": []
-            }
+            history_by_course[code] = {"course_title": title, "topics": []}
         history_by_course[code]["topics"].append(ts)
 
     return render(request, "core/history.html", {
@@ -692,30 +670,7 @@ def history_view(request):
     })
 
 
-def _get_past_questions_for_topic(course_code, level, topic_name, limit=3):
-    """Fetch past questions relevant to this topic, for blending into quizzes"""
-    from .models import PastQuestion
-
-    relevant = []
-    past_qs = PastQuestion.objects.filter(course_code=course_code, level=level, parsed=True)
-
-    for pq in past_qs:
-        for q in pq.parsed_questions:
-            hint = q.get("topic_hint", "").lower()
-            if any(word.lower() in hint for word in topic_name.split()):
-                relevant.append(q)
-
-    # If no topic match, just grab random ones from the course as general style reference
-    if not relevant:
-        all_questions = []
-        for pq in past_qs:
-            all_questions.extend(pq.parsed_questions)
-        relevant = all_questions
-
-    random.shuffle(relevant)
-    return relevant[:limit]
-
-# ─── Restart session ──────────────────────────────────────────────────────────
+# ─── Restart session ───────────────────────────────────────────────────────────
 
 @login_required
 @require_POST
@@ -726,7 +681,6 @@ def restart_session_view(request, course_code, week_number):
     profile = request.user.profile
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
 
-    # Find the session for that specific week (completed or not)
     session = Session.objects.filter(
         student=profile,
         course_code=course_code,
@@ -734,17 +688,13 @@ def restart_session_view(request, course_code, week_number):
     ).first()
 
     if session:
-        # Claw back XP earned in this session so it doesn't double up
         profile.xp = max(0, profile.xp - session.xp_earned)
         profile.save()
-
-        # Deleting the session cascades and deletes its TopicSessions too
         session.delete()
 
-    # Roll the timetable entry back to this week and mark it not completed
     entry.week_number = week_number
     entry.is_completed = False
     entry.save()
 
-    messages.success(request, f"{course_code} Week {week_number} has been restarted from the beginning.")
+    messages.success(request, f"{course_code} Week {week_number} has been restarted.")
     return redirect("session", course_code=course_code)

@@ -1,6 +1,4 @@
 from django.contrib import admin
-from .models import StudentProfile, TimetableEntry, Session, TopicSession, SlideDocument, CourseOutline
-from .outline_parser import _parse_course_outline
 from .models import (
     StudentProfile, TimetableEntry, Session, TopicSession,
     SlideDocument, CourseOutline, PastQuestion
@@ -8,7 +6,6 @@ from .models import (
 from .outline_parser import _parse_course_outline
 from .past_question_parser import _parse_past_question_file
 from .slide_topic_extractor import _parse_slide_document
-
 
 @admin.register(StudentProfile)
 class StudentProfileAdmin(admin.ModelAdmin):
@@ -40,9 +37,6 @@ class TopicSessionAdmin(admin.ModelAdmin):
 
 @admin.register(SlideDocument)
 class SlideDocumentAdmin(admin.ModelAdmin):
-    list_display = ["course_code", "course_title", "level", "week_number", "uploaded_at"]
-    list_filter = ["level", "course_code"]
-    search_fields = ["course_code", "course_title"]
     list_display = ["course_code", "course_title", "level", "parsed", "uploaded_at"]
     list_filter = ["level", "parsed"]
     search_fields = ["course_code", "course_title"]
@@ -57,7 +51,6 @@ class SlideDocumentAdmin(admin.ModelAdmin):
             self.message_user(request, f"File saved but parsing failed: {str(e)}", level="warning")
 
 
-
 @admin.register(CourseOutline)
 class CourseOutlineAdmin(admin.ModelAdmin):
     list_display = ["course_code", "course_title", "level", "parsed", "uploaded_at"]
@@ -67,12 +60,6 @@ class CourseOutlineAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        # Auto-parse when uploaded
-        try:
-            _parse_course_outline(obj)
-        except Exception as e:
-            self.message_user(request, f"Outline saved but parsing failed: {str(e)}", level="warning")
-
         try:
             _parse_course_outline(obj)
         except Exception as e:
