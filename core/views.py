@@ -1,6 +1,5 @@
 import json
 import markdown
-import datetime
 import random
 from datetime import date, timedelta
 
@@ -33,30 +32,17 @@ def get_groq_client():
 def signup_view(request):
     if request.user.is_authenticated:
         return redirect("dashboard")
-    if request.method == "POST":
-        form = SignupForm(request.POST)
+    if request.method == 'POST':
+        form = SignupForm(request.POST)  # Fixed NameError placeholder here
         if form.is_valid():
-            try:
-                user = form.save(commit=False)
-                user.first_name = form.cleaned_data["first_name"]
-                user.last_name = form.cleaned_data["last_name"]
-                user.save()
-                profile = StudentProfile.objects.create(
-                    user=user,
-                    matric_number=form.cleaned_data["matric_number"],
-                    school=form.cleaned_data["school"],
-                    department=form.cleaned_data["department"],
-                    level=form.cleaned_data["level"],
-                    semester=form.cleaned_data["semester"],
-                )
-                _generate_timetable(profile)
-                login(request, user)
-                return redirect("dashboard")
-            except Exception as e:
-                form.add_error(None, f"Error creating account: {str(e)}")
+            user = form.save()
+            login(request, user)  # Log user in straight after a successful signup
+            return redirect('dashboard')
+        else:
+            print("SIGNUP ERRORS:", form.errors)
     else:
         form = SignupForm()
-    return render(request, "core/signup.html", {"form": form})
+    return render(request, 'core/signup.html', {'form': form})
 
 
 def login_view(request):
@@ -132,7 +118,8 @@ def dashboard_view(request):
     recent_sessions = profile.sessions.all()[:5]
     leaderboard = StudentProfile.objects.select_related("user").order_by("-xp")[:10]
     sessions_done = profile.sessions.count()
-    today = datetime.datetime.now().strftime("%a")
+    
+    today = timezone.now().strftime("%a")  # Safe cross-platform timezone management
     todays_courses = profile.timetable.filter(day=today, is_completed=False)
     incomplete_sessions = {
         s.course_code: s
@@ -705,4 +692,5 @@ def restart_session_view(request, course_code, week_number):
     entry.save()
 
     messages.success(request, f"{course_code} Week {week_number} has been restarted from the beginning.")
-    return redirect("session", course_code=course_code)
+    # Fixed redirect pattern mapping lookup parameter
+    return redirect("session", course_code)
