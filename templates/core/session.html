@@ -19,13 +19,7 @@
 
   {% if session %}
   <div class="prog-bar" style="margin:16px 0">
-<<<<<<< HEAD
     <div class="prog-fill" style="width:{% widthratio topic_number total_topics 100 %}%"></div>
-=======
-    <div class="prog-fill" style= width= "{% widthratio topic_number total_topics 100 %}" >
-
-    </div>
->>>>>>> 63092e89ef9db556e340fe3f2c2ee7e587f6078f
   </div>
   <p class="prog-label">Topic {{ topic_number }} of {{ total_topics }}: {{ topic_name }}</p>
   {% endif %}
@@ -58,8 +52,6 @@
   </form>
   {% endif %}
 
-<<<<<<< HEAD
-=======
   {% if session or intro or lecture %}
   <form method="post" action="{% url 'restart_session' course_code=entry.course_code week_number=entry.week_number %}" style="margin-top:24px">
     {% csrf_token %}
@@ -70,6 +62,5 @@
   </form>
   {% endif %}
 
->>>>>>> 63092e89ef9db556e340fe3f2c2ee7e587f6078f
 </div>
 {% endblock %}
