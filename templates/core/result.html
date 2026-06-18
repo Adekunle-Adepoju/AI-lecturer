@@ -1,15 +1,15 @@
 {% extends "core/base.html" %}
-{% block title %}Result — PetroLearn{% endblock %}
+{% block title %}Result ΓÇö PetroLearn{% endblock %}
 
 {% block content %}
 <div class="page-container">
 
   <div class="done-card">
     {% if correct %}
-    <div class="done-emoji">🔥</div>
+    <div class="done-emoji">≡ƒöÑ</div>
     <div class="done-title">Correct!</div>
     {% else %}
-    <div class="done-emoji">💪</div>
+    <div class="done-emoji">≡ƒÆ¬</div>
     <div class="done-title">Not quite!</div>
     {% endif %}
     <div class="done-sub">{{ feedback }}</div>
@@ -17,62 +17,12 @@
     <div class="done-sub">Topic {{ topic_number }} of {{ total_topics }} complete</div>
   </div>
 
-<<<<<<< HEAD
-=======
-  <!-- Quiz review -->
-  <div class="quiz-card" style="margin-top:16px">
-    <div class="quiz-header">
-      <span class="quiz-icon">📋</span>
-      <span class="quiz-label">Quiz Review</span>
-    </div>
-    <p class="quiz-q">{{ topic_session.quiz_question }}</p>
-    {% for option in topic_session.quiz_options %}
-    <div class="qopt {% if forloop.counter0 == topic_session.correct_answer_index %}correct{% elif forloop.counter0 == topic_session.student_answer_index and not correct %}wrong{% endif %}"
-         style="cursor:default; pointer-events:none; margin-bottom:8px">
-      {{ option }}
-      {% if forloop.counter0 == topic_session.correct_answer_index %}
-      <span style="float:right; font-size:12px">✓ Correct</span>
-      {% elif forloop.counter0 == topic_session.student_answer_index and not correct %}
-      <span style="float:right; font-size:12px">✗ Your answer</span>
-      {% endif %}
-    </div>
-    {% endfor %}
-    {% if explanation %}
-    <div style="margin-top:12px; padding:12px 16px; background:var(--navy); border-radius:var(--radius-md); border-left:3px solid var(--amber)">
-      <p style="font-size:13px; color:var(--text-secondary); margin:0; line-height:1.7">
-        <strong style="color:var(--amber)">Explanation:</strong> {{ explanation }}
-      </p>
-    </div>
-    {% endif %}
-  </div>
-
->>>>>>> 63092e89ef9db556e340fe3f2c2ee7e587f6078f
-  {% if is_last_topic %}
-  <div class="done-card" style="margin-top:16px">
-    <div class="done-emoji">🎉</div>
-    <div class="done-title">Session Complete!</div>
-    <div class="done-sub">You completed all {{ total_topics }} topics for this week. See you next week!</div>
-  </div>
-  <a href="{% url 'dashboard' %}" class="btn btn-primary btn-full" style="margin-top:14px">Back to Dashboard →</a>
-
-  {% else %}
-  <div style="margin-top:16px">
-    <p style="margin-bottom:8px">Up next: <strong>{{ next_topic_name }}</strong></p>
-<<<<<<< HEAD
-   <form method="POST" action="{% url 'next_topic' %}">
-  {% csrf_token %}
-  <input type="hidden" name="topic_session_id" value="{{ topic_session.id }}">
-  <input type="hidden" name="next_topic_index" value="{{ next_topic_index }}">
-  <button type="submit" class="btn btn-primary">Start Next Topic →</button>
-</form>
-=======
     <form method="POST" action="{% url 'next_topic' %}">
       {% csrf_token %}
       <input type="hidden" name="topic_session_id" value="{{ topic_session.id }}">
       <input type="hidden" name="next_topic_index" value="{{ next_topic_index }}">
-      <button type="submit" class="btn btn-primary btn-full">Start Next Topic →</button>
+      <button type="submit" class="btn btn-primary btn-full">Start Next Topic ΓåÆ</button>
     </form>
->>>>>>> 63092e89ef9db556e340fe3f2c2ee7e587f6078f
   </div>
   {% endif %}
 

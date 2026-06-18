@@ -19,7 +19,6 @@
   </button>
 </nav>
 
-<!-- Overlay and drawer OUTSIDE nav -->
 <div class="nav-overlay" id="nav-overlay"></div>
 <div class="nav-drawer" id="nav-drawer">
   <div class="nav-drawer-header">
@@ -30,7 +29,7 @@
         <div class="nav-drawer-meta">{{ user.username }}</div>
       </div>
     </div>
-    <button class="nav-drawer-close" id="nav-close">✕</button>
+    <button class="nav-drawer-close" id="nav-close">✖</button>
   </div>
 
   <div class="nav-drawer-links">
@@ -43,13 +42,11 @@
     <a href="{% url 'leaderboard' %}" class="nav-drawer-link">
       <span class="nav-drawer-icon">🏆</span> Leaderboard
     </a>
+    <a href="{% url 'history' %}" class="nav-drawer-link">
+      <span class="nav-drawer-icon">📚</span> History
+    </a>
     <a href="{% url 'profile_edit' %}" class="nav-drawer-link">
       <span class="nav-drawer-icon">⚙️</span> Edit Profile
-<<<<<<< HEAD
-=======
-      <a href="{% url 'history' %}" class="nav-drawer-link">
-  <span class="nav-drawer-icon">📚</span> History
->>>>>>> 63092e89ef9db556e340fe3f2c2ee7e587f6078f
     </a>
   </div>
 

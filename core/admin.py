@@ -7,6 +7,7 @@ from .outline_parser import _parse_course_outline
 from .past_question_parser import _parse_past_question_file
 from .slide_topic_extractor import _parse_slide_document
 
+
 @admin.register(StudentProfile)
 class StudentProfileAdmin(admin.ModelAdmin):
     list_display = ["user", "level", "semester", "xp", "streak", "last_session_date"]
