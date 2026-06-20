@@ -2,13 +2,230 @@
 {% block title %}Sign Up — PetroLearn{% endblock %}
 
 {% block content %}
+<style>
+  /* Split Screen Layout Wrapper mimicking login.jpg */
+  .auth-container {
+    display: flex;
+    background-color: #ffffff;
+    width: 100%;
+    max-width: 1100px;
+    min-height: 750px;
+    margin: 40px auto;
+    border-radius: 28px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  /* Left Hero Banner (login.jpg layout styled with PetroLearn colors) */
+  .brand-side {
+    background-color: #0f172a; /* Deep tech slate matching image_3d5ba2.png hints */
+    color: #ffffff;
+    width: 40%;
+    padding: 48px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+  }
+
+  .brand-side::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    opacity: 0.03;
+    background-image: linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px);
+    background-size: 20px 20px;
+    pointer-events: none;
+  }
+
+  .brand-logo-area h2 {
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .brand-logo-area p {
+    color: #94a3b8;
+    font-size: 11px;
+    margin-top: 4px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .brand-headline {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  /* Right Form Area */
+  .form-side {
+    width: 60%;
+    padding: 56px 64px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .form-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 8px;
+  }
+
+  .form-subtitle {
+    font-size: 14px;
+    color: #64748b;
+    margin-bottom: 32px;
+  }
+
+  /* Structural multi-column form rows matching your code */
+  .form-row {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  .form-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 20px;
+    position: relative;
+  }
+
+  .form-row .form-group {
+    margin-bottom: 0; /* Let row wrap spacing handle it */
+  }
+
+  /* Clean minimal line inputs mimicking login.jpg */
+  .form-group label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin-bottom: 4px;
+  }
+
+  /* Target both raw inputs and Django form widgets */
+  .form-group input, 
+  .form-group select,
+  .form-group textarea {
+    width: 100%;
+    padding: 10px 0;
+    font-size: 15px;
+    color: #0f172a;
+    border: none;
+    border-bottom: 1px solid #cbd5e1;
+    outline: none;
+    background: transparent;
+    transition: border-color 0.2s ease;
+  }
+
+  .form-group input:focus,
+  .form-group select:focus {
+    border-bottom-color: #e58a00; /* PetroLearn orange accent color */
+  }
+
+  /* Django Form Error Messaging */
+  .form-error {
+    color: #ef4444;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  /* Exact Pill Style Action Button matching login.jpg */
+  .btn-submit-pill {
+    width: 100%;
+    background-color: #e58a00; /* From Start button in image_3d5ba2.png */
+    color: #ffffff;
+    border: none;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(229, 138, 0, 0.15);
+    margin-top: 16px;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+  }
+
+  .btn-submit-pill:hover {
+    background-color: #cc7a00;
+  }
+
+  .btn-submit-pill:active {
+    transform: scale(0.99);
+  }
+
+  .auth-switch {
+    text-align: center;
+    font-size: 14px;
+    color: #64748b;
+    margin-top: 24px;
+  }
+
+  .auth-switch a {
+    color: #4f46e5;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .auth-switch a:hover {
+    text-decoration: underline;
+  }
+
+  /* Responsive Stacking Grid for smaller viewports */
+  @media (max-width: 900px) {
+    .auth-container {
+      flex-direction: column;
+      margin: 20px auto;
+      border-radius: 20px;
+    }
+    .brand-side {
+      width: 100%;
+      padding: 32px;
+    }
+    .brand-headline {
+      font-size: 24px;
+      margin-top: 16px;
+    }
+    .form-side {
+      width: 100%;
+      padding: 36px 24px;
+    }
+    .form-row {
+      flex-direction: column;
+      gap: 20px;
+    }
+  }
+
+  /* Add this inside the <style> block of your signup page */
+.petrolearn-footer {
+  display: none !important;
+}
+</style>
+
 <div class="auth-container">
-  <div class="auth-card">
-    <div class="auth-hero">
-      <div class="auth-emoji">🛢️</div>
-      <h1>Join PetroLearn</h1>
-      <p>Your personal AI lecturer for Petroleum & Gas Engineering at Unilag</p>
+  
+  <!-- Left Side: Custom branded Hero UI Column mimicking login.jpg spatial distribution -->
+  <div class="brand-side">
+    <div class="brand-logo-area">
+      <h2>🛢️ PetroLearn</h2>
+      <p>University of Lagos</p>
     </div>
+    
+    <div>
+      <h1 class="brand-headline">Your personal AI lecturer for Petroleum & Gas Engineering.</h1>
+    </div>
+  </div>
+
+  <!-- Right Side: Exact Django Input fields styling architecture -->
+  <div class="form-side">
+    <h3 class="form-title">Create Account</h3>
+    <p class="form-subtitle">Join your peers and step up your academic tracking streak.</p>
 
     <form method="post">
       {% csrf_token %}
@@ -69,6 +286,7 @@
           {% if form.semester.errors %}<p class="form-error">{{ form.semester.errors.0 }}</p>{% endif %}
         </div>
       </div>
+
       <div class="form-group">
         <label>Password</label>
         {{ form.password1 }}
@@ -81,9 +299,11 @@
         {% if form.password2.errors %}<p class="form-error">{{ form.password2.errors.0 }}</p>{% endif %}
       </div>
 
-      <button type="submit" class="btn btn-primary btn-full">Create my account 🚀</button>
+      <button type="submit" class="btn-submit-pill">Create my account 🚀</button>
     </form>
+    
     <p class="auth-switch">Already have an account? <a href="{% url 'login' %}">Log in</a></p>
   </div>
+
 </div>
 {% endblock %}

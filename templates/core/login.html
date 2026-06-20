@@ -2,29 +2,275 @@
 {% block title %}Log In — PetroLearn{% endblock %}
 
 {% block content %}
+<style>
+  /* Base page layout override to ensure total center alignment */
+  body {
+    background-color: #f8fafc !important;
+  }
+
+  /* Hide the base global footer on this page */
+  footer, .petrolearn-footer {
+    display: none !important;
+  }
+
+  /* Main Split Card Container following watermarked_img_13779515424701427028.png */
+  .auth-container {
+    display: flex;
+    background-color: #ffffff;
+    width: 100%;
+    max-width: 1000px;
+    min-height: 600px;
+    margin: 60px auto;
+    border-radius: 24px;
+    box-shadow: 0 15px 35px rgba(15, 23, 42, 0.04);
+    overflow: hidden;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  /* Left Branded Side (Engineering Slate Accent Grid) */
+  .brand-side {
+    background-color: #0c1524; /* Rich technical dark navy */
+    color: #ffffff;
+    width: 38%;
+    padding: 48px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+  }
+
+  /* Mathematical Engineering Blueprint Grid Overlay */
+  .brand-side::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    opacity: 0.05;
+    background-image: linear-gradient(#ffffff 1px, transparent 1px), linear-gradient(90deg, #ffffff 1px, transparent 1px);
+    background-size: 24px 24px;
+    pointer-events: none;
+  }
+
+  .brand-logo-area h2 {
+    font-size: 22px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #ffffff;
+  }
+
+  .brand-logo-area p {
+    color: #64748b;
+    font-size: 11px;
+    margin-top: 4px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .brand-headline {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.35;
+    color: #f1f5f9;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Right Interactive Form Workspace */
+  .form-side {
+    width: 62%;
+    padding: 64px 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background-color: #ffffff;
+  }
+
+  .form-title {
+    font-size: 32px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+
+  .form-subtitle {
+    font-size: 14px;
+    color: #64748b;
+    margin-bottom: 36px;
+  }
+
+  /* Elegant Input Groups matching premium card aesthetics */
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 24px;
+    max-width: 460px; /* Limits width so inputs don't stretch excessively */
+  }
+
+  .form-group label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+
+  /* Pill-Shaped Rounded Form Controls targeting Django Widgets */
+  .form-group input {
+    width: 100%;
+    padding: 12px 18px;
+    font-size: 14px;
+    color: #0f172a;
+    background-color: #f8fafc; /* Pill background tone */
+    border: 1px solid #e2e8f0;
+    border-radius: 12px; /* Smooth rounded pill edges */
+    outline: none;
+    transition: all 0.2s ease;
+  }
+
+  .form-group input:focus {
+    background-color: #ffffff;
+    border-color: #e58a00; /* PetroLearn Signature Orange Accent */
+    box-shadow: 0 0 0 4px rgba(229, 138, 0, 0.08);
+  }
+
+  /* Handle Django browser native autofill color styling overrides */
+  .form-group input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 30px #f8fafc inset !important;
+  }
+
+  /* Error Handling Styles */
+  .form-error {
+    color: #ef4444;
+    font-size: 13px;
+    margin: -8px 0 20px 0;
+    font-weight: 500;
+  }
+
+  /* Premium Signature Action Button CTA */
+  .btn-submit-pill {
+    width: 100%;
+    max-width: 460px;
+    background-color: #e58a00; /* Direct match to dashboard 'Start' element */
+    color: #ffffff;
+    border: none;
+    padding: 14px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 50px; /* Round pill button shape */
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(229, 138, 0, 0.2);
+    margin-top: 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+  }
+
+  .btn-submit-pill:hover {
+    background-color: #cc7a00;
+    box-shadow: 0 6px 20px rgba(229, 138, 0, 0.25);
+  }
+
+  .btn-submit-pill:active {
+    transform: scale(0.99);
+  }
+
+  /* Redirection Switch Navigation */
+  .auth-switch {
+    font-size: 14px;
+    color: #64748b;
+    margin-top: 28px;
+    max-width: 460px;
+    text-align: center;
+  }
+
+  .auth-switch a {
+    color: #4f46e5;
+    text-decoration: none;
+    font-weight: 600;
+    margin-left: 4px;
+  }
+
+  .auth-switch a:hover {
+    text-decoration: underline;
+  }
+
+  /* Responsive Stacking Mechanics for smaller screen resolutions */
+  @media (max-width: 850px) {
+    .auth-container {
+      flex-direction: column;
+      margin: 20px auto;
+      max-width: 500px;
+    }
+    .brand-side {
+      width: 100%;
+      padding: 36px;
+    }
+    .brand-headline {
+      font-size: 22px;
+      margin-top: 24px;
+    }
+    .form-side {
+      width: 100%;
+      padding: 40px 32px;
+    }
+    .form-group, .btn-submit-pill, .auth-switch {
+      max-width: 100%;
+    }
+  }
+
+    /* Add this inside the <style> block of your signup page */
+.petrolearn-footer {
+  display: none !important;
+}
+</style>
+
 <div class="auth-container">
-  <div class="auth-card">
-    <div class="auth-hero">
-      <div class="auth-emoji">🛢️</div>
-      <h1>Welcome back</h1>
-      <p>Log in to continue your learning streak</p>
+  
+  <!-- Left Column: Spatial Branding Section -->
+  <div class="brand-side">
+    <div class="brand-logo-area">
+      <h2>🛢️ PetroLearn</h2>
+      <p>University of Lagos</p>
     </div>
+    
+    <div>
+      <h1 class="brand-headline">Resume Your Academic Streak.</h1>
+    </div>
+  </div>
+
+  <!-- Right Column: Interactive Form Area -->
+  <div class="form-side">
+    <h3 class="form-title">Welcome Back</h3>
+    <p class="form-subtitle">Log in to continue your learning streak.</p>
+
     <form method="post">
       {% csrf_token %}
+      
       <div class="form-group">
         <label>Username</label>
         {{ form.username }}
       </div>
+      
       <div class="form-group">
         <label>Password</label>
         {{ form.password }}
       </div>
+      
       {% if form.errors %}
-      <p class="form-error">Incorrect username or password. Try again.</p>
+      <p class="form-error">❌ Incorrect username or password. Try again.</p>
       {% endif %}
-      <button type="submit" class="btn btn-primary btn-full">Log in →</button>
+      
+      <button type="submit" class="btn-submit-pill">Log in →</button>
     </form>
+    
     <p class="auth-switch">No account yet? <a href="{% url 'signup' %}">Sign up free</a></p>
   </div>
+
 </div>
 {% endblock %}
