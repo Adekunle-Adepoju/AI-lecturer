@@ -7,6 +7,124 @@
   <title>{% block title %}PetroLearn{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'core/css/main.css' %}">
 
+
+<style>
+    /* Base Layout & Theme Colors matching image_3d5ba2.png */
+    .petrolearn-footer {
+      background-color: #f8fafc; /* Ultra-light blue/gray tint */
+      border-top: 1px solid #e2e8f0;
+      padding: 64px 24px 32px 24px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin-top: 80px;
+    }
+
+    .footer-max-width {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* Responsive Grid */
+    .footer-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 40px;
+      margin-bottom: 48px;
+    }
+
+    /* Header styling matching dashboard side-labels */
+    .footer-header {
+      color: #6b7280; /* Muted gray */
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 20px;
+    }
+
+    /* Lists and Links */
+    .footer-links {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .footer-links li {
+      margin-bottom: 12px;
+    }
+
+    .footer-links a {
+      color: #4b5563; /* Readable dark-gray */
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.2s ease;
+    }
+
+    /* Interactive Brand Orange Hover State */
+    .footer-links a:hover {
+      color: #e58a00; /* PetroLearn Accent Orange */
+    }
+
+    .footer-text {
+      color: #6b7280;
+      font-size: 13px;
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+
+    /* Newsletter Form elements mirroring Dashboard Card elements */
+    .newsletter-form {
+      display: flex;
+      gap: 8px;
+    }
+
+    .newsletter-input {
+      flex: 1;
+      padding: 10px 14px;
+      font-size: 14px;
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px; /* Clean rounded edges */
+      outline: none;
+      color: #1f2937;
+      transition: border-color 0.2s ease;
+    }
+
+    .newsletter-input:focus {
+      border-color: #e58a00;
+    }
+
+    .newsletter-btn {
+      background-color: #e58a00; /* Exact orange from "Start →" button */
+      color: #ffffff;
+      border: none;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    .newsletter-btn:hover {
+      background-color: #cc7a00;
+    }
+
+    /* Bottom Bar */
+    .footer-bottom {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 24px;
+      text-align: center;
+    }
+
+    .footer-bottom p {
+      color: #9ca3af;
+      font-size: 12px;
+      margin: 0;
+    }
+  </style>
+
+
+
   <script>
     (function() {
       const savedTheme = localStorage.getItem('petrolearn-theme');
@@ -141,6 +259,62 @@
 <main class="main-content">
   {% block content %}{% endblock %}
 </main>
+
+
+
+<footer class="petrolearn-footer">
+    <div class="footer-max-width">
+      <div class="footer-grid">
+        
+        <div class="footer-column">
+          <h4 class="footer-header">Platform</h4>
+          <ul class="footer-links">
+            <li><a href="#">About PetroLearn</a></li>
+            <li><a href="#">System Status</a></li>
+            <li><a href="#">Careers</a></li>
+            <li><a href="#">Privacy & Terms</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-column">
+          <h4 class="footer-header">Academics</h4>
+          <ul class="footer-links">
+            <li><a href="#">Course Catalog</a></li>
+            <li><a href="#">SPE Student Chapter</a></li>
+            <li><a href="#">Documentation</a></li>
+            <li><a href="#">Leaderboard Archives</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-column">
+          <h4 class="footer-header">Support</h4>
+          <ul class="footer-links">
+            <li><a href="#">Help Center / FAQs</a></li>
+            <li><a href="#">Report a Bug</a></li>
+            <li><a href="#">Student Guide</a></li>
+            <li><a href="#">Contact Support</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-column">
+          <h4 class="footer-header">Connect</h4>
+          <p class="footer-text">Stay updated on new features and course drops.</p>
+          <form class="newsletter-form" onsubmit="event.preventDefault();">
+            <input type="email" placeholder="Your institutional email" class="newsletter-input" required>
+            <button type="submit" class="newsletter-btn">Join</button>
+          </form>
+        </div>
+
+      </div>
+
+      <div class="footer-bottom">
+        <p>© 2026 PetroLearn. Empowering the next generation of petroleum engineers.</p>
+      </div>
+    </div>
+  </footer>
+
+
+
 
 {% block extra_js %}{% endblock %}
 
