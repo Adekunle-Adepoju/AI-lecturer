@@ -2,256 +2,12 @@
 {% block title %}Dashboard — PetroLearn{% endblock %}
 
 {% block content %}
-<<<<<<< Updated upstream
-<style>
-  /* ── Structural Layout Corrections & Overrides ─────────────────── */
-  /* Ensures consistency across all viewport configurations */
-  .dashboard-grid-container {
-    max-width: 1040px !important;
-    display: grid;
-    grid-template-columns: 1fr 320px;
-    grid-template-areas: "main side"; /* Define explicit desk grid areas */
-    gap: 2rem;
-    align-items: start;
-    margin: 0 auto;
-  }
-
-  .dashboard-main-col {
-    grid-area: main;
-  }
-
-  .dashboard-side-col {
-    grid-area: side;
-  }
-
-  @media (max-width: 900px) {
-    .dashboard-grid-container {
-      /* Reorder the grid tracks globally on mobile screens */
-      grid-template-columns: 1fr;
-      grid-template-areas: 
-        "search"
-        "main"
-        "side";
-      gap: 0;
-    }
-
-    .dashboard-side-col { 
-      position: static; 
-    }
-
-    /* Target the search row inside the side column explicitly */
-    .dashboard-side-col .search-header-row {
-      grid-area: search;
-      margin-bottom: 24px !important;
-    }
-  }
-
-  /* Subgrid injection helper to allow child tracking within the layout */
-  @media (max-width: 900px) {
-    .dashboard-grid-container {
-      display: grid !important;
-    }
-    
-    /* Make the side column pass through its grid specifications */
-    .dashboard-side-col {
-      display: contents; 
-    }
-  }
-
-  /* ── Search Input & Header Avatar Component ────────────────────── */
-  .search-header-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    margin-bottom: 24px;
-  }
-
-  .search-container {
-    flex: 1;
-  }
-
-  .search-wrapper {
-    width: 100%;
-    display: flex;
-  }
-
-  .search-input {
-    width: 100%;
-    padding: 11px 18px; 
-    font-size: 14px;
-    font-family: inherit;
-    color: var(--text);
-    background-color: var(--navy-card);
-    border: 1px solid var(--border);
-    border-radius: 50px;
-    outline: none;
-    transition: border-color 0.15s, box-shadow 0.15s;
-  }
-
-  .search-input:focus {
-    border-color: var(--amber);
-    box-shadow: 0 0 0 3px var(--amber-glow);
-  }
-
-  .search-input::placeholder {
-    color: var(--text-muted);
-    opacity: 1;
-  }
-
-  .header-avatar-frame {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    overflow: hidden;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--navy-card);
-    border: 1px solid var(--border);
-  }
-
-  .header-avatar-frame img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .header-avatar-fallback {
-    font-size: 18px;
-  }
-
-  /* ── Dynamic Conic Progress Metric Module ──────────────────────── */
-  .progress-circle-outer {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    background: conic-gradient(var(--teal) calc(var(--progress-val) * 1%), var(--border) 0);
-  }
-
-  .progress-circle-inner {
-    width: 34px;
-    height: 34px;
-    background-color: var(--navy-card);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: absolute;
-    transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  
-  .course-pill:hover .progress-circle-inner {
-    background-color: var(--navy-raised);
-  }
-
-  .progress-circle-text {
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--text);
-  }
-
-  /* ── Synchronized Theme-Adaptive Calendar Widget ───────────────── */
-  .calendar-widget {
-    background: var(--navy-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 16px;
-    box-shadow: var(--shadow-card);
-    animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-    animation-delay: 0.2s;
-  }
-
-  .calendar-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-
-  .calendar-title {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text);
-  }
-
-  .calendar-nav-btn {
-    background: var(--navy-raised);
-    border: 1px solid var(--border);
-    color: var(--text-secondary);
-    width: 28px;
-    height: 28px;
-    border-radius: var(--radius-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 12px;
-  }
-
-  .calendar-nav-btn:hover {
-    background: var(--navy-card);
-    border-color: rgba(255,255,255,0.15);
-    color: var(--text);
-  }
-
-  .calendar-weekdays {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    text-align: center;
-    font-weight: 600;
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .calendar-days-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    row-gap: 6px;
-    text-align: center;
-  }
-
-  .calendar-day-cell {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text);
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    border-radius: 50%;
-  }
-
-  .calendar-day-cell.empty-pad {
-    color: var(--text-muted);
-    opacity: 0.35;
-  }
-
-  .calendar-day-cell.is-today {
-    background-color: var(--teal-glow); 
-    color: var(--green-text);            
-    font-weight: 700;
-    box-shadow: 0 0 0 1px rgba(26,158,122,0.3) inset;
-  }
-</style>
-=======
 <head>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Mona+Sans:ital,wght@0,200..900;1,200..900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
 </head>
->>>>>>> Stashed changes
 
 <div id="petrolearn-loader">
   <div class="loader-content">
@@ -413,14 +169,9 @@
     
     <p class="section-label">⚙️ Quick Links</p>
     <div class="side-widget-card" style="display: flex; flex-direction: column; gap: 8px;">
-<<<<<<< Updated upstream
-       <a href="{% url 'timetable' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start;">📅 Review Full Timetable</a>
-       <a href="{% url 'leaderboard' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start;">🏆 Open Leaderboard</a>
-=======
        <a href="{% url 'elective_selection' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px; border-color: var(--amber); color: var(--amber);">🔧 Manage Electives</a>
        <a href="{% url 'timetable' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px;">📅 Review Full Timetable</a>
        <a href="{% url 'leaderboard' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px;">🏆 Open Leaderboard</a>
->>>>>>> Stashed changes
     </div>
   </div>
 
@@ -433,14 +184,9 @@
     min-width: auto; 
     padding: 10px 14px; 
     border-radius: 50%; 
-<<<<<<< Updated upstream
-    box-shadow: var(--shadow-card); 
-    cursor: pointer;
-=======
     box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
     cursor: pointer;
     transition: opacity 0.3s ease, transform 0.3s ease;
->>>>>>> Stashed changes
   ">
     ↑
   </button>
@@ -455,10 +201,7 @@
     const h = new Date().getHours();
     const gr = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
     const emoji = h < 12 ? "☀️" : h < 17 ? "👋" : "🌙";
-<<<<<<< Updated upstream
-=======
     
->>>>>>> Stashed changes
     const firstName = "{{ user.first_name|escapejs }}".trim();
     
     if (firstName) {
@@ -468,91 +211,7 @@
     }
   })();
 
-<<<<<<< Updated upstream
-<script>
-  (function() {
-    const dateObj = new Date();
-    let currentYear = dateObj.getFullYear();
-    let currentMonth = dateObj.getMonth();
-
-    const monthNames = [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December"
-    ];
-
-    const monthTitle = document.getElementById("calendarMonthTitle");
-    const daysGrid = document.getElementById("calendarDaysGrid");
-    const prevBtn = document.getElementById("calPrevBtn");
-    const nextBtn = document.getElementById("calNextBtn");
-
-    function renderCalendarGrid(year, month) {
-      daysGrid.innerHTML = "";
-      monthTitle.textContent = `${monthNames[month]}, ${year}`;
-
-      const initialDayIndex = new Date(year, month, 1).getDay();
-      const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
-      
-      const totalDaysInPrevMonth = new Date(year, month, 0).getDate();
-      for (let i = initialDayIndex - 1; i >= 0; i--) {
-        const padCell = document.createElement("div");
-        padCell.classList.add("calendar-day-cell", "empty-pad");
-        padCell.textContent = totalDaysInPrevMonth - i;
-        daysGrid.appendChild(padCell);
-      }
-
-      const today = new Date();
-      for (let day = 1; day <= totalDaysInMonth; day++) {
-        const dayCell = document.createElement("div");
-        dayCell.classList.add("calendar-day-cell");
-        dayCell.textContent = day;
-
-        if (
-          day === today.getDate() &&
-          month === today.getMonth() &&
-          year === today.getFullYear()
-        ) {
-          dayCell.classList.add("is-today");
-        }
-
-        daysGrid.appendChild(dayCell);
-      }
-
-      const totalGridCellsUsed = initialDayIndex + totalDaysInMonth;
-      const remainingSlots = 42 - totalGridCellsUsed; 
-      for (let nextDay = 1; nextDay <= remainingSlots; nextDay++) {
-        const nextPadCell = document.createElement("div");
-        nextPadCell.classList.add("calendar-day-cell", "empty-pad");
-        nextPadCell.textContent = nextDay;
-        daysGrid.appendChild(nextPadCell);
-      }
-    }
-
-    prevBtn.addEventListener("click", () => {
-      currentMonth--;
-      if (currentMonth < 0) {
-        currentMonth = 11;
-        currentYear--;
-      }
-      renderCalendarGrid(currentYear, currentMonth);
-    });
-
-    nextBtn.addEventListener("click", () => {
-      currentMonth++;
-      if (currentMonth > 11) {
-        currentMonth = 0;
-        currentYear++;
-      }
-      renderCalendarGrid(currentYear, currentMonth);
-    });
-
-    renderCalendarGrid(currentYear, currentMonth);
-  })();
-</script>
-
-<script>
-=======
   // 2. Back To Top Floating Action Button System
->>>>>>> Stashed changes
   const topBtn = document.getElementById("backToTopBtn");
 
   window.onscroll = function() {

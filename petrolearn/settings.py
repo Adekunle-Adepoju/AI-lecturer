@@ -119,4 +119,4 @@ STATICFILES_DIRS = [
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-LOGIN_URL = '/login/'
+LOGIN_URL = '/'
