@@ -112,7 +112,6 @@
   </div>
 
   <div class="dashboard-side-col">
-    
     <div class="search-header-row">
       <div class="search-container">
         <form method="GET" action="#" class="search-wrapper" onsubmit="event.preventDefault();">
@@ -192,9 +191,7 @@
   </button>
 
 </div>
-{% endblock %}
 
-{% block extra_js %}
 <script>
   // 1. App Greeting Selector Engine
   (function() {
@@ -239,5 +236,72 @@
       }, 2000);
     }
  });
+</script>
+
+<script>
+  // 3. Calendar Tracking Widget Subsystem Engine
+  (function() {
+    const dateObj = new Date();
+    let currentYear = dateObj.getFullYear();
+    let currentMonth = dateObj.getMonth();
+
+    const monthNames = ["January","February","March","April","May","June",
+      "July","August","September","October","November","December"];
+
+    const monthTitle = document.getElementById("calendarMonthTitle");
+    const daysGrid = document.getElementById("calendarDaysGrid");
+    const prevBtn = document.getElementById("calPrevBtn");
+    const nextBtn = document.getElementById("calNextBtn");
+
+    function renderCalendarGrid(year, month) {
+      daysGrid.innerHTML = "";
+      monthTitle.textContent = `${monthNames[month]}, ${year}`;
+
+      const initialDayIndex = new Date(year, month, 1).getDay();
+      const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+      const totalDaysInPrevMonth = new Date(year, month, 0).getDate();
+
+      for (let i = initialDayIndex - 1; i >= 0; i--) {
+        const padCell = document.createElement("div");
+        padCell.classList.add("calendar-day-cell", "empty-pad");
+        padCell.textContent = totalDaysInPrevMonth - i;
+        daysGrid.appendChild(padCell);
+      }
+
+      const today = new Date();
+      for (let day = 1; day <= totalDaysInMonth; day++) {
+        const dayCell = document.createElement("div");
+        dayCell.classList.add("calendar-day-cell");
+        dayCell.textContent = day;
+        if (day === today.getDate() && month === today.getMonth() && year === today.getFullYear()) {
+          dayCell.classList.add("is-today");
+        }
+        daysGrid.appendChild(dayCell);
+      }
+
+      const totalGridCellsUsed = initialDayIndex + totalDaysInMonth;
+      const remainingSlots = 42 - totalGridCellsUsed;
+      for (let nextDay = 1; nextDay <= remainingSlots; nextDay++) {
+        const nextPadCell = document.createElement("div");
+        nextPadCell.classList.add("calendar-day-cell", "empty-pad");
+        nextPadCell.textContent = nextDay;
+        daysGrid.appendChild(nextPadCell);
+      }
+    }
+
+    prevBtn.addEventListener("click", () => {
+      currentMonth--;
+      if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+      renderCalendarGrid(currentYear, currentMonth);
+    });
+
+    nextBtn.addEventListener("click", () => {
+      currentMonth++;
+      if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+      renderCalendarGrid(currentYear, currentMonth);
+    });
+
+    renderCalendarGrid(currentYear, currentMonth);
+  })();
 </script>
 {% endblock %}
