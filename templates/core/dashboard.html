@@ -2,6 +2,7 @@
 {% block title %}Dashboard — PetroLearn{% endblock %}
 
 {% block content %}
+<<<<<<< Updated upstream
 <style>
   /* ── Structural Layout Corrections & Overrides ─────────────────── */
   /* Ensures consistency across all viewport configurations */
@@ -243,6 +244,14 @@
     box-shadow: 0 0 0 1px rgba(26,158,122,0.3) inset;
   }
 </style>
+=======
+<head>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Mona+Sans:ital,wght@0,200..900;1,200..900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+</head>
+>>>>>>> Stashed changes
 
 <div id="petrolearn-loader">
   <div class="loader-content">
@@ -404,8 +413,14 @@
     
     <p class="section-label">⚙️ Quick Links</p>
     <div class="side-widget-card" style="display: flex; flex-direction: column; gap: 8px;">
+<<<<<<< Updated upstream
        <a href="{% url 'timetable' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start;">📅 Review Full Timetable</a>
        <a href="{% url 'leaderboard' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start;">🏆 Open Leaderboard</a>
+=======
+       <a href="{% url 'elective_selection' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px; border-color: var(--amber); color: var(--amber);">🔧 Manage Electives</a>
+       <a href="{% url 'timetable' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px;">📅 Review Full Timetable</a>
+       <a href="{% url 'leaderboard' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px;">🏆 Open Leaderboard</a>
+>>>>>>> Stashed changes
     </div>
   </div>
 
@@ -418,8 +433,14 @@
     min-width: auto; 
     padding: 10px 14px; 
     border-radius: 50%; 
+<<<<<<< Updated upstream
     box-shadow: var(--shadow-card); 
     cursor: pointer;
+=======
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+    cursor: pointer;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+>>>>>>> Stashed changes
   ">
     ↑
   </button>
@@ -429,10 +450,15 @@
 
 {% block extra_js %}
 <script>
+  // 1. App Greeting Selector Engine
   (function() {
     const h = new Date().getHours();
     const gr = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
     const emoji = h < 12 ? "☀️" : h < 17 ? "👋" : "🌙";
+<<<<<<< Updated upstream
+=======
+    
+>>>>>>> Stashed changes
     const firstName = "{{ user.first_name|escapejs }}".trim();
     
     if (firstName) {
@@ -441,8 +467,8 @@
       document.getElementById("greeting").textContent = `${gr}! ${emoji}`;
     }
   })();
-</script>
 
+<<<<<<< Updated upstream
 <script>
   (function() {
     const dateObj = new Date();
@@ -524,6 +550,9 @@
 </script>
 
 <script>
+=======
+  // 2. Back To Top Floating Action Button System
+>>>>>>> Stashed changes
   const topBtn = document.getElementById("backToTopBtn");
 
   window.onscroll = function() {

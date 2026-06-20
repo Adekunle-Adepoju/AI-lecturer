@@ -165,6 +165,23 @@ LEVEL_CHOICES = [("100", "100 Level"), ("200", "200 Level"), ("300", "300 Level"
 SEMESTER_CHOICES = [("1", "First Semester"), ("2", "Second Semester")]
 SCHOOL_CHOICES = [("unilag", "University of Lagos")]
 DEPARTMENT_CHOICES = [("petroleum", "Petroleum & Gas Engineering")]
+class CourseDefinition(models.Model):
+    """Admin-defined course catalogue — compulsory or elective"""
+    course_code = models.CharField(max_length=10, unique=True)
+    course_title = models.CharField(max_length=100)
+    level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
+    semester = models.CharField(max_length=1, choices=SEMESTER_CHOICES)
+    school = models.CharField(max_length=50, choices=SCHOOL_CHOICES, default="unilag")
+    department = models.CharField(max_length=50, choices=DEPARTMENT_CHOICES, default="petroleum")
+    units = models.IntegerField(default=3)
+    is_elective = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["level", "semester", "is_elective", "course_code"]
+
+    def __str__(self):
+        tag = "Elective" if self.is_elective else "Compulsory"
+        return f"{self.course_code} — {self.course_title} ({tag})"
 
 
 class StudentProfile(models.Model):
@@ -174,6 +191,12 @@ class StudentProfile(models.Model):
     department = models.CharField(max_length=50, choices=DEPARTMENT_CHOICES, default="petroleum")
     level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
     semester = models.CharField(max_length=1, choices=SEMESTER_CHOICES)
+    elective_courses = models.ManyToManyField(
+        CourseDefinition,
+        blank=True,
+        related_name="enrolled_students",
+        limit_choices_to={"is_elective": True}
+    )
     xp = models.IntegerField(default=0)
     streak = models.IntegerField(default=0)
     last_session_date = models.DateField(null=True, blank=True)
@@ -181,7 +204,6 @@ class StudentProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} — {self.level}L"
-
 
 class TimetableEntry(models.Model):
     DAYS = [("Mon", "Monday"), ("Tue", "Tuesday"), ("Wed", "Wednesday"), ("Thu", "Thursday"), ("Fri", "Friday")]

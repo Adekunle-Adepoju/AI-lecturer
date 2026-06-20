@@ -13,10 +13,10 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 from groq import Groq
 
-from .forms import SignupForm, OnboardingForm, ProfileEditForm
+from .forms import SignupForm, OnboardingForm, ProfileEditForm, ElectiveSelectionForm
 from .models import (
     StudentProfile, TimetableEntry, Session, TopicSession,
-    SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES
+    SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES, CourseDefinition
 )
 from .prompt import SYSTEM_PROMPT
 
@@ -32,17 +32,78 @@ def get_groq_client():
 def signup_view(request):
     if request.user.is_authenticated:
         return redirect("dashboard")
-    if request.method == 'POST':
-        form = SignupForm(request.POST)  # Fixed NameError placeholder here
+    if request.method == "POST":
+        form = SignupForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            login(request, user)  # Log user in straight after a successful signup
-            return redirect('dashboard')
-        else:
-            print("SIGNUP ERRORS:", form.errors)
+            try:
+                user = form.save(commit=False)
+                user.first_name = form.cleaned_data["first_name"]
+                user.last_name = form.cleaned_data["last_name"]
+                user.save()
+
+                profile = StudentProfile.objects.create(
+                    user=user,
+                    matric_number=form.cleaned_data["matric_number"],
+                    school=form.cleaned_data["school"],
+                    department=form.cleaned_data["department"],
+                    level=form.cleaned_data["level"],
+                    semester=form.cleaned_data["semester"],
+                )
+                login(request, user)
+                return redirect("elective_selection")
+            except Exception as e:
+                form.add_error(None, f"Error creating account: {str(e)}")
     else:
         form = SignupForm()
-    return render(request, 'core/signup.html', {'form': form})
+    return render(request, "core/signup.html", {"form": form})
+
+@login_required
+def elective_selection_view(request):
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
+
+    profile = request.user.profile
+
+    # Check if there are any electives available for this level/semester
+    available_electives = CourseDefinition.objects.filter(
+        level=profile.level,
+        semester=profile.semester,
+        school=profile.school,
+        department=profile.department,
+        is_elective=True,
+    )
+
+    # If no electives defined yet, skip straight to dashboard
+    if not available_electives.exists():
+        _generate_timetable(profile)
+        return redirect("dashboard")
+
+    if request.method == "POST":
+        form = ElectiveSelectionForm(
+            request.POST,
+            level=profile.level,
+            semester=profile.semester,
+            school=profile.school,
+            department=profile.department,
+        )
+        if form.is_valid():
+            profile.elective_courses.set(form.cleaned_data["electives"])
+            profile.save()
+            _generate_timetable(profile)
+            return redirect("dashboard")
+    else:
+        form = ElectiveSelectionForm(
+            level=profile.level,
+            semester=profile.semester,
+            school=profile.school,
+            department=profile.department,
+            initial={"electives": profile.elective_courses.all()},
+        )
+
+    return render(request, "core/elective_selection.html", {
+        "form": form,
+        "profile": profile,
+    })
 
 
 def login_view(request):
@@ -86,17 +147,54 @@ def onboarding_view(request):
 # ─── Timetable generator ───────────────────────────────────────────────────────
 
 def _generate_timetable(profile):
-    courses = COURSES.get(profile.level, {}).get(profile.semester, [])
+    """Generate timetable from CourseDefinition — compulsory + chosen electives"""
     days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
     TimetableEntry.objects.filter(student=profile).delete()
+
+    # Get compulsory courses
+    compulsory = list(CourseDefinition.objects.filter(
+        level=profile.level,
+        semester=profile.semester,
+        school=profile.school,
+        department=profile.department,
+        is_elective=False,
+    ).order_by("course_code"))
+
+    # Get chosen electives
+    electives = list(profile.elective_courses.filter(
+        level=profile.level,
+        semester=profile.semester,
+    ).order_by("course_code"))
+
+    all_courses = compulsory + electives
+
+    # Fall back to hardcoded COURSES if no CourseDefinitions exist yet
+    if not all_courses:
+        courses = COURSES.get(profile.level, {}).get(profile.semester, [])
+        entries = []
+        for i, course in enumerate(courses):
+            day = days[i % len(days)]
+            time = "09:00" if i < len(days) else "11:00"
+            entries.append(TimetableEntry(
+                student=profile,
+                course_code=course["code"],
+                course_title=course["title"],
+                day=day,
+                time=time,
+                week_number=1,
+                total_weeks=15,
+            ))
+        TimetableEntry.objects.bulk_create(entries)
+        return
+
     entries = []
-    for i, course in enumerate(courses):
+    for i, course in enumerate(all_courses):
         day = days[i % len(days)]
         time = "09:00" if i < len(days) else "11:00"
         entries.append(TimetableEntry(
             student=profile,
-            course_code=course["code"],
-            course_title=course["title"],
+            course_code=course.course_code,
+            course_title=course.course_title,
             day=day,
             time=time,
             week_number=1,
@@ -694,3 +792,86 @@ def restart_session_view(request, course_code, week_number):
     messages.success(request, f"{course_code} Week {week_number} has been restarted from the beginning.")
     # Fixed redirect pattern mapping lookup parameter
     return redirect("session", course_code)
+
+
+
+@login_required
+def manage_courses_view(request):
+    user = request.user
+    
+    # 1. PROFILE CHECK & FALLBACK FOR ADMINS
+    if hasattr(user, 'studentprofile'):
+        profile = user.studentprofile
+        current_level = profile.level
+        current_semester = profile.semester
+    else:
+        # Fallback parameters if logged in as an Admin/Superuser without a profile row
+        current_level = 300
+        current_semester = 1
+        profile = None  # Flagged so we know not to write to TimetableEntry later
+
+    # 2. DIFFERENTIATING COMPULSORY VS ELECTIVES
+    # We query the CourseOutline table filtering by the user's current track
+    available_courses = CourseOutline.objects.filter(
+        level=current_level, 
+        semester=current_semester
+    )
+    
+    # Django splits them cleanly based on your 'is_compulsory' boolean model column
+    compulsory_courses = available_courses.filter(is_compulsory=True)
+    elective_courses = available_courses.filter(is_compulsory=False)
+    
+    # 3. TRACKING CURRENTLY ACTIVE ELECTIVES
+    if profile:
+        active_elective_codes = TimetableEntry.objects.filter(
+            student=profile,
+            course_code__in=elective_courses.values_list('course_code', flat=True)
+        ).values_list('course_code', flat=True)
+    else:
+        # For Admin testing, pre-select nothing or everything so the page renders normally
+        active_elective_codes = []
+
+    # 4. POST PROCESSING (SAVING SELECTIONS)
+    if request.method == "POST":
+        if not profile:
+            messages.warning(request, "Oga Admin, choices weren't saved because your account doesn't have a Student Profile attached.")
+            return redirect('dashboard')
+            
+        selected_elective_codes = request.POST.getlist('selected_electives')
+        
+        # Drop elective slots that were unchecked
+        TimetableEntry.objects.filter(
+            student=profile, 
+            course_code__in=elective_courses.values_list('course_code', flat=True)
+        ).exclude(course_code__in=selected_elective_codes).delete()
+        
+        Session.objects.filter(
+            student=profile, 
+            course_code__in=elective_courses.values_list('course_code', flat=True)
+        ).exclude(course_code__in=selected_elective_codes).delete()
+        
+        # Provision newly checked electives
+        for code in selected_elective_codes:
+            course = elective_courses.get(course_code=code)
+            TimetableEntry.objects.get_or_create(
+                student=profile,
+                course_code=course.course_code,
+                course_title=course.course_title,
+                defaults={
+                    'day': 'Wednesday', 
+                    'time': '12:00 PM',
+                    'week_number': 1,
+                    'total_weeks': 12
+                }
+            )
+        
+        messages.success(request, "Your semester course window has been updated successfully!")
+        return redirect('dashboard')
+
+    context = {
+        'compulsory_courses': compulsory_courses,
+        'elective_courses': elective_courses,
+        'active_elective_codes': active_elective_codes,
+        'is_admin_testing': (profile is None)
+    }
+    return render(request, 'core/manage_courses.html', context)

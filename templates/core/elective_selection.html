@@ -1,0 +1,43 @@
+{% extends "core/base.html" %}
+{% block title %}Choose Your Electives — PetroLearn{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:500px; margin:40px auto">
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin-bottom:4px">Choose Your Electives</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
+    Select the elective courses you are registered for this semester.
+    Compulsory courses are already included automatically.
+  </p>
+
+  <form method="POST">
+    {% csrf_token %}
+
+    {% if form.electives.field.queryset.count > 0 %}
+    <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:24px">
+      {% for checkbox in form.electives %}
+      <label style="display:flex; align-items:center; gap:12px; padding:14px 16px;
+                    background:var(--navy-card); border:1px solid var(--border);
+                    border-radius:var(--radius-lg); cursor:pointer; transition:border-color 0.15s"
+             onmouseover="this.style.borderColor='rgba(245,166,35,0.3)'"
+             onmouseout="this.style.borderColor='rgba(255,255,255,0.08)'">
+        {{ checkbox.tag }}
+        <div>
+          <div style="font-weight:600; font-size:14px">{{ checkbox.choice_label }}</div>
+        </div>
+      </label>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="done-card" style="margin-bottom:24px">
+      <div class="done-emoji">📋</div>
+      <div class="done-title">No electives available</div>
+      <div class="done-sub">No elective courses have been set up for your level and semester yet.</div>
+    </div>
+    {% endif %}
+
+    <button type="submit" class="btn btn-primary btn-full">Save & Continue →</button>
+  </form>
+
+</div>
+{% endblock %}
