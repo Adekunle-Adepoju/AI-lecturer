@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     StudentProfile, TimetableEntry, Session, TopicSession,
-    SlideDocument, CourseOutline, PastQuestion
+    SlideDocument, CourseOutline, PastQuestion, CourseDefinition
 )
 from .outline_parser import _parse_course_outline
 from .past_question_parser import _parse_past_question_file
@@ -81,3 +81,10 @@ class PastQuestionAdmin(admin.ModelAdmin):
             self.message_user(request, f"Parsed {len(obj.parsed_questions)} questions successfully.")
         except Exception as e:
             self.message_user(request, f"File saved but parsing failed: {str(e)}", level="warning")
+
+@admin.register(CourseDefinition)
+class CourseDefinitionAdmin(admin.ModelAdmin):
+    list_display = ["course_code", "course_title", "level", "semester", "is_elective", "units"]
+    list_filter = ["level", "semester", "is_elective", "school", "department"]
+    search_fields = ["course_code", "course_title"]
+    list_editable = ["is_elective"]

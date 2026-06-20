@@ -2,8 +2,8 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from .models import (
-    StudentProfile, LEVEL_CHOICES, SEMESTER_CHOICES,
-    SCHOOL_CHOICES, DEPARTMENT_CHOICES
+    StudentProfile, CourseDefinition,
+    LEVEL_CHOICES, SEMESTER_CHOICES, SCHOOL_CHOICES, DEPARTMENT_CHOICES
 )
 
 
@@ -23,6 +23,27 @@ class SignupForm(UserCreationForm):
             "school", "department", "level", "semester",
             "password1", "password2"
         ]
+
+
+class ElectiveSelectionForm(forms.Form):
+    """Shown after signup and on profile edit — pick electives"""
+    electives = forms.ModelMultipleChoiceField(
+        queryset=CourseDefinition.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        label="Select your elective courses"
+    )
+
+    def __init__(self, *args, level=None, semester=None, school=None, department=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if level and semester:
+            self.fields["electives"].queryset = CourseDefinition.objects.filter(
+                level=level,
+                semester=semester,
+                is_elective=True,
+                school=school or "unilag",
+                department=department or "petroleum",
+            )
 
 
 class OnboardingForm(forms.ModelForm):
