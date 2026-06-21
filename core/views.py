@@ -16,9 +16,12 @@ from groq import Groq
 from .forms import SignupForm, OnboardingForm, ProfileEditForm, ElectiveSelectionForm
 from .models import (
     StudentProfile, TimetableEntry, Session, TopicSession,
-    SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES, CourseDefinition
+    SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES, CourseDefinition, PastQuestion
 )
 from .prompt import SYSTEM_PROMPT
+from functools import wraps
+from .staff_forms import SlideUploadForm, CourseOutlineUploadForm, PastQuestionUploadForm, CourseDefinitionForm
+
 
 
 # ─── Groq client ───────────────────────────────────────────────────────────────
@@ -875,3 +878,124 @@ def manage_courses_view(request):
         'is_admin_testing': (profile is None)
     }
     return render(request, 'core/manage_courses.html', context)
+
+from functools import wraps
+
+def staff_required(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect("login")
+        if not hasattr(request.user, "profile") or not request.user.profile.is_staff_member:
+            return redirect("dashboard")
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+
+@staff_required
+def staff_portal_view(request):
+    """Staff portal home — overview of uploaded materials"""
+    slides = SlideDocument.objects.all().order_by("-uploaded_at")[:10]
+    outlines = CourseOutline.objects.all().order_by("-uploaded_at")[:10]
+    past_questions = PastQuestion.objects.all().order_by("-uploaded_at")[:10]
+    courses = CourseDefinition.objects.all().order_by("level", "semester", "course_code")
+
+    return render(request, "core/staff/portal.html", {
+        "slides": slides,
+        "outlines": outlines,
+        "past_questions": past_questions,
+        "courses": courses,
+    })
+
+
+@staff_required
+def staff_upload_slide_view(request):
+    if request.method == "POST":
+        form = SlideUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            slide = form.save()
+            try:
+                from .slide_topic_extractor import _parse_slide_document
+                _parse_slide_document(slide)
+                messages.success(request, f"Slide uploaded and {len(slide.extracted_topics)} topics extracted.")
+            except Exception as e:
+                messages.warning(request, f"Slide saved but topic extraction failed: {str(e)}")
+            return redirect("staff_portal")
+    else:
+        form = SlideUploadForm()
+    return render(request, "core/staff/upload_form.html", {
+        "form": form,
+        "title": "Upload Course Slide",
+        "description": "Upload the full course slide deck (PDF, DOCX or PPTX). Topics will be extracted automatically.",
+    })
+
+
+@staff_required
+def staff_upload_outline_view(request):
+    if request.method == "POST":
+        form = CourseOutlineUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            outline = form.save()
+            try:
+                from .outline_parser import _parse_course_outline
+                _parse_course_outline(outline)
+                messages.success(request, "Course outline uploaded and parsed successfully.")
+            except Exception as e:
+                messages.warning(request, f"Outline saved but parsing failed: {str(e)}")
+            return redirect("staff_portal")
+    else:
+        form = CourseOutlineUploadForm()
+    return render(request, "core/staff/upload_form.html", {
+        "form": form,
+        "title": "Upload Course Outline",
+        "description": "Upload the course outline document. It will be parsed into weekly topics automatically.",
+    })
+
+
+@staff_required
+def staff_upload_past_questions_view(request):
+    if request.method == "POST":
+        form = PastQuestionUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            pq = form.save()
+            try:
+                from .past_question_parser import _parse_past_question_file
+                _parse_past_question_file(pq)
+                messages.success(request, f"Past questions uploaded. {len(pq.parsed_questions)} questions extracted.")
+            except Exception as e:
+                messages.warning(request, f"File saved but parsing failed: {str(e)}")
+            return redirect("staff_portal")
+    else:
+        form = PastQuestionUploadForm()
+    return render(request, "core/staff/upload_form.html", {
+        "form": form,
+        "title": "Upload Past Questions",
+        "description": "Upload past exam or test papers. Questions will be extracted and structured automatically.",
+    })
+
+
+@staff_required
+def staff_manage_courses_view(request):
+    if request.method == "POST":
+        form = CourseDefinitionForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Course added successfully.")
+            return redirect("staff_manage_courses")
+    else:
+        form = CourseDefinitionForm()
+
+    courses = CourseDefinition.objects.all().order_by("level", "semester", "course_code")
+    return render(request, "core/staff/manage_courses.html", {
+        "form": form,
+        "courses": courses,
+    })
+
+
+@staff_required
+def staff_delete_course_view(request, course_id):
+    course = get_object_or_404(CourseDefinition, id=course_id)
+    course.delete()
+    messages.success(request, f"{course.course_code} deleted.")
+    return redirect("staff_manage_courses")

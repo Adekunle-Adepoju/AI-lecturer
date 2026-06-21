@@ -1,0 +1,80 @@
+{% extends "core/base.html" %}
+{% block title %}Staff Portal — PetroLearn{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin-bottom:4px">🏫 Staff Portal</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
+    Manage course materials, slides, past questions and course definitions.
+  </p>
+
+  <!-- Upload actions -->
+  <p class="section-label">📤 Upload Materials</p>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px">
+    <a href="{% url 'staff_upload_slide' %}" class="today-card" style="text-decoration:none; display:block">
+      <h3>📑 Course Slides</h3>
+      <p>Upload full course slide deck. Topics extracted automatically.</p>
+    </a>
+    <a href="{% url 'staff_upload_outline' %}" class="today-card" style="text-decoration:none; display:block">
+      <h3>📋 Course Outline</h3>
+      <p>Upload course outline. Parsed into weekly topics automatically.</p>
+    </a>
+    <a href="{% url 'staff_upload_past_questions' %}" class="today-card" style="text-decoration:none; display:block">
+      <h3>📝 Past Questions</h3>
+      <p>Upload past exam papers. Questions extracted and structured.</p>
+    </a>
+    <a href="{% url 'staff_manage_courses' %}" class="today-card" style="text-decoration:none; display:block">
+      <h3>📚 Manage Courses</h3>
+      <p>Add, edit or remove course definitions and electives.</p>
+    </a>
+  </div>
+
+  <!-- Recent slides -->
+  <p class="section-label">📑 Recent Slides</p>
+  <div class="course-list" style="margin-bottom:24px">
+    {% for slide in slides %}
+    <div class="course-pill" style="cursor:default">
+      <div>
+        <div class="course-name">{{ slide.course_code }} — {{ slide.course_title }}</div>
+        <div class="course-code">
+          Level {{ slide.level }} ·
+          {% if slide.parsed %}
+            {{ slide.extracted_topics|length }} topics extracted ✓
+          {% else %}
+            Not yet parsed
+          {% endif %}
+          · {{ slide.uploaded_at|date:"d M Y" }}
+        </div>
+      </div>
+    </div>
+    {% empty %}
+    <p style="color:var(--text-muted); font-size:13px">No slides uploaded yet.</p>
+    {% endfor %}
+  </div>
+
+  <!-- Recent past questions -->
+  <p class="section-label">📝 Recent Past Questions</p>
+  <div class="course-list" style="margin-bottom:24px">
+    {% for pq in past_questions %}
+    <div class="course-pill" style="cursor:default">
+      <div>
+        <div class="course-name">{{ pq.course_code }} — {{ pq.course_title }}</div>
+        <div class="course-code">
+          Level {{ pq.level }} ·
+          {% if pq.parsed %}
+            {{ pq.parsed_questions|length }} questions extracted ✓
+          {% else %}
+            Not yet parsed
+          {% endif %}
+          · {{ pq.uploaded_at|date:"d M Y" }}
+        </div>
+      </div>
+    </div>
+    {% empty %}
+    <p style="color:var(--text-muted); font-size:13px">No past questions uploaded yet.</p>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}

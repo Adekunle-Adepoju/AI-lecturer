@@ -213,6 +213,11 @@
     <a href="{% url 'profile_edit' %}" class="nav-drawer-link">
       <span class="nav-drawer-icon">⚙️</span> Edit Profile
     </a>
+    {% if user.is_authenticated and user.profile.is_staff_member %}
+<a href="{% url 'staff_portal' %}" class="nav-drawer-link">
+  <span class="nav-drawer-icon">🏫</span> Staff Portal
+</a>
+{% endif %}
 
     <div class="theme-toggle-container">
       <span class="theme-toggle-label">Appearance</span>

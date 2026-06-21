@@ -1,0 +1,44 @@
+{% extends "core/base.html" %}
+{% block title %}{{ title }} — PetroLearn{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:500px; margin:40px auto">
+
+  <a href="{% url 'staff_portal' %}" style="font-size:13px; color:var(--text-secondary)">← Back to portal</a>
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">{{ title }}</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">{{ description }}</p>
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="message" style="margin-bottom:16px">{{ message }}</div>
+  {% endfor %}
+  {% endif %}
+
+  {% if form.errors %}
+  <div style="color:var(--red-soft); margin-bottom:16px">
+    {% for field in form %}
+      {% for error in field.errors %}
+        <p>{{ field.label }}: {{ error }}</p>
+      {% endfor %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+    {% for field in form %}
+    <div style="margin-bottom:16px">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em">
+        {{ field.label }}
+      </label>
+      {{ field }}
+    </div>
+    {% endfor %}
+    <button type="submit" class="btn btn-primary btn-full" style="margin-top:8px">
+      Upload & Process →
+    </button>
+  </form>
+
+</div>
+{% endblock %}
