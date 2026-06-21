@@ -191,8 +191,9 @@ class StudentProfile(models.Model):
     department = models.CharField(max_length=50, choices=DEPARTMENT_CHOICES, default="petroleum")
     level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
     semester = models.CharField(max_length=1, choices=SEMESTER_CHOICES)
+    is_staff_member = models.BooleanField(default=False)
     elective_courses = models.ManyToManyField(
-        CourseDefinition,
+        'CourseDefinition',
         blank=True,
         related_name="enrolled_students",
         limit_choices_to={"is_elective": True}
