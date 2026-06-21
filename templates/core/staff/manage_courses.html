@@ -1,0 +1,65 @@
+{% extends "core/base.html" %}
+{% block title %}Manage Courses — PetroLearn{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <a href="{% url 'staff_portal' %}" style="font-size:13px; color:var(--text-secondary)">← Back to portal</a>
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">📚 Manage Courses</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">Add or remove course definitions.</p>
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="message" style="margin-bottom:16px">{{ message }}</div>
+  {% endfor %}
+  {% endif %}
+
+  <!-- Add course form -->
+  <p class="section-label">Add New Course</p>
+  <form method="POST" style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; margin-bottom:32px">
+    {% csrf_token %}
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+      {% for field in form %}
+      <div style="{% if field.field.widget.input_type == 'checkbox' %}grid-column:1/-1{% endif %}">
+        <label style="display:block; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em">
+          {{ field.label }}
+        </label>
+        {{ field }}
+      </div>
+      {% endfor %}
+    </div>
+    <button type="submit" class="btn btn-primary" style="margin-top:16px">Add Course →</button>
+  </form>
+
+  <!-- Course list -->
+  <p class="section-label">All Courses ({{ courses.count }})</p>
+  <div class="course-list">
+    {% for course in courses %}
+    <div class="course-pill" style="cursor:default">
+      <div>
+        <div class="course-name">
+          {{ course.course_code }} — {{ course.course_title }}
+          {% if course.is_elective %}
+          <span class="badge badge-amber" style="margin-left:8px">Elective</span>
+          {% else %}
+          <span class="badge badge-green" style="margin-left:8px">Compulsory</span>
+          {% endif %}
+        </div>
+        <div class="course-code">Level {{ course.level }} · Semester {{ course.semester }} · {{ course.units }} units</div>
+      </div>
+      <form method="POST" action="{% url 'staff_delete_course' course.id %}">
+        {% csrf_token %}
+        <button type="submit" style="background:none; border:none; color:var(--red-soft); cursor:pointer; font-size:13px"
+                onclick="return confirm('Delete {{ course.course_code }}?')">
+          Delete
+        </button>
+      </form>
+    </div>
+    {% empty %}
+    <p style="color:var(--text-muted); font-size:13px">No courses defined yet.</p>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
