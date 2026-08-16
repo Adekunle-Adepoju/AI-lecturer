@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}PetroLearn{% endblock %}</title>
+  <title>{% block title %}Rovea{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'core/css/main.css' %}">
 
   <!-- KaTeX CSS -->
@@ -16,7 +16,7 @@
 
 <style>
     /* Base Layout & Theme Colors matching image_3d5ba2.png */
-    .petrolearn-footer {
+    .Rovea-footer {
       background-color: #f8fafc; /* Ultra-light blue/gray tint */
       border-top: 1px solid #e2e8f0;
       padding: 64px 24px 32px 24px;
@@ -67,7 +67,7 @@
 
     /* Interactive Brand Orange Hover State */
     .footer-links a:hover {
-      color: #e58a00; /* PetroLearn Accent Orange */
+      color: #e58a00; /* Rovea Accent Orange */
     }
 
     .footer-text {
@@ -131,7 +131,7 @@
 
   <script>
     (function() {
-      const savedTheme = localStorage.getItem('petrolearn-theme');
+      const savedTheme = localStorage.getItem('Rovea-theme');
       const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       
       if (savedTheme === 'light' || (!savedTheme && !systemPrefersDark)) {
@@ -144,7 +144,7 @@
 
 <script>
   window.addEventListener("load", function() {
-    const loader = document.getElementById("petrolearn-loader");
+    const loader = document.getElementById("Rovea-loader");
     
     if (loader) {
       loader.classList.add("fade-out");
@@ -153,7 +153,7 @@
 </script>
 <script>
   window.addEventListener("load", function() {
-    const loader = document.getElementById("petrolearn-loader");
+    const loader = document.getElementById("Rovea-loader");
     
     if (loader) {
       setTimeout(function() {
@@ -169,7 +169,7 @@
 
 {% if user.is_authenticated %}
 <nav class="navbar">
-  <a href="{% url 'dashboard' %}" class="nav-logo">🛢️ PetroLearn</a>
+  <a href="{% url 'dashboard' %}" class="nav-logo"> Rovea</a>
   <button class="hamburger" id="hamburger" aria-label="Menu">
     <span></span>
     <span></span>
@@ -256,14 +256,14 @@
   {% block content %}{% endblock %}
 </main>
 
-<footer class="petrolearn-footer">
+<footer class="Rovea-footer">
     <div class="footer-max-width">
       <div class="footer-grid">
         
         <div class="footer-column">
           <h4 class="footer-header">Platform</h4>
           <ul class="footer-links">
-            <li><a href="#">About PetroLearn</a></li>
+            <li><a href="#">About Rovea</a></li>
             <li><a href="#">System Status</a></li>
             <li><a href="#">Careers</a></li>
             <li><a href="#">Privacy & Terms</a></li>
@@ -302,7 +302,7 @@
       </div>
 
       <div class="footer-bottom">
-        <p>© 2026 PetroLearn. Empowering the next generation of petroleum engineers.</p>
+        <p>© 2026 Rovea. Empowering the next generation of petroleum engineers.</p>
       </div>
     </div>
   </footer>
@@ -362,7 +362,7 @@
         const targetTheme = activeTheme === 'dark' ? 'light' : 'dark';
         
         document.documentElement.setAttribute('data-theme', targetTheme);
-        localStorage.setItem('petrolearn-theme', targetTheme);
+        localStorage.setItem('Rovea-theme', targetTheme);
         updateToggleButton(targetTheme);
       });
     }

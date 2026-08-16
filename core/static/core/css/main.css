@@ -102,7 +102,7 @@ select {
 
 
 /* Fullscreen Loader Overlay */
-#petrolearn-loader {
+#rovea-loader {
   position: fixed;
   top: 0;
   left: 0;
@@ -180,7 +180,7 @@ select {
 }
 
 /* Class to cleanly fade out the screen */
-#petrolearn-loader.fade-out {
+#rovea-loader.fade-out {
   opacity: 0;
   visibility: hidden;
 }
@@ -1469,7 +1469,7 @@ hr {
 }
 
 /* ── Loader ──────────────────────────────────────────────────────── */
-#petrolearn-loader {
+#rovea-loader {
   position: fixed;
   inset: 0;
   background: var(--navy);
@@ -1480,7 +1480,7 @@ hr {
   transition: opacity 0.5s ease;
 }
 
-#petrolearn-loader.fade-out {
+#rovea-loader.fade-out {
   opacity: 0;
   pointer-events: none;
 }

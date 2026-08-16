@@ -1,5 +1,5 @@
 {% extends "core/base.html" %}
-{% block title %}{{ entry.course_code }} — PetroLearn{% endblock %}
+{% block title %}{{ entry.course_code }} — Rovea{% endblock %}
 
 {% block content %}
 <div class="page-container">
@@ -8,7 +8,7 @@
     <div class="ai-avatar">🤖</div>
     <div>
       <div class="session-title">{{ entry.course_title }}</div>
-      <div class="session-sub">{{ entry.course_code }} · Week {{ entry.week_number }} of {{ entry.total_weeks }} · PetroLearn AI</div>
+      <div class="session-sub">{{ entry.course_code }} · Week {{ entry.week_number }} of {{ entry.total_weeks }} · Rovea AI</div>
     </div>
     <span class="badge badge-green live-badge">{% if chat_mode %}LIVE{% else %}UPCOMING{% endif %}</span>
   </div>
@@ -27,7 +27,7 @@
         {% endfor %}
       </ol>
       <p style="margin-top:16px; color:var(--muted,#8a97ac); font-size:0.9rem;">
-        Each topic is taught step by step in a live chat with PetroLearn AI — you'll check in as you go, and there's a short quiz after each one.
+        Each topic is taught step by step in a live chat with Rovea AI — you'll check in as you go, and there's a short quiz after each one.
       </p>
     </div>
 
