@@ -7,6 +7,12 @@
   <title>{% block title %}PetroLearn{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'core/css/main.css' %}">
 
+  <!-- KaTeX CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+
+  <!-- KaTeX JS -->
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body);"></script>
 
 <style>
     /* Base Layout & Theme Colors matching image_3d5ba2.png */
@@ -123,8 +129,6 @@
     }
   </style>
 
-
-
   <script>
     (function() {
       const savedTheme = localStorage.getItem('petrolearn-theme');
@@ -138,17 +142,11 @@
     })();
   </script>
 
-
-
-
 <script>
   window.addEventListener("load", function() {
     const loader = document.getElementById("petrolearn-loader");
     
-    // Smoothly fade out the preloader
     if (loader) {
-      // Small artificial delay (e.g., 400ms) can be added here if your local server is too instantaneous 
-      // to let users appreciate the text animation.
       loader.classList.add("fade-out");
     }
   });
@@ -158,8 +156,6 @@
     const loader = document.getElementById("petrolearn-loader");
     
     if (loader) {
-      // 2000 milliseconds = 2 seconds. 
-      // Change this number to make it display shorter or longer!
       setTimeout(function() {
         loader.classList.add("fade-out");
       }, 2000); 
@@ -167,10 +163,7 @@
   });
 </script>
 
-
 </head>
-
-
 
 <body>
 
@@ -235,8 +228,6 @@
 </div>
 {% endif %}
 
-
-
 {% if messages %}
 <div class="messages">
   {% for message in messages %}
@@ -264,8 +255,6 @@
 <main class="main-content">
   {% block content %}{% endblock %}
 </main>
-
-
 
 <footer class="petrolearn-footer">
     <div class="footer-max-width">
@@ -318,9 +307,6 @@
     </div>
   </footer>
 
-
-
-
 {% block extra_js %}{% endblock %}
 
 <script>
@@ -367,7 +353,6 @@
       }
     }
 
-    // Set initial text state inside drawer button based on early head selection
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
     updateToggleButton(currentTheme);
 
@@ -387,7 +372,6 @@
 <script>
   const topBtn = document.getElementById("backToTopBtn");
 
-  // Show the button when the user scrolls down 300px from the top
   window.onscroll = function() {
     if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
       topBtn.style.display = "block";
@@ -396,7 +380,6 @@
     }
   };
 
-  // Smooth scroll back to the top when clicked
   topBtn.addEventListener("click", function() {
     window.scrollTo({
       top: 0,

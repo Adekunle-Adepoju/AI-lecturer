@@ -1,12 +1,12 @@
 import json
-from groq import Groq
+import anthropic
 from django.conf import settings
 from .slide_extractor import extract_text_from_slide
 
 
 def parse_past_questions_with_ai(course_code, course_title, raw_text):
-    """Use Groq to parse uploaded past questions into structured JSON"""
-    client = Groq(api_key=settings.GROQ_API_KEY)
+    """Use Claude to parse uploaded past questions into structured JSON"""
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
     prompt = f"""You are given raw text extracted from a past exam/test paper for {course_code} — {course_title}.
 
@@ -37,13 +37,13 @@ Raw text:
 {raw_text[:8000]}
 """
 
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+    response = client.messages.create(
+        model="claude-sonnet-5",
         max_tokens=6000,
         messages=[{"role": "user", "content": prompt}],
     )
 
-    raw = response.choices[0].message.content.strip()
+    raw = response.content[0].text.strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
     return json.loads(raw)
 

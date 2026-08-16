@@ -1,4 +1,6 @@
+import os
 import json
+from urllib import request
 import markdown
 import random
 from datetime import date, timedelta
@@ -11,24 +13,99 @@ from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_POST
-from groq import Groq
+import anthropic
+from django.http import StreamingHttpResponse
+from django.http import JsonResponse
 
 from .forms import SignupForm, OnboardingForm, ProfileEditForm, ElectiveSelectionForm
 from .models import (
-    StudentProfile, TimetableEntry, Session, TopicSession,
-    SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES, CourseDefinition, PastQuestion
+    StudentProfile, TimetableEntry, Session, TopicSession, ChatMessage,
+    SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES, CourseDefinition, PastQuestion,
+    
 )
-from .prompt import SYSTEM_PROMPT
+from .prompt import SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT
 from functools import wraps
 from .staff_forms import SlideUploadForm, CourseOutlineUploadForm, PastQuestionUploadForm, CourseDefinitionForm
 
 
 
-# ─── Groq client ───────────────────────────────────────────────────────────────
+# ─── Gemini client ───────────────────────────────────────────────────────────────
 
-def get_groq_client():
-    return Groq(api_key=settings.GROQ_API_KEY)
+client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
 
+def _build_history(topic_session):
+    """Convert saved ChatMessages into Claude message format."""
+    history = []
+    messages = list(topic_session.chatmessage_set.order_by("created_at"))
+    for msg in messages[:-1]:
+        role = "user" if msg.role == "user" else "assistant"
+        history.append({"role": role, "content": msg.content})
+    return history
+
+def chat_message_view(request):
+    topic_session_id = request.POST.get("topic_session_id")
+    user_message = request.POST.get("message")
+    topic_session = get_object_or_404(TopicSession, id=topic_session_id)
+
+    is_start_trigger = (user_message == "__START__")
+
+    if not is_start_trigger:
+        ChatMessage.objects.create(topic_session=topic_session, role="user", content=user_message)
+
+    slide_context = ""
+    try:
+        slide_doc = SlideDocument.objects.get(
+            course_code=topic_session.session.course_code,
+            level=topic_session.session.student.level,
+        )
+        slide_context = slide_doc.extracted_text[:6000]
+    except SlideDocument.DoesNotExist:
+        pass
+
+    system_instruction = CHAT_SYSTEM_PROMPT.format(
+        student_name=topic_session.session.student.user.first_name or topic_session.session.student.user.username,
+        topic_name=topic_session.topic_name,
+        course_code=topic_session.session.course_code,
+        slide_context=slide_context,
+    )
+
+    history = [] if is_start_trigger else _build_history(topic_session)
+
+    message_to_send = (
+        "Begin the session now — greet the student and introduce the topic."
+        if is_start_trigger else user_message
+    )
+
+    messages = history + [{"role": "user", "content": message_to_send}]
+
+    def event_stream():
+        full_reply = ""
+        try:
+            with client.messages.stream(
+                model="claude-sonnet-5",
+                max_tokens=2048,
+                system=system_instruction,
+                messages=messages,
+            ) as stream:
+                for text in stream.text_stream:
+                    full_reply += text
+                    yield f"data: {json.dumps({'chunk': text})}\n\n"
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            return
+
+        is_complete = "TOPIC_COMPLETE" in full_reply
+        clean_reply = full_reply.replace("TOPIC_COMPLETE", "").strip()
+        ChatMessage.objects.create(topic_session=topic_session, role="ai", content=clean_reply)
+
+        yield f"data: {json.dumps({'done': True, 'topic_complete': is_complete})}\n\n"
+
+    resp = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
+    resp["Cache-Control"] = "no-cache"
+    resp["X-Accel-Buffering"] = "no"
+    return resp
 
 # ─── Auth views ────────────────────────────────────────────────────────────────
 
@@ -287,7 +364,6 @@ def _get_past_questions_for_topic(course_code, level, topic_name, limit=3):
 
 
 def _generate_topic_lecture(course_code, course_title, topic_name, week, level, student_name, topic_index=0, slide_text=""):
-    client = get_groq_client()
     past_questions = _get_past_questions_for_topic(course_code, level, topic_name, limit=2)
     past_q_text = ""
     if past_questions:
@@ -307,15 +383,15 @@ def _generate_topic_lecture(course_code, course_title, topic_name, week, level, 
         f"{slide_text}"
         f"{past_q_text}"
     )
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+
+    response = client.messages.create(
+        model="claude-sonnet-5",
         max_tokens=8000,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_message},
-        ],
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_message}],
     )
-    return response.choices[0].message.content
+
+    return response.content[0].text
 
 
 def _parse_lecture(full_text):
@@ -396,7 +472,12 @@ def session_view(request, course_code):
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
 
     if request.method == "GET":
-        return render(request, "core/session.html", {"entry": entry})
+        topics = _get_topics_for_week(course_code, request.user.profile.level, entry.week_number)
+        return render(request, "core/session.html", {
+            "entry": entry,
+            "chat_mode": False,
+            "upcoming_topics": topics,
+        })
 
     action = request.POST.get("action")
 
@@ -410,36 +491,45 @@ def session_view(request, course_code):
 
         if existing_session:
             current_index = existing_session.current_topic_index
-            existing_topic = existing_session.topic_sessions.filter(
-                topic_index=current_index,
-                is_complete=False,
+            topic_session = existing_session.topic_sessions.filter(
+                topic_index=current_index, is_complete=False,
             ).first()
+            if not topic_session:
+                topic_session = TopicSession.objects.create(
+                    session=existing_session,
+                    topic_name=existing_session.topics[current_index],
+                    topic_index=current_index,
+                )
+        else:
+            topics = _get_topics_for_week(course_code, profile.level, entry.week_number)
+            existing_session = Session.objects.create(
+                student=profile,
+                course_code=course_code,
+                course_title=entry.course_title,
+                week_number=entry.week_number,
+                topics=topics,
+                current_topic_index=0,
+            )
+            topic_session = TopicSession.objects.create(
+                session=existing_session,
+                topic_name=topics[0],
+                topic_index=0,
+            )
 
-            if existing_topic:
-                intro_html = markdown.markdown(existing_topic.intro_content, extensions=["extra"])
-                return render(request, "core/session.html", {
-                    "entry": entry,
-                    "session": existing_session,
-                    "topic_session": existing_topic,
-                    "intro": intro_html,
-                    "topic_number": current_index + 1,
-                    "total_topics": len(existing_session.topics),
-                    "topic_name": existing_topic.topic_name,
-                })
-            else:
-                topic_name = existing_session.topics[current_index]
-                return _teach_topic(request, existing_session, entry, profile, topic_name, current_index)
+        has_started_chat = topic_session.chatmessage_set.filter(role="ai").exists()
+        existing_messages = list(topic_session.chatmessage_set.order_by("created_at").values("role", "content"))
 
-        topics = _get_topics_for_week(course_code, profile.level, entry.week_number)
-        session = Session.objects.create(
-            student=profile,
-            course_code=course_code,
-            course_title=entry.course_title,
-            week_number=entry.week_number,
-            topics=topics,
-            current_topic_index=0,
-        )
-        return _teach_topic(request, session, entry, profile, topics[0], 0)
+        return render(request, "core/session.html", {
+            "entry": entry,
+            "session": existing_session,
+            "topic_session": topic_session,
+            "topic_number": topic_session.topic_index + 1,
+            "total_topics": len(existing_session.topics),
+            "topic_name": topic_session.topic_name,
+            "chat_mode": True,
+            "has_started_chat": has_started_chat,
+            "existing_messages_json": json.dumps(existing_messages),
+        })
 
     if action == "show_lecture":
         topic_session_id = request.POST.get("topic_session_id")
@@ -457,7 +547,48 @@ def session_view(request, course_code):
             "show_quiz": True,
         })
 
-    return redirect("dashboard")
+    return redirect("session_view", course_code=course_code)
+
+@login_required
+def course_outline_view(request, course_code):
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
+
+    profile = request.user.profile
+    entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
+
+    week_topics = COURSE_OUTLINES.get(course_code, {})
+
+    sessions = Session.objects.filter(student=profile, course_code=course_code)
+    session_by_week = {s.week_number: s for s in sessions}
+
+    weeks_display = []
+    for week_number in sorted(week_topics.keys()):
+        topics = week_topics[week_number]
+        session = session_by_week.get(week_number)
+        completed_indices = set()
+        if session:
+            completed_indices = set(
+                session.topic_sessions.filter(is_complete=True).values_list("topic_index", flat=True)
+            )
+        topics_display = [
+            {"name": name, "is_complete": i in completed_indices}
+            for i, name in enumerate(topics)
+        ]
+        weeks_display.append({
+            "week_number": week_number,
+            "topics": topics_display,
+            "all_complete": len(completed_indices) == len(topics),
+        })
+
+    return render(request, "core/course_outline.html", {
+        "entry": entry,
+        "course_code": course_code,
+        "course_title": entry.course_title,
+        "weeks": weeks_display,
+    })
+
+    
 
 
 def _teach_topic(request, session, entry, profile, topic_name, topic_index):
@@ -999,3 +1130,69 @@ def staff_delete_course_view(request, course_id):
     course.delete()
     messages.success(request, f"{course.course_code} deleted.")
     return redirect("staff_manage_courses")
+
+# ─── Staff Delete Views ────────────────────────────────────────────────────────
+
+@staff_required
+@require_POST
+def delete_slide(request, slide_id):
+    """Delete a course slide deck and clean up its file from disk"""
+    slide = get_object_or_404(SlideDocument, id=slide_id)
+    
+    if slide.file and os.path.isfile(slide.file.path):
+        try:
+            os.remove(slide.file.path)
+        except OSError:
+            pass
+            
+    course_code = slide.course_code
+    slide.delete()
+    messages.success(request, f"Slide deck for {course_code} deleted successfully.")
+    return redirect("staff_portal")
+
+
+@staff_required
+def delete_outline_view(request, outline_id):
+    from .models import CourseOutline
+    try:
+        outline = CourseOutline.objects.get(id=outline_id)
+        outline.delete()
+        messages.success(request, "Outline deleted.")
+    except CourseOutline.DoesNotExist:
+        messages.warning(request, "Outline not found — it may have already been deleted.")
+    return redirect("staff_portal")
+
+
+@staff_required
+@require_POST
+def delete_past_question(request, question_id):
+    """Delete a past question upload and clean up its file from disk"""
+    pq = get_object_or_404(PastQuestion, id=question_id)
+    
+    if pq.file and os.path.isfile(pq.file.path):
+        try:
+            os.remove(pq.file.path)
+        except OSError:
+            pass
+            
+    course_code = pq.course_code
+    pq.delete()
+    messages.success(request, f"Past question for {course_code} deleted successfully.")
+    return redirect("staff_portal")
+
+
+@staff_required
+@require_POST
+def delete_course_definition(request, course_id):
+    """Delete a defined course record"""
+    course = get_object_or_404(CourseDefinition, id=course_id)
+    course_code = course.course_code
+    course.delete()
+    messages.success(request, f"Course definition {course_code} deleted successfully.")
+    return redirect("staff_portal")
+
+@require_POST
+def chat_next_topic_view(request):
+    topic_session_id = request.POST.get("topic_session_id")
+    topic_session = get_object_or_404(TopicSession, id=topic_session_id)
+    return JsonResponse({"redirect": f"/quiz/{topic_session.id}/"})

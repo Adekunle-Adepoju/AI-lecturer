@@ -25,4 +25,11 @@ urlpatterns = [
     path("staff/past-questions/upload/", views.staff_upload_past_questions_view, name="staff_upload_past_questions"),
     path("staff/courses/", views.staff_manage_courses_view, name="staff_manage_courses"),
     path("staff/courses/delete/<int:course_id>/", views.staff_delete_course_view, name="staff_delete_course"),
+    path('staff/slides/delete/<int:slide_id>/', views.delete_slide, name='delete_slide'),
+    path('staff/outlines/delete/<int:outline_id>/', views.delete_outline_view, name='delete_outline'),
+    path('staff/past-questions/delete/<int:question_id>/', views.delete_past_question, name='delete_past_question'),
+    path('staff/courses/delete/<int:course_id>/', views.delete_course_definition, name='delete_course_definition'),
+    path("chat/message/", views.chat_message_view, name="chat_message"),
+    path("chat/next-topic/", views.chat_next_topic_view, name="chat_next_topic"),
+    path("course/<str:course_code>/outline/", views.course_outline_view, name="course_outline"),
 ]

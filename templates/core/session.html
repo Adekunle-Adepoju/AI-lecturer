@@ -4,67 +4,66 @@
 {% block content %}
 <div class="page-container">
 
-  <div id="petrolearn-loader">
-  
-  <div class="loader-content">
-    <span class="loader-avatar">🤖</span>
-    <h1 class="loader-logo">PetroLearn</h1>
-    <div class="loader-bar-container">
-      <div class="loader-bar-fill"></div>
-      
-    </div>
-  </div>
-</div>
-
   <div class="session-header">
     <div class="ai-avatar">🤖</div>
     <div>
       <div class="session-title">{{ entry.course_title }}</div>
       <div class="session-sub">{{ entry.course_code }} · Week {{ entry.week_number }} of {{ entry.total_weeks }} · PetroLearn AI</div>
     </div>
-    <span class="badge badge-green live-badge">LIVE</span>
+    <span class="badge badge-green live-badge">{% if chat_mode %}LIVE{% else %}UPCOMING{% endif %}</span>
   </div>
 
   {% if error %}
-  <div style="color:red; padding:10px;">{{ error }}</div>
+  <div style="color:var(--danger, red); padding:10px;">{{ error }}</div>
   {% endif %}
 
-  {% if session %}
-  <div class="prog-bar" style="margin:16px 0">
-    <div class="prog-fill" style="width: {% widthratio topic_number total_topics 100 %}%"></div>
-  </div>
-  <p class="prog-label">Topic {{ topic_number }} of {{ total_topics }}: {{ topic_name }}</p>
-  {% endif %}
+  {% if not chat_mode %}
+    <!-- ─── BRIEF / OVERVIEW PAGE ─────────────────────────────────────── -->
+    <div class="brief-box" style="background:var(--card-bg,#16202e); border-radius:16px; padding:24px; margin:24px 0;">
+      <h3 style="margin-bottom:12px;">This week you'll cover:</h3>
+      <ol style="line-height:2; padding-left:20px;">
+        {% for topic in upcoming_topics %}
+          <li>{{ topic }}</li>
+        {% endfor %}
+      </ol>
+      <p style="margin-top:16px; color:var(--muted,#8a97ac); font-size:0.9rem;">
+        Each topic is taught step by step in a live chat with PetroLearn AI — you'll check in as you go, and there's a short quiz after each one.
+      </p>
+    </div>
 
-  {% if lecture %}
-  <div class="chat-box">
-    <div class="msg ai">{{ lecture|safe }}</div>
-  </div>
-  <form method="POST" action="{% url 'quiz' topic_session.id %}">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-primary" style="margin-top:16px">Take Quiz →</button>
-  </form>
-
-  {% elif intro %}
-  <div class="chat-box">
-    <div class="msg ai">{{ intro|safe }}</div>
-  </div>
-  <form method="POST" action="{% url 'session' entry.course_code %}">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="show_lecture">
-    <input type="hidden" name="topic_session_id" value="{{ topic_session.id }}">
-    <button type="submit" class="btn btn-primary" style="margin-top:16px">Continue to Lecture →</button>
-  </form>
+    <form method="POST" action="{% url 'session' entry.course_code %}">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="start">
+      <button type="submit" class="btn btn-primary">Start Session</button>
+    </form>
 
   {% else %}
-  <form method="POST" action="{% url 'session' entry.course_code %}">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="start">
-    <button type="submit" class="btn btn-primary">Start Session</button>
-  </form>
+    <!-- ─── LIVE CHAT PAGE ─────────────────────────────────────────────── -->
+    <div class="prog-bar" style="margin:16px 0">
+      <div class="prog-fill" style="width: {% widthratio topic_number total_topics 100 %}%"></div>
+    </div>
+    <p class="prog-label">Topic {{ topic_number }} of {{ total_topics }}: {{ topic_name }}</p>
+
+    <div class="chat-box" id="chat-box" style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 12px; position: relative;">
+      <div id="chat-window"></div>
+
+<div id="understanding-controls" class="understanding-controls" style="display:none;">
+  <button class="btn-understand btn-yes" onclick="sendCanned('Yes, I understand. Please continue.')">
+    <span class="btn-icon">✓</span> Got it
+  </button>
+  <button class="btn-understand btn-no" onclick="sendCanned(&quot;No, I&#39;m confused.&quot;)">
+    <span class="btn-icon">?</span> I'm confused
+  </button>
+</div>
+
+<div id="input-row" class="chat-input-row">
+  <input id="chat-input" type="text" placeholder="Type here..." class="chat-input" />
+  <button onclick="sendTyped()" class="btn-send">Send</button>
+</div>
+    </div>
   {% endif %}
 
-  {% if session or intro or lecture %}
+  {% if chat_mode %}
   <form method="post" action="{% url 'restart_session' course_code=entry.course_code week_number=entry.week_number %}" style="margin-top:24px">
     {% csrf_token %}
     <button type="submit" class="btn btn-white-outline btn-full"
@@ -74,42 +73,170 @@
   </form>
   {% endif %}
 
-  <button id="backToTopBtn" class="btn btn-white-outline" title="Go to top" style="
-  display: none; 
-  position: fixed; 
-  bottom: 24px; 
-  right: 24px; 
-  z-index: 99; 
-  min-width: auto; 
-  padding: 10px 14px; 
-  border-radius: 50%; 
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
-  cursor: pointer;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-">
-  ↑
-</button>
-
 </div>
 
+{% if chat_mode %}
 <script>
-  const topBtn = document.getElementById("backToTopBtn");
+  const topicSessionId = {{ topic_session.id|default:"null" }};
+  const hasStartedChat = {{ has_started_chat|yesno:"true,false" }};
+  const existingMessages = {{ existing_messages_json|default:"[]"|safe }};
 
-  // Show the button when the user scrolls down 300px from the top
-  window.onscroll = function() {
-    if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
-      topBtn.style.display = "block";
-    } else {
-      topBtn.style.display = "none";
-    }
-  };
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(";").shift();
+  }
 
-  // Smooth scroll back to the top when clicked
-  topBtn.addEventListener("click", function() {
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
+  function appendUserBubble(text) {
+    const div = document.createElement("div");
+    div.className = "msg user";
+    div.textContent = text;
+    document.getElementById("chat-window").appendChild(div);
+    scrollChatToBottom();
+  }
+
+  function createAiBubble() {
+    const div = document.createElement("div");
+    div.className = "msg ai";
+    document.getElementById("chat-window").appendChild(div);
+    return div;
+  }
+
+  function appendSystemBubble(text) {
+    const div = document.createElement("div");
+    div.className = "msg system";
+    div.textContent = text;
+    document.getElementById("chat-window").appendChild(div);
+    scrollChatToBottom();
+  }
+
+  function scrollChatToBottom() {
+    const win = document.getElementById("chat-window");
+    win.scrollTop = win.scrollHeight;
+  }
+
+  function renderMarkdown(text) {
+    return text
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\n/g, "<br>");
+  }
+
+  function showTypingIndicator() {
+    const div = document.createElement("div");
+    div.className = "ai-bubble typing";
+    div.innerHTML = `<span></span><span></span><span></span>`;
+    document.getElementById("chat-window").appendChild(div);
+    scrollChatToBottom();
+    return div;
+  }
+
+  function triggerQuizGeneration() {
+    appendSystemBubble("Nice work! Generating your quiz... 📝");
+    fetch("/chat/next-topic/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-CSRFToken": getCookie("csrftoken"),
+      },
+      body: `topic_session_id=${topicSessionId}&action=quiz`,
+    }).then(r => r.json()).then(data => {
+      if (data.redirect) window.location.href = data.redirect;
     });
-  });
+  }
+
+  async function sendMessage(message) {
+    if (message !== "__START__") {
+      appendUserBubble(message);
+    }
+    const typingBubble = showTypingIndicator();
+
+    const response = await fetch("/chat/message/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-CSRFToken": getCookie("csrftoken"),
+      },
+      body: `topic_session_id=${topicSessionId}&message=${encodeURIComponent(message)}`,
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let aiBubble = null;
+    let buffer = "";
+    let rawText = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const payload = JSON.parse(line.slice(6));
+
+        if (payload.error) {
+          typingBubble.remove();
+          appendSystemBubble("Error: " + payload.error);
+          return;
+        }
+
+        if (payload.chunk) {
+          if (!aiBubble) {
+            typingBubble.remove();
+            aiBubble = createAiBubble();
+          }
+          rawText += payload.chunk;
+          aiBubble.textContent = rawText.replace("TOPIC_COMPLETE", "");
+          scrollChatToBottom();
+        }
+
+        if (payload.done) {
+          aiBubble.innerHTML = renderMarkdown(rawText.replace("TOPIC_COMPLETE", ""));
+          if (payload.topic_complete) {
+            triggerQuizGeneration();
+          } else {
+            document.getElementById("understanding-controls").style.display = "block";
+          }
+        }
+      }
+    }
+  }
+
+  async function sendCanned(text) {
+    document.getElementById("understanding-controls").style.display = "none";
+    await sendMessage(text);
+  }
+
+  async function sendTyped() {
+    const input = document.getElementById("chat-input");
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    document.getElementById("understanding-controls").style.display = "none";
+    await sendMessage(text);
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    // Replay any existing conversation
+    existingMessages.forEach(msg => {
+      if (msg.role === "user") {
+        appendUserBubble(msg.content);
+      } else {
+        const bubble = createAiBubble();
+        bubble.innerHTML = renderMarkdown(msg.content.replace("TOPIC_COMPLETE", ""));
+      }
+    });
+
+    if (topicSessionId && !hasStartedChat) {
+      sendMessage("__START__");
+    } else if (existingMessages.length > 0) {
+      // Chat already in progress — show the understanding buttons again
+      // so the student isn't stuck with no way to respond after a refresh
+      document.getElementById("understanding-controls").style.display = "block";
+    }
+});
 </script>
+{% endif %}
 {% endblock %}

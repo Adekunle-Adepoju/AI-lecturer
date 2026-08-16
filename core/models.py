@@ -266,28 +266,42 @@ class TopicSession(models.Model):
 
     def __str__(self):
         return f"{self.session} — {self.topic_name}"
+    
+class ChatMessage(models.Model):
+    ROLE_CHOICES = [
+        ("user", "User"),
+        ("ai", "AI"),
+    ]
+
+    topic_session = models.ForeignKey(
+        TopicSession, on_delete=models.CASCADE, related_name="chatmessage_set"
+    )
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.role} — {self.content[:40]}"
 
 
 class SlideDocument(models.Model):
     course_code = models.CharField(max_length=10)
     course_title = models.CharField(max_length=100)
-    week_number = models.IntegerField(null=True, blank=True)
-    level = models.CharField(max_length=3, choices=LEVEL_CHOICES, null=True, blank=True)
-    file = models.FileField(upload_to="slides/")
+    level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
+    file = models.FileField(upload_to="slides/", max_length=500)
     extracted_text = models.TextField(blank=True)
     extracted_topics = models.JSONField(default=list)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     parsed = models.BooleanField(default=False)
 
     class Meta:
-        ordering = ["course_code", "week_number"]
-        unique_together = ["course_code", "level", "week_number"]
+        ordering = ["course_code"]
+        unique_together = ["course_code", "level"]
 
     def __str__(self):
-        if self.week_number:
-            return f"{self.course_code} — Week {self.week_number}"
-        if self.level:
-            return f"{self.course_code} — Slide Document ({self.level})"
         return f"{self.course_code} — Slide Document"
 
 
