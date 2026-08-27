@@ -13,7 +13,8 @@ from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_POST
-import anthropic
+from google import genai
+from google.genai import types
 from django.http import StreamingHttpResponse
 from django.http import JsonResponse
 
@@ -31,15 +32,15 @@ from .staff_forms import SlideUploadForm, CourseOutlineUploadForm, PastQuestionU
 
 # ─── Gemini client ───────────────────────────────────────────────────────────────
 
-client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
+client = genai.Client(api_key=settings.GEMINI_API_KEY_CHAT)
 
 def _build_history(topic_session):
-    """Convert saved ChatMessages into Claude message format."""
+    """Convert saved ChatMessages into Gemini content format."""
     history = []
     messages = list(topic_session.chatmessage_set.order_by("created_at"))
-    for msg in messages[:-1]:
-        role = "user" if msg.role == "user" else "assistant"
-        history.append({"role": role, "content": msg.content})
+    for msg in messages[:-1]:  # exclude most recent — sent separately
+        role = "user" if msg.role == "user" else "model"
+        history.append({"role": role, "parts": [{"text": msg.content}]})
     return history
 
 def chat_message_view(request):
@@ -76,20 +77,23 @@ def chat_message_view(request):
         if is_start_trigger else user_message
     )
 
-    messages = history + [{"role": "user", "content": message_to_send}]
+    messages = history + [{"role": "user", "parts": [{"text": message_to_send}]}]
 
     def event_stream():
         full_reply = ""
         try:
-            with client.messages.stream(
-                model="claude-sonnet-5",
-                max_tokens=2048,
-                system=system_instruction,
-                messages=messages,
-            ) as stream:
-                for text in stream.text_stream:
-                    full_reply += text
-                    yield f"data: {json.dumps({'chunk': text})}\n\n"
+            stream = client.models.generate_content_stream(
+                model="gemini-3.6-flash",
+                contents=messages,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    max_output_tokens=2048,
+                ),
+            )
+            for chunk in stream:
+                if chunk.text:
+                    full_reply += chunk.text
+                    yield f"data: {json.dumps({'chunk': chunk.text})}\n\n"
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -384,14 +388,16 @@ def _generate_topic_lecture(course_code, course_title, topic_name, week, level, 
         f"{past_q_text}"
     )
 
-    response = client.messages.create(
-        model="claude-sonnet-5",
-        max_tokens=8000,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
+    response = client.models.generate_content(
+        model="gemini-3.7-flash",
+        contents=user_message,
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            max_output_tokens=8000,
+        ),
     )
 
-    return response.content[0].text
+    return response.text
 
 
 def _parse_lecture(full_text):
@@ -1189,6 +1195,29 @@ def delete_course_definition(request, course_id):
     course_code = course.course_code
     course.delete()
     messages.success(request, f"Course definition {course_code} deleted successfully.")
+    return redirect("staff_portal")
+
+@staff_required
+@require_POST
+def retry_slide_topics_view(request, slide_id):
+    """Retry AI topic extraction for a slide that already has text saved."""
+    slide = get_object_or_404(SlideDocument, id=slide_id)
+
+    if not slide.extracted_text:
+        messages.warning(request, "Can't retry — no extracted text saved for this slide.")
+        return redirect("staff_portal")
+
+    try:
+        from .slide_topic_extractor import extract_topics_from_slide
+        topics = extract_topics_from_slide(slide.course_code, slide.course_title, slide.extracted_text)
+        slide.extracted_topics = topics
+        slide.save()
+        messages.success(request, f"Topics extracted successfully — {len(topics)} topics found.")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        messages.warning(request, f"Retry failed: {str(e)}")
+
     return redirect("staff_portal")
 
 @require_POST

@@ -1,5 +1,5 @@
 {% extends "core/base.html" %}
-{% block title %}Staff Portal — PetroLearn{% endblock %}
+{% block title %}Staff Portal — Rovea{% endblock %}
 
 {% block content %}
 <div class="page-container">
@@ -33,7 +33,7 @@
   <!-- Recent slides -->
   <p class="section-label">📑 Recent Slides</p>
   <div class="course-list" style="margin-bottom:24px">
-    {% for slide in slides %}
+        {% for slide in slides %}
     <div class="course-pill" style="cursor:default">
       <div>
         <div class="course-name">{{ slide.course_code }} — {{ slide.course_title }}</div>
@@ -47,6 +47,12 @@
           · {{ slide.uploaded_at|date:"d M Y" }}
         </div>
       </div>
+      {% if slide.parsed and not slide.extracted_topics %}
+      <form method="post" action="{% url 'retry_slide_topics' slide.id %}" style="margin:0">
+        {% csrf_token %}
+        <button type="submit" class="btn" style="padding:6px 12px; font-size:12px">🔄 Retry Topics</button>
+      </form>
+      {% endif %}
     </div>
     {% empty %}
     <p style="color:var(--text-muted); font-size:13px">No slides uploaded yet.</p>

@@ -35,6 +35,7 @@
     {% for slide in slides %}
     <div class="course-pill" style="cursor:default; display:flex; justify-content:space-between; align-items:center;">
       <div>
+              <div>
         <div class="course-name">{{ slide.course_code }} — {{ slide.course_title }}</div>
         <div class="course-code">
           Level {{ slide.level }} ·
@@ -43,9 +44,17 @@
           · {{ slide.uploaded_at|date:"d M Y" }}
         </div>
       </div>
-      <button type="button" class="btn btn-sm btn-outline-danger" onclick="openDeleteModal('slide', '{{ slide.id }}', '{{ slide.course_code }} slide deck')">
-        🗑️ Delete
-      </button>
+      <div style="display:flex; gap:8px; align-items:center;">
+        {% if slide.parsed and not slide.extracted_topics %}
+        <form method="post" action="{% url 'retry_slide_topics' slide.id %}" style="margin:0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm">🔄 Retry Topics</button>
+        </form>
+        {% endif %}
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="openDeleteModal('slide', '{{ slide.id }}', '{{ slide.course_code }} slide deck')">
+          🗑️ Delete
+        </button>
+      </div>
     </div>
     {% empty %}
     <p style="color:var(--text-muted); font-size:13px">No slides uploaded yet.</p>

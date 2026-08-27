@@ -1,15 +1,17 @@
 import json
-import anthropic
+from google import genai
+from google.genai import types
 from django.conf import settings
 
 
-def extract_topics_from_slide(course_code, course_title, slide_text):
-    """Use Claude to extract ALL teachable topics from a full course slide deck, in order"""
-    api_key = getattr(settings, "ANTHROPIC_API_KEY", None)
-    if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY is missing from Django settings.py.")
 
-    client = anthropic.Anthropic(api_key=api_key)
+def extract_topics_from_slide(course_code, course_title, slide_text):
+    """Use Gemini to extract ALL teachable topics from a full course slide deck, in order"""
+    api_key = getattr(settings, "GEMINI_API_KEY_EXTRACTION", None)
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY_EXTRACTION is missing from Django settings.py.")
+
+    client = genai.Client(api_key=api_key)
 
     prompt = f"""You are given the FULL slide content for an entire course: {course_code} — {course_title}.
 
@@ -27,13 +29,13 @@ Slide content:
 {slide_text[:10000]}
 """
 
-    response = client.messages.create(
-        model="claude-sonnet-5",
-        max_tokens=4000,
-        messages=[{"role": "user", "content": prompt}],
+    response = client.models.generate_content(
+        model="gemini-3.7-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(max_output_tokens=4000),
     )
 
-    raw = response.content[0].text.strip()
+    raw = response.text.strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
     return json.loads(raw)
 
@@ -42,15 +44,22 @@ def _parse_slide_document(slide_obj):
     """Extract text and topics from an uploaded slide deck"""
     from .slide_extractor import extract_text_from_slide
 
-    text = extract_text_from_slide(slide_obj.file.path)
+    # Pure text extraction — no AI, always saved regardless of what follows.
+    text = extract_text_from_slide(slide_obj.file.path, course_code=slide_obj.course_code)
     slide_obj.extracted_text = text
-
-    topics = extract_topics_from_slide(
-        slide_obj.course_code,
-        slide_obj.course_title,
-        text
-    )
-
-    slide_obj.extracted_topics = topics
     slide_obj.parsed = True
     slide_obj.save()
+
+    # AI topic extraction is best-effort — falls back to hardcoded
+    # COURSE_OUTLINES in _get_topics_for_week() if this fails.
+    try:
+        topics = extract_topics_from_slide(
+            slide_obj.course_code,
+            slide_obj.course_title,
+            text
+        )
+        slide_obj.extracted_topics = topics
+        slide_obj.save()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
