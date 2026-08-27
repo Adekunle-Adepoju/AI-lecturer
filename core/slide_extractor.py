@@ -1,57 +1,93 @@
 import os
 
 
-def extract_text_via_vision(file_path, course_code="", max_pages=15):
-    """
-    Render PDF pages to images and transcribe them using Gemini vision.
-    Default path for ALL PDFs — handles both scanned/handwritten and
-    text-based PDFs uniformly, per project decision.
-    """
-    import fitz  # PyMuPDF
+def extract_text_via_vision(file_path, course_code="", max_pages=5):
+    import fitz
+    import tempfile
+    import time
     from google import genai
     from google.genai import types
     from django.conf import settings
 
     api_key = getattr(settings, "GEMINI_API_KEY_EXTRACTION", None)
     if not api_key:
-        raise ValueError("GEMINI_API_KEY_EXTRACTION is missing from Django settings.py.")
+        raise ValueError("GEMINI_API_KEY_EXTRACTION is missing from settings.")
 
     client = genai.Client(api_key=api_key)
+
     doc = fitz.open(file_path)
+    total_pages = len(doc)
 
-    if len(doc) > max_pages:
-        print(f"Warning: {course_code} has {len(doc)} pages, only processing first {max_pages} for cost control.")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+        temp_path = temp_pdf.name
 
-    full_text = []
-    for page_num in range(min(len(doc), max_pages)):
-        page = doc[page_num]
-        pix = page.get_pixmap(dpi=150)
-        image_bytes = pix.tobytes("png")
-
-        try:
-            response = client.models.generate_content(
-                model="gemini-3.7-flash",
-                contents=[
-                    types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
-                    "Transcribe all text/handwriting on this page exactly as written, "
-                    "including formulas, headings, and diagram labels. Preserve structure "
-                    "with line breaks. If a formula is written by hand, transcribe it as "
-                    "plain text math notation. Do not summarize or explain — transcribe only.",
-                ],
-                config=types.GenerateContentConfig(max_output_tokens=2000),
-            )
-            full_text.append(f"--- Page {page_num + 1} ---\n{response.text.strip()}")
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            full_text.append(f"--- Page {page_num + 1} (transcription failed) ---")
-
+    if total_pages > max_pages:
+        print(f"[{course_code}] {total_pages} pages — trimming to {max_pages}.")
+        trimmed = fitz.open()
+        trimmed.insert_pdf(doc, from_page=0, to_page=max_pages - 1)
+        trimmed.save(temp_path)
+        trimmed.close()
+    else:
+        doc.save(temp_path)
     doc.close()
-    return "\n\n".join(full_text)
+
+    gemini_file = None
+    transcription = ""
+
+    try:
+        # Upload with retry
+        for attempt in range(3):
+            try:
+                print(f"[{course_code}] Upload attempt {attempt + 1}...")
+                with open(temp_path, "rb") as f:
+                    gemini_file = client.files.upload(file=f, config={"mime_type": "application/pdf"})
+                print(f"[{course_code}] Upload successful.")
+                break
+            except Exception as e:
+                print(f"[{course_code}] Upload attempt {attempt + 1} failed: {e}")
+                if attempt < 2:
+                    time.sleep(3)
+                else:
+                    raise
+
+        print(f"[{course_code}] Transcribing...")
+
+        for model in ["gemini-3.6-flash", "gemini-3.7-flash"]:
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=[
+                        gemini_file,
+                        "Transcribe all text and handwriting in this document exactly as written, "
+                        "page by page, including formulas, headings, and diagram labels. "
+                        "Preserve structure with line breaks. Mark each page as '--- Page N ---'. "
+                        "For handwritten formulas, use plain text math notation. "
+                        "Do not summarize or explain — transcribe only.",
+                    ],
+                    config=types.GenerateContentConfig(max_output_tokens=8000),
+                )
+                transcription = response.text.strip()
+                print(f"[{course_code}] Transcription done using {model} ({len(transcription)} chars).")
+                break
+            except Exception as e:
+                print(f"[{course_code}] Model {model} failed: {e}. Trying next...")
+
+        if not transcription:
+            raise RuntimeError("All vision models failed to transcribe the document.")
+
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        if gemini_file:
+            try:
+                client.files.delete(name=gemini_file.name)
+            except Exception as e:
+                print(f"[{course_code}] Could not delete remote file: {e}")
+
+    return transcription
 
 
 def extract_text_from_slide(file_path, course_code=""):
-    """Extract text from uploaded PDF, DOCX, or PPTX file"""
     path = str(file_path)
 
     if path.endswith(".pdf"):
@@ -69,24 +105,18 @@ def extract_text_from_slide(file_path, course_code=""):
         extracted_chunks = []
 
         def extract_from_shape(shape):
-            """Helper function to handle shapes, tables, and grouped elements"""
-            # 1. Text boxes & auto shapes
             if shape.has_text_frame:
                 for paragraph in shape.text_frame.paragraphs:
                     para_text = paragraph.text.strip()
                     if para_text:
                         extracted_chunks.append(para_text)
-
-            # 2. Tables
             elif shape.has_table:
                 for row in shape.table.rows:
                     for cell in row.cells:
                         cell_text = cell.text.strip()
                         if cell_text:
                             extracted_chunks.append(cell_text)
-
-            # 3. Grouped shapes (recursive search)
-            elif shape.shape_type == 6:  # MSO_SHAPE_TYPE.GROUP
+            elif shape.shape_type == 6:
                 for sub_shape in shape.shapes:
                     extract_from_shape(sub_shape)
 

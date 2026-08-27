@@ -1,0 +1,31 @@
+{% extends "core/base.html" %}
+{% block title %}SIWES — Rovea{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:560px; text-align:center; padding-top:3rem">
+
+  <div style="font-size:64px; margin-bottom:16px">🏭</div>
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; font-size:24px; font-weight:700; margin-bottom:8px">
+    You're on SIWES!
+  </h2>
+
+  <p style="color:var(--text-secondary); font-size:14px; line-height:1.8; margin-bottom:32px">
+    400 Level Second Semester is your Student Industrial Work Experience Scheme.
+    You're out in the field gaining real industry experience — Rovea will be here when you get back.
+    <br><br>
+    When you're done with SIWES and ready to start 500 Level, come back and update your level below.
+  </p>
+
+  <div class="today-card" style="text-align:left; margin-bottom:24px">
+    <h3>🎓 Ready for 500 Level?</h3>
+    <p>Once your SIWES is complete, update your level to continue your studies.</p>
+    <a href="{% url 'profile_edit' %}" class="btn btn-primary">Update My Level →</a>
+  </div>
+
+  <div style="color:var(--text-muted); font-size:12px">
+    Logged in as {{ profile.user.first_name }} · {{ profile.level }}L Semester {{ profile.semester }}
+  </div>
+
+</div>
+{% endblock %}

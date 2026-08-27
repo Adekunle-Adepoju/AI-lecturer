@@ -295,18 +295,27 @@ def dashboard_view(request):
         return redirect("onboarding")
 
     profile = request.user.profile
+
+    # Redirect to SIWES if 400L Sem 2
+    if profile.level == "400" and profile.semester == "2":
+        return redirect("siwes")
+
     courses = COURSES.get(profile.level, {}).get(profile.semester, [])
     timetable = profile.timetable.all()
     recent_sessions = profile.sessions.all()[:5]
     leaderboard = StudentProfile.objects.select_related("user").order_by("-xp")[:10]
     sessions_done = profile.sessions.count()
-    
-    today = timezone.now().strftime("%a")  # Safe cross-platform timezone management
+    today = timezone.now().strftime("%a")
     todays_courses = profile.timetable.filter(day=today, is_completed=False)
     incomplete_sessions = {
         s.course_code: s
         for s in Session.objects.filter(student=profile, is_complete=False)
     }
+
+    # Check if all courses are completed — show end of year message
+    total_courses = timetable.count()
+    completed_courses = timetable.filter(is_completed=True).count()
+    all_done = total_courses > 0 and completed_courses == total_courses
 
     return render(request, "core/dashboard.html", {
         "profile": profile,
@@ -318,6 +327,7 @@ def dashboard_view(request):
         "todays_courses": todays_courses,
         "today": today,
         "incomplete_sessions": incomplete_sessions,
+        "all_done": all_done,
     })
 
 
@@ -847,17 +857,34 @@ def profile_edit_view(request):
         return redirect("onboarding")
 
     profile = request.user.profile
+    old_level = profile.level
+    old_semester = profile.semester
 
     if request.method == "POST":
         form = ProfileEditForm(request.POST, instance=profile, user=request.user)
         if form.is_valid():
-            form.save()
-            messages.success(request, "Profile updated successfully.")
+            updated_profile = form.save(commit=False)
+            level_changed = updated_profile.level != old_level
+            semester_changed = updated_profile.semester != old_semester
+            updated_profile.save()
+
+            if level_changed or semester_changed:
+                # Clear old timetable and sessions, keep XP and streak
+                TimetableEntry.objects.filter(student=profile).delete()
+                Session.objects.filter(student=profile).delete()
+                _generate_timetable(profile)
+                messages.success(request, f"Level updated to {profile.level}L Semester {profile.semester}. Your timetable has been regenerated.")
+            else:
+                messages.success(request, "Profile updated successfully.")
+
+            # Redirect to SIWES if 400L Sem 2
+            if profile.level == "400" and profile.semester == "2":
+                return redirect("siwes")
             return redirect("dashboard")
     else:
         form = ProfileEditForm(instance=profile, user=request.user)
 
-    return render(request, "core/profile_edit.html", {"form": form})
+    return render(request, "core/profile_edit.html", {"form": form, "profile": profile})
 
 
 # ─── Review ────────────────────────────────────────────────────────────────────
@@ -1016,6 +1043,15 @@ def manage_courses_view(request):
     }
     return render(request, 'core/manage_courses.html', context)
 
+@login_required
+def siwes_view(request):
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
+    profile = request.user.profile
+    if not (profile.level == "400" and profile.semester == "2"):
+        return redirect("dashboard")
+    return render(request, "core/siwes.html", {"profile": profile})
+
 from functools import wraps
 
 def staff_required(view_func):
@@ -1049,7 +1085,10 @@ def staff_portal_view(request):
 @staff_required
 def staff_upload_slide_view(request):
     if request.method == "POST":
+        print("POST received")
         form = SlideUploadForm(request.POST, request.FILES)
+        print(f"Form valid: {form.is_valid()}")
+        print(f"Form errors: {form.errors}")
         if form.is_valid():
             slide = form.save()
             try:
@@ -1066,7 +1105,6 @@ def staff_upload_slide_view(request):
         "title": "Upload Course Slide",
         "description": "Upload the full course slide deck (PDF, DOCX or PPTX). Topics will be extracted automatically.",
     })
-
 
 @staff_required
 def staff_upload_outline_view(request):

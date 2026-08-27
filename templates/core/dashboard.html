@@ -48,6 +48,14 @@
       </div>
     </div>
 
+    {% if all_done %}
+<div class="today-card" style="background:linear-gradient(135deg,#1A3A5C,#0F2A42); border-color:rgba(245,166,35,0.4); margin-bottom:24px; text-align:center;">
+  <div style="font-size:40px; margin-bottom:8px">🎉</div>
+  <h3 style="color:var(--amber)">You've completed all your courses!</h3>
+  <p style="margin-bottom:16px">Amazing work this semester. When you're ready, move on to the next chapter.</p>
+  <a href="{% url 'profile_edit' %}" class="btn btn-primary">Update My Level / Semester →</a>
+</div>
+{% endif %}
     <p class="section-label">📅 Today's Classes</p>
 
     {% if todays_courses %}
@@ -171,6 +179,7 @@
        <a href="{% url 'elective_selection' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px; border-color: var(--amber); color: var(--amber);">🔧 Manage Electives</a>
        <a href="{% url 'timetable' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px;">📅 Review Full Timetable</a>
        <a href="{% url 'leaderboard' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px;">🏆 Open Leaderboard</a>
+       <a href="{% url 'profile_edit' %}" class="btn btn-white-outline btn-full" style="justify-content:flex-start; font-size:13px; border-color:var(--amber); color:var(--amber);">🎓 Change Level / Semester</a>
     </div>
   </div>
 
