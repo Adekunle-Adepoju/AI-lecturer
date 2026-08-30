@@ -19,6 +19,7 @@ urlpatterns = [
     path("history/", views.history_view, name="history"),
     path("session/<str:course_code>/restart/<int:week_number>/", views.restart_session_view, name="restart_session"),
     path("electives/", views.elective_selection_view, name="elective_selection"),
+    path("courses/manage/", views.manage_courses_view, name="manage_courses"),
     path("staff/", views.staff_portal_view, name="staff_portal"),
     path("staff/slides/upload/", views.staff_upload_slide_view, name="staff_upload_slide"),
     path("staff/outline/upload/", views.staff_upload_outline_view, name="staff_upload_outline"),
@@ -34,4 +35,5 @@ urlpatterns = [
     path("chat/next-topic/", views.chat_next_topic_view, name="chat_next_topic"),
     path("course/<str:course_code>/outline/", views.course_outline_view, name="course_outline"),
     path("siwes/", views.siwes_view, name="siwes"),
+    path("courses/manage/", views.manage_courses_view, name="manage_courses"),
 ]

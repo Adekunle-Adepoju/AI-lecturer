@@ -964,82 +964,58 @@ def restart_session_view(request, course_code, week_number):
 
 @login_required
 def manage_courses_view(request):
-    user = request.user
-    
-    # 1. PROFILE CHECK & FALLBACK FOR ADMINS
-    if hasattr(user, 'studentprofile'):
-        profile = user.studentprofile
-        current_level = profile.level
-        current_semester = profile.semester
-    else:
-        # Fallback parameters if logged in as an Admin/Superuser without a profile row
-        current_level = 300
-        current_semester = 1
-        profile = None  # Flagged so we know not to write to TimetableEntry later
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
 
-    # 2. DIFFERENTIATING COMPULSORY VS ELECTIVES
-    # We query the CourseOutline table filtering by the user's current track
-    available_courses = CourseOutline.objects.filter(
-        level=current_level, 
-        semester=current_semester
+    profile = request.user.profile
+
+    available_courses = CourseDefinition.objects.filter(
+        level=profile.level,
+        semester=profile.semester,
+        school=profile.school,
+        department=profile.department,
     )
-    
-    # Django splits them cleanly based on your 'is_compulsory' boolean model column
-    compulsory_courses = available_courses.filter(is_compulsory=True)
-    elective_courses = available_courses.filter(is_compulsory=False)
-    
-    # 3. TRACKING CURRENTLY ACTIVE ELECTIVES
-    if profile:
-        active_elective_codes = TimetableEntry.objects.filter(
-            student=profile,
-            course_code__in=elective_courses.values_list('course_code', flat=True)
-        ).values_list('course_code', flat=True)
-    else:
-        # For Admin testing, pre-select nothing or everything so the page renders normally
-        active_elective_codes = []
 
-    # 4. POST PROCESSING (SAVING SELECTIONS)
+    active_course_codes = TimetableEntry.objects.filter(
+        student=profile,
+        course_code__in=available_courses.values_list('course_code', flat=True)
+    ).values_list('course_code', flat=True)
+
     if request.method == "POST":
-        if not profile:
-            messages.warning(request, "Oga Admin, choices weren't saved because your account doesn't have a Student Profile attached.")
-            return redirect('dashboard')
-            
-        selected_elective_codes = request.POST.getlist('selected_electives')
-        
-        # Drop elective slots that were unchecked
+        selected_codes = request.POST.getlist('selected_courses')
+
+        # Remove timetable/session rows for anything unchecked
         TimetableEntry.objects.filter(
-            student=profile, 
-            course_code__in=elective_courses.values_list('course_code', flat=True)
-        ).exclude(course_code__in=selected_elective_codes).delete()
-        
+            student=profile,
+            course_code__in=available_courses.values_list('course_code', flat=True)
+        ).exclude(course_code__in=selected_codes).delete()
+
         Session.objects.filter(
-            student=profile, 
-            course_code__in=elective_courses.values_list('course_code', flat=True)
-        ).exclude(course_code__in=selected_elective_codes).delete()
-        
-        # Provision newly checked electives
-        for code in selected_elective_codes:
-            course = elective_courses.get(course_code=code)
+            student=profile,
+            course_code__in=available_courses.values_list('course_code', flat=True)
+        ).exclude(course_code__in=selected_codes).delete()
+
+        # Add timetable rows for anything newly checked
+        for code in selected_codes:
+            course = available_courses.get(course_code=code)
             TimetableEntry.objects.get_or_create(
                 student=profile,
                 course_code=course.course_code,
                 course_title=course.course_title,
                 defaults={
-                    'day': 'Wednesday', 
+                    'day': 'Wednesday',
                     'time': '12:00 PM',
                     'week_number': 1,
-                    'total_weeks': 12
+                    'total_weeks': 12,
                 }
             )
-        
-        messages.success(request, "Your semester course window has been updated successfully!")
+
+        messages.success(request, "Your course selections have been updated successfully!")
         return redirect('dashboard')
 
     context = {
-        'compulsory_courses': compulsory_courses,
-        'elective_courses': elective_courses,
-        'active_elective_codes': active_elective_codes,
-        'is_admin_testing': (profile is None)
+        'courses': available_courses,
+        'active_course_codes': list(active_course_codes),
     }
     return render(request, 'core/manage_courses.html', context)
 
