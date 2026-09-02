@@ -296,12 +296,28 @@ def dashboard_view(request):
 
     profile = request.user.profile
 
-    # Redirect to SIWES if 400L Sem 2
+        # Redirect to SIWES if 400L Sem 2
     if profile.level == "400" and profile.semester == "2":
         return redirect("siwes")
 
-    courses = COURSES.get(profile.level, {}).get(profile.semester, [])
     timetable = profile.timetable.all()
+
+    # Build "Your courses" from actual enrollment (TimetableEntry), not the
+    # hardcoded COURSES dict — so Manage Courses changes actually reflect here.
+    course_defs = {
+        c.course_code: c
+        for c in CourseDefinition.objects.filter(
+            course_code__in=timetable.values_list("course_code", flat=True)
+        )
+    }
+    courses = [
+        {
+            "code": t.course_code,
+            "title": t.course_title,
+            "units": course_defs[t.course_code].units if t.course_code in course_defs else 3,
+        }
+        for t in timetable
+    ]
     recent_sessions = profile.sessions.all()[:5]
     leaderboard = StudentProfile.objects.select_related("user").order_by("-xp")[:10]
     sessions_done = profile.sessions.count()
@@ -345,6 +361,16 @@ def _get_topics_for_week(course_code, level, week_number):
             if len(slide.extracted_topics) >= 3:
                 return slide.extracted_topics[-3:]
     except SlideDocument.DoesNotExist:
+        pass
+
+    # Check AI-parsed course outline (uploaded via staff portal)
+    try:
+        outline = CourseOutline.objects.get(course_code=course_code, level=level, parsed=True)
+        if outline.topics_json:
+            week_topics = outline.topics_json.get(str(week_number), [])
+            if week_topics:
+                return week_topics[:3]
+    except CourseOutline.DoesNotExist:
         pass
 
     # Fallback — hardcoded outline

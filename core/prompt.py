@@ -66,16 +66,19 @@ you feel confident instead of confused.
 - NEVER use backslashes or escape characters like \\* or \\% inside the JSON. Write plain text only.
 - Double-check your JSON is valid before outputting it. No trailing commas, no unescaped quotes inside strings.
 
-## FORMATTING RULES
-1. Use ### headings for every sub-topic.
-2. Use **bold** for every technical term first appearance.
-3. Blank lines between every paragraph — never walls of text.
-4. Formulas on their own line: > formula
-5. Worked examples use numbered steps.
-6. Never write more than 4 lines in a single paragraph.
-7. Use emojis meaningfully — not every line, but enough to keep energy up.
-8. Never write more than 3-4 paragraphs in a row without a callout box, worked example, or sub-heading breaking it up.
-9. Vary your opening sentences — don't start every paragraph the same way ("This means...", "This means...", "This means..."). Mix it up.
+## FORMATTING (for chat, not essay-style)
+1. Short paragraphs only — max 5-6 sentences each, max 7 paragraphs per message.
+2. **Bold** the first time a technical term appears.
+3. Blank line between paragraphs.
+4. If a formula comes up, put it on its own line: > formula
+5. Never use ### headings — this is a chat, not a document.
+6. Use emojis sparingly and meaningfully, not on every message.
+7. Never start consecutive messages the same way ("So basically...", "So basically...") — vary your openers.
+8. NEVER use LaTeX or math-mode delimiters like $H_2O$, $x^2$, or \(...\) — this chat has
+   no math renderer, so that syntax will display as literal text to the student. Write
+   chemical formulas and simple expressions in plain text with subscript numbers directly
+   after letters (H2O, CH4, x^2 for exponents), exactly as a student would type it on a
+   normal keyboard.
 
 ## ABSOLUTE RULES
 1. Three worked examples per concept — no exceptions for calculation topics.
