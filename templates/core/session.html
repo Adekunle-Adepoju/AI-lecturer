@@ -2,81 +2,284 @@
 {% block title %}{{ entry.course_code }} — Rovea{% endblock %}
 
 {% block content %}
-<div class="page-container">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* =========================================================
+     Rovea lecture session — scoped under #sessionRoot, same
+     tokens as the dashboard so the app feels like one product.
+     Backend contract (urls, POST bodies, context vars, JS
+     endpoints) is untouched — only presentation changed.
+     ========================================================= */
+  @import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Inter:wght@400;500;600;700&display=swap');
+  #sessionRoot{
+    --bg:#0F1D2B; --bg-alt:#16283A; --surface:#13212F; --surface-2:#1A2C3D;
+    --ink:#ECEFF3; --ink-soft:#B7C2CB; --ink-faint:#8A97A0;
+    --line:rgba(236,239,243,.14); --line-soft:rgba(236,239,243,.08);
+    --navy:#0F4677; --navy-deep:#0A2E4D; --heading:#E7EDF3;
+    --amber:#E2A63B; --amber-deep:#C98A22;
+    --coral:#D96A45; --green:#4A9D74;
+    --bubble-ai:var(--surface-2); --bubble-user:var(--amber);
+    --bubble-ai-text:var(--ink); --bubble-user-text:var(--navy-deep);
+    --font-display:'Newsreader',serif; --font-body:'Inter',sans-serif;
+    --ease:cubic-bezier(.22,.61,.36,1);
+    --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
+    --content-max:1320px;
+    color-scheme: dark;
+    max-width:none; margin:0;
+    background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    line-height:1.55; padding:32px clamp(18px,4vw,48px) 70px;
+    border-radius:0 0 var(--radius-lg) var(--radius-lg);
+    transition:background .35s var(--ease),color .35s var(--ease);
+  }
+  #sessionRoot[data-theme="light"]{
+    --bg:#F1EFE6; --bg-alt:#E7E2D3; --surface:#FBFAF4; --surface-2:#FFFFFF;
+    --ink:#17212B; --ink-soft:#54626D; --ink-faint:#818D94;
+    --line:rgba(23,33,43,.14); --line-soft:rgba(23,33,43,.07);
+    --heading:#0A2E4D;
+    --bubble-ai:#FFFFFF; --bubble-ai-text:#17212B;
+    color-scheme: light;
+  }
+  #sessionRoot *{box-sizing:border-box;}
+  #sessionRoot img{max-width:100%;display:block;}
+  #sessionRoot a{color:inherit;}
+  #sessionRoot :focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:4px;}
+  #sessionRoot h1,#sessionRoot h2,#sessionRoot h3{font-family:var(--font-display);font-weight:500;color:var(--heading);letter-spacing:-.01em;margin:0;}
+  #sessionRoot .max{max-width:var(--content-max);margin-inline:auto;}
+  #sessionRoot .ic{width:16px;height:16px;flex:none;}
+  @keyframes sRise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  @keyframes typingBounce{0%,60%,100%{transform:translateY(0);opacity:.5;}30%{transform:translateY(-4px);opacity:1;}}
+  @media(prefers-reduced-motion:reduce){#sessionRoot *{animation-duration:.001ms!important;transition-duration:.001ms!important;}}
+
+  /* ---------- header ---------- */
+  #sessionRoot .session-header{
+    max-width:var(--content-max);margin:0 auto 24px;background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--radius-lg);padding:22px 28px;display:flex;align-items:center;gap:16px;
+    animation:sRise .5s var(--ease);
+  }
+  #sessionRoot .ai-avatar{
+    width:46px;height:46px;border-radius:50%;flex:none;background:var(--navy);
+    display:flex;align-items:center;justify-content:center;padding:9px;
+  }
+  #sessionRoot .ai-avatar img{width:100%;height:100%;object-fit:contain;}
+  #sessionRoot .ai-avatar img.logo-dark{display:none;}
+  #sessionRoot[data-theme="light"] .ai-avatar img.logo-light{display:none;}
+  #sessionRoot[data-theme="light"] .ai-avatar img.logo-dark{display:block;}
+  #sessionRoot .session-title{font-family:var(--font-display);font-size:1.4rem;font-weight:600;color:var(--heading);}
+  #sessionRoot .session-sub{font-size:.85rem;color:var(--ink-soft);margin-top:3px;}
+  #sessionRoot .header-spacer{flex:1;}
+
+  #sessionRoot .badge{display:inline-flex;align-items:center;gap:6px;padding:7px 15px;border-radius:999px;font-size:.78rem;font-weight:700;letter-spacing:.02em;flex:none;}
+  #sessionRoot .badge-green{background:rgba(74,157,116,.16);color:var(--green);}
+  #sessionRoot .live-badge .live-dot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pulse 1.6s ease-in-out infinite;}
+  #sessionRoot .badge-amber{background:rgba(226,166,59,.16);color:var(--amber);}
+
+  /* ---------- error ---------- */
+  #sessionRoot .error-banner{
+    max-width:var(--content-max);margin:0 auto 18px;background:rgba(217,106,69,.12);border:1px solid rgba(217,106,69,.35);
+    color:var(--coral);padding:12px 18px;border-radius:var(--radius-sm);font-size:.88rem;
+  }
+
+  /* ---------- brief page ---------- */
+  #sessionRoot .brief-card{
+    max-width:var(--content-max);margin:0 auto 26px;background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--radius-lg);padding:34px 36px;animation:sRise .55s var(--ease) .06s both;
+  }
+  #sessionRoot .brief-card h3{font-size:1.2rem;margin-bottom:16px;}
+  #sessionRoot .topic-brief-list{list-style:none;display:flex;flex-direction:column;gap:13px;margin:0;padding:0;}
+  #sessionRoot .topic-brief-list li{display:flex;align-items:flex-start;gap:14px;font-size:.96rem;color:var(--ink);}
+  #sessionRoot .topic-brief-index{
+    width:24px;height:24px;border-radius:50%;flex:none;background:var(--bg-alt);color:var(--ink-soft);
+    display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;margin-top:1px;
+  }
+  #sessionRoot .brief-note{margin-top:20px;color:var(--ink-soft);font-size:.9rem;padding-top:18px;border-top:1px solid var(--line-soft);}
+  #sessionRoot .start-form{max-width:var(--content-max);margin:0 auto;}
+
+  /* ---------- buttons ---------- */
+  #sessionRoot .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:999px;border:1px solid transparent;
+    font-weight:600;font-size:.9rem;cursor:pointer;padding:12px 24px;transition:transform .2s var(--ease),background .2s var(--ease),border-color .2s var(--ease);
+    font-family:var(--font-body);
+  }
+  #sessionRoot .btn-primary{background:var(--amber);color:var(--navy-deep);}
+  #sessionRoot .btn-primary:hover{background:var(--amber-deep);transform:translateY(-2px);}
+  #sessionRoot .btn-white-outline{background:transparent;color:var(--ink-soft);border-color:var(--line);}
+  #sessionRoot .btn-white-outline:hover{border-color:var(--coral);color:var(--coral);}
+  #sessionRoot .btn-full{width:100%;}
+
+  /* ---------- progress ---------- */
+  #sessionRoot .prog-bar{max-width:var(--content-max);margin:0 auto;height:7px;border-radius:99px;background:var(--bg-alt);overflow:hidden;}
+  #sessionRoot .prog-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--green),var(--amber));transition:width 1s var(--ease);}
+  #sessionRoot .prog-label{max-width:var(--content-max);margin:10px auto 20px;font-size:.85rem;color:var(--ink-soft);}
+  #sessionRoot .prog-label strong{color:var(--heading);font-weight:600;}
+
+  /* ---------- chat box ---------- */
+  #sessionRoot .chat-box{max-width:var(--content-max);margin:0 auto 16px;background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--radius-lg);display:flex;flex-direction:column;overflow:hidden;
+    animation:sRise .55s var(--ease) .1s both;}
+  #sessionRoot #chat-window{height:min(58vh,600px);overflow-y:auto;padding:26px 28px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth;}
+  #sessionRoot #chat-window::-webkit-scrollbar{width:8px;}
+  #sessionRoot #chat-window::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px;}
+
+  #sessionRoot .msg-row{display:flex;gap:10px;max-width:min(75%,640px);animation:sRise .35s var(--ease) both;}
+  #sessionRoot .msg-row.ai{align-self:flex-start;}
+  #sessionRoot .msg-row.user{align-self:flex-end;flex-direction:row-reverse;}
+  #sessionRoot .msg-row.system{align-self:center;max-width:95%;}
+  #sessionRoot .msg-avatar{width:26px;height:26px;border-radius:50%;flex:none;background:var(--navy);display:flex;align-items:center;justify-content:center;padding:5px;margin-top:2px;}
+  #sessionRoot .msg-avatar img{width:100%;height:100%;object-fit:contain;}
+  #sessionRoot .msg-avatar img.logo-dark{display:none;}
+  #sessionRoot[data-theme="light"] .msg-avatar img.logo-light{display:none;}
+  #sessionRoot[data-theme="light"] .msg-avatar img.logo-dark{display:block;}
+  #sessionRoot .msg-bubble{padding:12px 17px;border-radius:16px;font-size:.94rem;line-height:1.6;word-wrap:break-word;}
+  #sessionRoot .msg-row.ai .msg-bubble{background:var(--bubble-ai);color:var(--bubble-ai-text);border:1px solid var(--line);border-bottom-left-radius:4px;}
+  #sessionRoot .msg-row.user .msg-bubble{background:var(--bubble-user);color:var(--bubble-user-text);border-bottom-right-radius:4px;font-weight:500;}
+  #sessionRoot .msg-row.system .msg-bubble{background:transparent;border:1px dashed var(--line);color:var(--ink-faint);font-size:.8rem;text-align:center;}
+  #sessionRoot .msg-bubble sub{font-size:.75em;}
+  #sessionRoot .msg-bubble sup{font-size:.72em;}
+
+  #sessionRoot .typing-row .typing-dots{display:flex;gap:4px;align-items:center;background:var(--bubble-ai);border:1px solid var(--line);padding:13px 16px;border-radius:16px;border-bottom-left-radius:4px;}
+  #sessionRoot .typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);animation:typingBounce 1.2s ease-in-out infinite;}
+  #sessionRoot .typing-dots span:nth-child(2){animation-delay:.15s;}
+  #sessionRoot .typing-dots span:nth-child(3){animation-delay:.3s;}
+
+  /* ---------- understanding controls: hug the sides, not stretched together ---------- */
+  #sessionRoot .understanding-controls{display:none;align-items:center;justify-content:space-between;padding:16px 26px 0;border-top:1px solid var(--line-soft);}
+  #sessionRoot .btn-understand{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 20px;border-radius:999px;
+    font-size:.86rem;font-weight:600;cursor:pointer;transition:transform .2s var(--ease),border-color .2s var(--ease),color .2s var(--ease),background .2s var(--ease);
+    border:1px solid var(--line);background:var(--bg-alt);color:var(--ink);font-family:var(--font-body);
+  }
+  #sessionRoot .btn-yes:hover{border-color:var(--green);color:var(--green);background:rgba(74,157,116,.1);transform:translateY(-1px);}
+  #sessionRoot .btn-no:hover{border-color:var(--coral);color:var(--coral);background:rgba(217,106,69,.1);transform:translateY(-1px);}
+  #sessionRoot .btn-icon{width:16px;height:16px;}
+
+  /* ---------- input row ---------- */
+  #sessionRoot .chat-input-row{display:flex;align-items:center;gap:12px;padding:18px 22px;border-top:1px solid var(--line);}
+  #sessionRoot .chat-input{
+    flex:1;border:1px solid var(--line);border-radius:999px;padding:13px 20px;background:var(--bg-alt);
+    color:var(--ink);font-family:var(--font-body);font-size:.94rem;outline:none;transition:border-color .2s var(--ease);
+  }
+  #sessionRoot .chat-input:focus{border-color:var(--navy);}
+  #sessionRoot .chat-input::placeholder{color:var(--ink-faint);}
+  #sessionRoot .btn-send{
+    width:46px;height:46px;border-radius:50%;flex:none;border:none;background:var(--amber);color:var(--navy-deep);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .2s var(--ease),background .2s var(--ease);
+  }
+  #sessionRoot .btn-send:hover{background:var(--amber-deep);transform:translateY(-2px);}
+
+  /* ---------- restart ---------- */
+  #sessionRoot .restart-form{max-width:var(--content-max);margin:24px auto 0;}
+</style>
+
+<div class="page-container" id="sessionRoot" data-theme="dark">
 
   <div class="session-header">
-    <div class="ai-avatar">🤖</div>
+    <div class="ai-avatar">
+      <img class="logo-light" src="data:image/png;base64,__NAVY_B64__" alt="" onerror="this.style.display='none'">
+      <img class="logo-dark" src="data:image/png;base64,__CREAM_B64__" alt="" onerror="this.style.display='none'">
+    </div>
     <div>
       <div class="session-title">{{ entry.course_title }}</div>
       <div class="session-sub">{{ entry.course_code }} · Week {{ entry.week_number }} of {{ entry.total_weeks }} · Rovea AI</div>
     </div>
-    <span class="badge badge-green live-badge">{% if chat_mode %}LIVE{% else %}UPCOMING{% endif %}</span>
+    <div class="header-spacer"></div>
+    <span class="badge badge-green live-badge">
+      {% if chat_mode %}<span class="live-dot"></span> LIVE{% else %}UPCOMING{% endif %}
+    </span>
   </div>
 
   {% if error %}
-  <div style="color:var(--danger, red); padding:10px;">{{ error }}</div>
+  <div class="error-banner">{{ error }}</div>
   {% endif %}
 
   {% if not chat_mode %}
     <!-- ─── BRIEF / OVERVIEW PAGE ─────────────────────────────────────── -->
-    <div class="brief-box" style="background:var(--navy-card); border-radius:16px; padding:24px; margin:24px 0;">
-      <h3 style="margin-bottom:12px;">This week you'll cover:</h3>
-      <ol style="line-height:2; padding-left:20px;">
+    <div class="brief-card">
+      <h3>This week you'll cover:</h3>
+      <ol class="topic-brief-list">
         {% for topic in upcoming_topics %}
-          <li>{{ topic }}</li>
+          <li><span class="topic-brief-index">{{ forloop.counter }}</span><span>{{ topic }}</span></li>
         {% endfor %}
       </ol>
-      <p style="margin-top:16px; color:var(--muted,#8a97ac); font-size:0.9rem;">
+      <p class="brief-note">
         Each topic is taught step by step in a live chat with Rovea AI — you'll check in as you go, and there's a short quiz after each one.
       </p>
     </div>
 
-    <form method="POST" action="{% url 'session' entry.course_code %}">
+    <form method="POST" action="{% url 'session' entry.course_code %}" class="start-form">
       {% csrf_token %}
       <input type="hidden" name="action" value="start">
-      <button type="submit" class="btn btn-primary">Start Session</button>
+      <button type="submit" class="btn btn-primary btn-full">Start session</button>
     </form>
 
   {% else %}
     <!-- ─── LIVE CHAT PAGE ─────────────────────────────────────────────── -->
-    <div class="prog-bar" style="margin:16px 0">
+    <div class="prog-bar">
       <div class="prog-fill" style="width: {% widthratio topic_number total_topics 100 %}%"></div>
     </div>
-    <p class="prog-label">Topic {{ topic_number }} of {{ total_topics }}: {{ topic_name }}</p>
+    <p class="prog-label">Topic <strong>{{ topic_number }}</strong> of {{ total_topics }}: <strong>{{ topic_name }}</strong></p>
 
-    <div class="chat-box" id="chat-box" style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 12px; position: relative;">
+    <div class="chat-box" id="chat-box">
       <div id="chat-window"></div>
 
-<div id="understanding-controls" class="understanding-controls" style="display:none;">
-  <button class="btn-understand btn-yes" onclick="sendCanned('Yes, I understand. Please continue.')">
-    <span class="btn-icon">✓</span> Got it
-  </button>
-  <button class="btn-understand btn-no" onclick="sendCanned(&quot;No, I&#39;m confused.&quot;)">
-    <span class="btn-icon">?</span> I'm confused
-  </button>
-</div>
+      <div id="understanding-controls" class="understanding-controls">
+        <button type="button" id="gotItBtn" class="btn-understand btn-yes">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>
+          Got it
+        </button>
+        <button type="button" id="confusedBtn" class="btn-understand btn-no">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.5-2 1.8-2 3.3M12 17h.01"/></svg>
+          I'm confused
+        </button>
+      </div>
 
-<div id="input-row" class="chat-input-row">
-  <input id="chat-input" type="text" placeholder="Type here..." class="chat-input" />
-  <button onclick="sendTyped()" class="btn-send">Send</button>
-</div>
+      <div id="input-row" class="chat-input-row">
+        <input id="chat-input" type="text" placeholder="Type here…" class="chat-input" autocomplete="off" />
+        <button type="button" id="sendBtn" class="btn-send" aria-label="Send message">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
     </div>
   {% endif %}
 
   {% if chat_mode %}
-  <form method="post" action="{% url 'restart_session' course_code=entry.course_code week_number=entry.week_number %}" style="margin-top:24px">
+  <form method="post" action="{% url 'restart_session' course_code=entry.course_code week_number=entry.week_number %}" class="restart-form">
     {% csrf_token %}
     <button type="submit" class="btn btn-white-outline btn-full"
             onclick="return confirm('This will erase your progress for Week {{ entry.week_number }} and restart from scratch. Continue?');">
-      ⟳ Restart this week from the beginning
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 1 2.6 6.4M3 21v-6h6"/></svg>
+      Restart this week from the beginning
     </button>
   </form>
   {% endif %}
 
 </div>
 
+<script>
+(function(){
+  "use strict";
+  // Theme now mirrors the site-wide toggle in the hamburger drawer (base.html)
+  // instead of keeping its own button + localStorage key — runs unconditionally
+  // so it applies on the brief page too, not just once chat_mode starts.
+  const root = document.getElementById("sessionRoot");
+  if (!root) return;
+  function syncTheme(){
+    root.setAttribute("data-theme", document.documentElement.getAttribute("data-theme") || "dark");
+  }
+  syncTheme();
+  new MutationObserver(syncTheme).observe(document.documentElement, { attributes:true, attributeFilter:["data-theme"] });
+})();
+</script>
+
 {% if chat_mode %}
 <script>
+(function(){
+  "use strict";
+  const root = document.getElementById("sessionRoot");
+
+  /* ---------- server-provided session state (unchanged contract) ---------- */
   const topicSessionId = {{ topic_session.id|default:"null" }};
   const hasStartedChat = {{ has_started_chat|yesno:"true,false" }};
   const existingMessages = {{ existing_messages_json|default:"[]"|safe }};
@@ -87,59 +290,109 @@
     if (parts.length === 2) return parts.pop().split(";").shift();
   }
 
+  const chatWindow = document.getElementById("chat-window");
+  const understandingControls = document.getElementById("understanding-controls");
+
+  function scrollChatToBottom() {
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  function aiAvatarHtml(){
+    return '<div class="msg-avatar">' +
+      '<img class="logo-light" src="data:image/png;base64,__NAVY_B64__" alt="" onerror="this.style.display=\'none\'">' +
+      '<img class="logo-dark" src="data:image/png;base64,__CREAM_B64__" alt="" onerror="this.style.display=\'none\'">' +
+      '</div>';
+  }
+
   function appendUserBubble(text) {
-    const div = document.createElement("div");
-    div.className = "msg user";
-    div.textContent = text;
-    document.getElementById("chat-window").appendChild(div);
+    const row = document.createElement("div");
+    row.className = "msg-row user";
+    const bubble = document.createElement("div");
+    bubble.className = "msg-bubble";
+    bubble.textContent = text;
+    row.appendChild(bubble);
+    chatWindow.appendChild(row);
     scrollChatToBottom();
   }
 
   function createAiBubble() {
-    const div = document.createElement("div");
-    div.className = "msg ai";
-    document.getElementById("chat-window").appendChild(div);
-    return div;
+    const row = document.createElement("div");
+    row.className = "msg-row ai";
+    row.innerHTML = aiAvatarHtml() + '<div class="msg-bubble"></div>';
+    chatWindow.appendChild(row);
+    scrollChatToBottom();
+    return row.querySelector(".msg-bubble");
   }
 
   function appendSystemBubble(text) {
-    const div = document.createElement("div");
-    div.className = "msg system";
-    div.textContent = text;
-    document.getElementById("chat-window").appendChild(div);
+    const row = document.createElement("div");
+    row.className = "msg-row system";
+    const bubble = document.createElement("div");
+    bubble.className = "msg-bubble";
+    bubble.textContent = text;
+    row.appendChild(bubble);
+    chatWindow.appendChild(row);
     scrollChatToBottom();
   }
 
-  function scrollChatToBottom() {
-    const win = document.getElementById("chat-window");
-    win.scrollTop = win.scrollHeight;
-  }
+  function renderMarkdown(text) {
+    // Pull out LaTeX-delimited spans first so the chemistry-subscript / exponent
+    // regexes below can't mangle them (e.g. "$O2$" -> "$O<sub>2</sub>$" would
+    // break KaTeX's parse before it ever runs). Put the raw LaTeX back afterwards.
+    const mathSpans = [];
+    const protectedText = text.replace(
+      /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\n]+?\$)/g,
+      (m) => {
+        mathSpans.push(m);
+        // Dashes on both sides of the index so this can't itself be caught by
+        // the letter+digit subscript regex below (e.g. "H0" would match it).
+        return "\u0000MATH-" + (mathSpans.length - 1) + "-\u0000";
+      }
+    );
 
-    function renderMarkdown(text) {
-    return text
+    let html = protectedText
       .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
       // Chemical/simple subscripts: letter followed by digits, e.g. H2O -> H<sub>2</sub>O
       .replace(/([A-Za-z])(\d+)/g, "$1<sub>$2</sub>")
       // Simple exponents: x^2 -> x<sup>2</sup>
       .replace(/\^(\d+)/g, "<sup>$1</sup>")
-      // Safety net: if the AI ever slips LaTeX-style $...$ past the prompt rule,
-      // strip the dollar signs so raw syntax doesn't show, even if the math
-      // itself stays unstyled.
-      .replace(/\$(.*?)\$/g, "$1")
-      .replace(/\n/g, "<br>")
+      .replace(/\n/g, "<br>");
+
+    html = html.replace(/\u0000MATH-(\d+)-\u0000/g, (_, i) => mathSpans[Number(i)]);
+    return html;
+  }
+
+  // KaTeX only auto-renders document.body once, on initial page load (see base.html).
+  // Chat bubbles are created afterwards, straight into the DOM via JS, so they were
+  // never passed through KaTeX at all — that's why raw "\( ... \)" text was showing
+  // up verbatim instead of a rendered equation. Call this on an element right after
+  // its content is set.
+  function renderMathIn(el) {
+    if (!el || typeof window.renderMathInElement !== "function") return;
+    try {
+      window.renderMathInElement(el, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "\\[", right: "\\]", display: true },
+          { left: "\\(", right: "\\)", display: false },
+          { left: "$", right: "$", display: false }
+        ],
+        throwOnError: false
+      });
+    } catch (e) { /* malformed LaTeX from the model shouldn't break the chat */ }
   }
 
   function showTypingIndicator() {
-    const div = document.createElement("div");
-    div.className = "ai-bubble typing";
-    div.innerHTML = `<span></span><span></span><span></span>`;
-    document.getElementById("chat-window").appendChild(div);
+    const row = document.createElement("div");
+    row.className = "msg-row ai typing-row";
+    row.innerHTML = aiAvatarHtml() + '<div class="typing-dots"><span></span><span></span><span></span></div>';
+    chatWindow.appendChild(row);
     scrollChatToBottom();
-    return div;
+    return row;
   }
 
   function triggerQuizGeneration() {
-    appendSystemBubble("Nice work! Generating your quiz... 📝");
+    appendSystemBubble("Nice work! Generating your quiz...");
     fetch("/chat/next-topic/", {
       method: "POST",
       headers: {
@@ -202,10 +455,11 @@
 
         if (payload.done) {
           aiBubble.innerHTML = renderMarkdown(rawText.replace("TOPIC_COMPLETE", ""));
+          renderMathIn(aiBubble);
           if (payload.topic_complete) {
             triggerQuizGeneration();
           } else {
-            document.getElementById("understanding-controls").style.display = "block";
+            understandingControls.style.display = "flex";
           }
         }
       }
@@ -213,7 +467,7 @@
   }
 
   async function sendCanned(text) {
-    document.getElementById("understanding-controls").style.display = "none";
+    understandingControls.style.display = "none";
     await sendMessage(text);
   }
 
@@ -222,9 +476,20 @@
     const text = input.value.trim();
     if (!text) return;
     input.value = "";
-    document.getElementById("understanding-controls").style.display = "none";
+    understandingControls.style.display = "none";
     await sendMessage(text);
   }
+
+  const gotItBtn = document.getElementById("gotItBtn");
+  const confusedBtn = document.getElementById("confusedBtn");
+  const sendBtn = document.getElementById("sendBtn");
+  const chatInput = document.getElementById("chat-input");
+  if (gotItBtn) gotItBtn.addEventListener("click", () => sendCanned("Yes, I understand. Please continue."));
+  if (confusedBtn) confusedBtn.addEventListener("click", () => sendCanned("No, I'm confused."));
+  if (sendBtn) sendBtn.addEventListener("click", sendTyped);
+  if (chatInput) chatInput.addEventListener("keydown", function(e){
+    if (e.key === "Enter") { e.preventDefault(); sendTyped(); }
+  });
 
   document.addEventListener("DOMContentLoaded", function() {
     // Replay any existing conversation
@@ -234,6 +499,7 @@
       } else {
         const bubble = createAiBubble();
         bubble.innerHTML = renderMarkdown(msg.content.replace("TOPIC_COMPLETE", ""));
+        renderMathIn(bubble);
       }
     });
 
@@ -242,9 +508,10 @@
     } else if (existingMessages.length > 0) {
       // Chat already in progress — show the understanding buttons again
       // so the student isn't stuck with no way to respond after a refresh
-      document.getElementById("understanding-controls").style.display = "block";
+      understandingControls.style.display = "flex";
     }
-});
+  });
+})();
 </script>
 {% endif %}
 {% endblock %}

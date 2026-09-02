@@ -57,6 +57,16 @@
   }
   #dashboardRoot .dashboard-side-col{display:flex;flex-direction:column;gap:22px;}
 
+  /* ---------- search + avatar row: side column on desktop, right under the
+     greeting on mobile, never both at once. Compound class selectors here
+     so this reliably beats the generic .search-header-row rule further
+     down regardless of source order. ---------- */
+  #dashboardRoot .search-header-row.search-header-row--top{display:none;}
+  @media(max-width:960px){
+    #dashboardRoot .search-header-row.search-header-row--top{display:flex;margin-bottom:24px;}
+    #dashboardRoot .search-header-row.search-header-row--side{display:none;}
+  }
+
   /* ---------- icons ---------- */
   #dashboardRoot .ic{width:16px;height:16px;flex:none;vertical-align:-3px;}
   #dashboardRoot .ic-lg{width:20px;height:20px;}
@@ -257,6 +267,24 @@
       </p>
     </div>
 
+    <div class="search-header-row search-header-row--top">
+      <div class="search-container">
+        <form method="GET" action="#" class="search-wrapper" onsubmit="event.preventDefault();">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <label for="courseSearchInputTop" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;">Search courses</label>
+          <input type="text" name="q" placeholder="Search courses" class="search-input" id="courseSearchInputTop" autocomplete="off">
+        </form>
+      </div>
+
+      <div class="header-avatar-frame">
+        {% if profile.avatar_url %}
+          <img src="{{ profile.avatar_url }}" alt="Profile avatar">
+        {% else %}
+          <span class="header-avatar-fallback">{{ user.first_name|slice:":1"|upper|default:"R" }}</span>
+        {% endif %}
+      </div>
+    </div>
+
     <div class="stats-row">
       <div class="stat-card">
         <svg class="ic-lg stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c1 3-2 4-2 7a4 4 0 0 0 8 0c0-1-.5-2-1-3 2 1 3 3.5 3 6a7 7 0 0 1-14 0c0-4 3-6 4-10 .3 1 1 2 2 0Z"/></svg>
@@ -364,7 +392,7 @@
   </div>
 
   <div class="dashboard-side-col">
-    <div class="search-header-row">
+    <div class="search-header-row search-header-row--side">
       <div class="search-container">
         <form method="GET" action="#" class="search-wrapper" onsubmit="event.preventDefault();">
           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
@@ -593,15 +621,18 @@
   })();
 
   // ---------- Live course search (client-side filter over rendered courses) ----------
+  // Two inputs exist — one in the side column (desktop), one under the
+  // greeting (mobile) — only one is ever visible, but both stay wired up
+  // and in sync so switching viewport mid-session doesn't lose the query.
   (function(){
-    const input = document.getElementById('courseSearchInput');
+    const inputs = Array.from(document.querySelectorAll('#dashboardRoot .search-input'));
     const list = document.getElementById('courseList');
     const emptyMsg = document.getElementById('courseSearchEmpty');
-    if (!input || !list) return;
+    if (!inputs.length || !list) return;
     const pills = Array.from(list.querySelectorAll('.course-pill'));
 
-    input.addEventListener('input', function(){
-      const q = input.value.trim().toLowerCase();
+    function applyFilter(q){
+      q = q.trim().toLowerCase();
       let visibleCount = 0;
       pills.forEach(p => {
         const match = !q || (p.dataset.courseSearch || '').indexOf(q) !== -1;
@@ -609,6 +640,13 @@
         if (match) visibleCount++;
       });
       if (emptyMsg) emptyMsg.style.display = (q && visibleCount === 0) ? 'block' : 'none';
+    }
+
+    inputs.forEach(input => {
+      input.addEventListener('input', function(){
+        inputs.forEach(other => { if (other !== input) other.value = input.value; });
+        applyFilter(input.value);
+      });
     });
   })();
 
