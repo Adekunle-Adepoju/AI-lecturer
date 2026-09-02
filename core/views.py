@@ -1028,9 +1028,9 @@ def manage_courses_view(request):
                 student=profile,
                 course_code=course.course_code,
                 course_title=course.course_title,
-                defaults={
-                    'day': 'Wednesday',
-                    'time': '12:00 PM',
+                                defaults={
+                    'day': 'Wed',
+                    'time': '12:00',
                     'week_number': 1,
                     'total_weeks': 12,
                 }
