@@ -69,7 +69,7 @@
   
   --linear-today:      linear-gradient(135deg, #FFF6E6 0%, #FFFDF9 100%);
   --grid-line-color:   rgba(13,27,42,0.008);
-  --nav-bg:            rgba(255,255,255,0.85);
+  --nav-bg:            #FFFFFF;
 }
 
 /* ── Reset & base ────────────────────────────────────────────────── */

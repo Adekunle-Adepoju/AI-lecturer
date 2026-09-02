@@ -2,31 +2,255 @@
 {% block title %}Dashboard — Rovea{% endblock %}
 
 {% block content %}
-<head>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Mona+Sans:ital,wght@0,200..900;1,200..900&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
-</head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<div id="Rovea-loader">
-  <div class="loader-content">
-    <span class="loader-avatar">🤖</span>
-    <h1 class="loader-logo">Rovea</h1>
-    <div class="loader-bar-container">
-      <div class="loader-bar-fill"></div>
-    </div>
-  </div>
-</div>
+<style>
+  /* =========================================================
+     Rovea dashboard — scoped entirely under #dashboardRoot so
+     nothing here leaks into base.html's header/nav or any other
+     page that doesn't render this template.
+     ========================================================= */
+  #dashboardRoot{
+    --bg:#0F1D2B; --bg-alt:#16283A; --surface:#13212F; --surface-2:#1A2C3D;
+    --ink:#ECEFF3; --ink-soft:#B7C2CB; --ink-faint:#8A97A0;
+    --line:rgba(236,239,243,.14); --line-soft:rgba(236,239,243,.08);
+    --navy:#0F4677; --navy-deep:#0A2E4D; --heading:#E7EDF3;
+    --amber:#E2A63B; --amber-deep:#C98A22;
+    --coral:#D96A45; --green:#4A9D74;
+    --font-display:'Newsreader',serif; --font-body:'Inter',sans-serif;
+    --ease:cubic-bezier(.22,.61,.36,1);
+    --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
+    color-scheme: dark;
+  }
+  #dashboardRoot[data-theme="light"]{
+    --bg:#F4F7FA; --bg-alt:#E4EBF2; --surface:#FFFFFF; --surface-2:#FFFFFF;
+    --ink:#17212B; --ink-soft:#54626D; --ink-faint:#818D94;
+    --line:rgba(23,33,43,.14); --line-soft:rgba(23,33,43,.07);
+    --heading:#0A2E4D;
+    color-scheme: light;
+  }
 
-<div class="page-container dashboard-grid-container">
+  #dashboardRoot{
+    background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    line-height:1.55; padding:32px clamp(16px,3vw,32px) 80px;
+    border-radius:0 0 var(--radius-lg) var(--radius-lg);
+    transition:background .35s var(--ease),color .35s var(--ease);
+  }
+  #dashboardRoot *{box-sizing:border-box;}
+  #dashboardRoot img{max-width:100%;display:block;}
+  #dashboardRoot a{color:inherit;text-decoration:none;}
+  #dashboardRoot :focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:4px;}
+
+  #dashboardRoot h1,#dashboardRoot h2,#dashboardRoot h3{
+    font-family:var(--font-display);font-weight:500;color:var(--heading);letter-spacing:-.01em;margin:0;
+  }
+
+  /* ---------- layout ---------- */
+  #dashboardRoot.dashboard-grid-container{
+    max-width:1280px;margin-inline:auto;
+    display:grid;grid-template-columns:1fr 340px;gap:28px;align-items:start;
+  }
+  @media(max-width:960px){
+    #dashboardRoot.dashboard-grid-container{grid-template-columns:1fr;}
+  }
+  #dashboardRoot .dashboard-side-col{display:flex;flex-direction:column;gap:22px;}
+
+  /* ---------- icons ---------- */
+  #dashboardRoot .ic{width:16px;height:16px;flex:none;vertical-align:-3px;}
+  #dashboardRoot .ic-lg{width:20px;height:20px;}
+
+  /* ---------- greeting ---------- */
+  #dashboardRoot .greeting-section{padding-top:6px;margin-bottom:26px;
+    opacity:0;transform:translateY(10px);animation:dRise .7s var(--ease) forwards;}
+  #dashboardRoot .greeting{font-size:clamp(1.7rem,3vw,2.3rem);display:flex;align-items:center;gap:10px;}
+  #dashboardRoot .greeting-sub{margin-top:8px;color:var(--ink-soft);font-size:.98rem;}
+
+  /* ---------- stats ---------- */
+  #dashboardRoot .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:32px;}
+  @media(max-width:720px){#dashboardRoot .stats-row{grid-template-columns:1fr 1fr;}}
+  #dashboardRoot .stat-card{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);
+    padding:18px 20px;text-align:left;
+    opacity:0;transform:translateY(10px);animation:dRise .6s var(--ease) forwards;
+    transition:transform .25s var(--ease),border-color .25s var(--ease);
+  }
+  #dashboardRoot .stat-card:hover{transform:translateY(-3px);border-color:var(--navy);}
+  #dashboardRoot .stat-card:nth-child(1){animation-delay:.04s;}
+  #dashboardRoot .stat-card:nth-child(2){animation-delay:.1s;}
+  #dashboardRoot .stat-card:nth-child(3){animation-delay:.16s;}
+  #dashboardRoot .stat-card:nth-child(4){animation-delay:.22s;}
+  #dashboardRoot .stat-icon{color:var(--amber);margin-bottom:10px;}
+  #dashboardRoot .stat-val{font-family:var(--font-display);font-size:1.9rem;color:var(--heading);display:flex;align-items:center;gap:6px;}
+  #dashboardRoot .stat-lbl{font-size:.8rem;color:var(--ink-soft);margin-top:2px;}
+
+  /* ---------- section labels ---------- */
+  #dashboardRoot .section-label{
+    display:flex;align-items:center;gap:8px;font-size:.82rem;font-weight:600;
+    color:var(--ink-soft);letter-spacing:.02em;margin:0 0 14px;
+  }
+  #dashboardRoot .section-label .ic{color:var(--amber);}
+
+  /* ---------- all-done banner ---------- */
+  #dashboardRoot .today-card.all-done-banner{
+    background:linear-gradient(135deg,var(--navy),var(--navy-deep));
+    border:1px solid rgba(226,166,59,.35);text-align:center;color:#fff;
+    padding:34px 24px;margin-bottom:26px;
+  }
+  #dashboardRoot .all-done-banner .done-icon{margin-bottom:10px;color:var(--amber);}
+  #dashboardRoot .all-done-banner h3{color:var(--amber);font-size:1.3rem;}
+  #dashboardRoot .all-done-banner p{margin:10px auto 18px;color:rgba(255,255,255,.78);max-width:46ch;}
+
+  /* ---------- today card ---------- */
+  #dashboardRoot .today-card{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);
+    padding:20px 22px;margin-bottom:14px;
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;
+    border-left:3px solid var(--navy);
+    opacity:0;transform:translateY(10px);animation:dRise .55s var(--ease) forwards;
+    transition:border-color .25s var(--ease),transform .25s var(--ease);
+  }
+  #dashboardRoot .today-card:hover{transform:translateY(-2px);}
+  #dashboardRoot .today-card:nth-of-type(1){animation-delay:.1s;}
+  #dashboardRoot .today-card:nth-of-type(2){animation-delay:.16s;}
+  #dashboardRoot .today-card:nth-of-type(3){animation-delay:.22s;}
+  #dashboardRoot .tc-code{font-family:var(--font-body);font-weight:700;font-size:1rem;color:var(--heading);letter-spacing:.01em;}
+  #dashboardRoot .tc-title{font-size:.92rem;color:var(--ink-soft);margin:2px 0 8px;}
+  #dashboardRoot .tc-meta{font-size:.78rem;color:var(--ink-faint);display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+  #dashboardRoot .tc-meta .xp{color:var(--amber);font-weight:600;}
+  #dashboardRoot .tc-actions{display:flex;gap:10px;align-items:center;flex-shrink:0;}
+
+  #dashboardRoot .today-done{border-left-color:var(--green);text-align:left;display:block;}
+  #dashboardRoot .today-done h3{font-size:1.1rem;display:flex;align-items:center;gap:8px;}
+  #dashboardRoot .today-done p{color:var(--ink-soft);margin-top:6px;font-size:.9rem;}
+
+  /* ---------- buttons ---------- */
+  #dashboardRoot .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    border-radius:999px;border:1px solid transparent;font-weight:600;font-size:.86rem;
+    cursor:pointer;transition:transform .22s var(--ease),box-shadow .22s var(--ease),background .2s var(--ease),border-color .2s var(--ease);
+    padding:0 18px;height:40px;white-space:nowrap;font-family:var(--font-body);
+  }
+  #dashboardRoot .btn-primary{background:var(--amber);color:var(--navy-deep);}
+  #dashboardRoot .btn-primary:hover{background:var(--amber-deep);transform:translateY(-2px);box-shadow:0 10px 22px -10px rgba(201,138,34,.5);}
+  #dashboardRoot .btn-white-outline{background:transparent;color:var(--ink);border-color:var(--line);}
+  #dashboardRoot .btn-white-outline:hover{border-color:var(--navy);background:var(--bg-alt);}
+  #dashboardRoot .btn-full{width:100%;justify-content:flex-start;}
+
+  /* ---------- badges ---------- */
+  #dashboardRoot .badge{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:999px;font-size:.76rem;font-weight:700;}
+  #dashboardRoot .badge-amber{background:rgba(226,166,59,.16);color:var(--amber);}
+  #dashboardRoot .badge-green{background:rgba(74,157,116,.16);color:var(--green);}
+  #dashboardRoot .live-badge{border:1px solid rgba(226,166,59,.3);}
+
+  /* ---------- course list ---------- */
+  #dashboardRoot .course-list{display:flex;flex-direction:column;gap:12px;}
+  #dashboardRoot .course-pill{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);
+    padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:14px;
+    transition:transform .22s var(--ease),border-color .22s var(--ease),box-shadow .22s var(--ease);
+    opacity:0;transform:translateY(8px);animation:dRise .5s var(--ease) forwards;
+  }
+  #dashboardRoot .course-pill:hover{transform:translateY(-3px);border-color:var(--navy);box-shadow:0 14px 28px -18px rgba(0,0,0,.5);}
+  #dashboardRoot .course-name{font-weight:600;font-size:.98rem;color:var(--heading);}
+  #dashboardRoot .course-code{font-size:.82rem;color:var(--ink-faint);margin-top:2px;}
+  #dashboardRoot .course-empty{
+    text-align:center;padding:40px 20px;color:var(--ink-soft);border:1px dashed var(--line);border-radius:var(--radius-md);
+  }
+  #dashboardRoot .course-empty a{color:var(--amber);font-weight:600;}
+
+  #dashboardRoot .progress-circle-container{position:relative;width:46px;height:46px;flex:none;}
+  #dashboardRoot .progress-circle-outer{
+    width:46px;height:46px;border-radius:50%;
+    background:conic-gradient(var(--amber) calc(var(--progress-val,0) * 1%), var(--bg-alt) 0);
+    display:flex;align-items:center;justify-content:center;
+    transition:background 1s var(--ease);
+  }
+  #dashboardRoot .progress-circle-inner{
+    width:36px;height:36px;border-radius:50%;background:var(--surface);
+    display:flex;align-items:center;justify-content:center;
+  }
+  #dashboardRoot .progress-circle-text{font-size:.72rem;font-weight:700;color:var(--heading);}
+  #dashboardRoot .arrow{color:var(--ink-faint);transition:transform .2s var(--ease),color .2s var(--ease);}
+  #dashboardRoot .course-pill:hover .arrow{transform:translateX(3px);color:var(--amber);}
+
+  /* ---------- side col: search + avatar ---------- */
+  #dashboardRoot .search-header-row{display:flex;align-items:center;gap:10px;margin-bottom:26px;}
+  #dashboardRoot .search-container{flex:1;min-width:0;}
+  #dashboardRoot .search-wrapper{display:flex;align-items:center;gap:8px;background:var(--surface);
+    border:1px solid var(--line);border-radius:999px;padding:0 16px;height:42px;}
+  #dashboardRoot .search-wrapper .ic{color:var(--ink-faint);}
+  #dashboardRoot .search-input{border:none;background:none;outline:none;width:100%;font-size:.88rem;color:var(--ink);font-family:var(--font-body);}
+  #dashboardRoot .search-input::placeholder{color:var(--ink-faint);}
+
+  #dashboardRoot .header-avatar-frame{
+    width:42px;height:42px;border-radius:50%;flex:none;
+    display:flex;align-items:center;justify-content:center;overflow:hidden;
+    border:1px solid var(--line);background:var(--amber);color:var(--navy-deep);
+    font-weight:700;font-size:.95rem;font-family:var(--font-body);
+  }
+  #dashboardRoot .header-avatar-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}
+
+  /* ---------- generic side widget card ---------- */
+  #dashboardRoot .side-widget-card{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);
+    padding:16px 18px;margin-bottom:26px;
+  }
+  #dashboardRoot .session-list{display:flex;flex-direction:column;}
+  #dashboardRoot .session-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-soft);}
+  #dashboardRoot .session-row:last-child{border-bottom:none;}
+  #dashboardRoot .session-course{font-size:.86rem;font-weight:600;color:var(--heading);}
+  #dashboardRoot .session-date{font-size:.75rem;color:var(--ink-faint);margin-top:1px;}
+
+  /* ---------- focus timer ---------- */
+  #dashboardRoot .focus-widget{display:flex;align-items:center;gap:16px;}
+  #dashboardRoot .focus-ring{position:relative;width:64px;height:64px;flex:none;}
+  #dashboardRoot .focus-ring svg{transform:rotate(-90deg);}
+  #dashboardRoot .focus-ring-bg{stroke:var(--bg-alt);stroke-width:6;fill:none;}
+  #dashboardRoot .focus-ring-fg{stroke:var(--amber);stroke-width:6;fill:none;stroke-linecap:round;transition:stroke-dashoffset 1s linear;}
+  #dashboardRoot .focus-time{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;color:var(--heading);}
+  #dashboardRoot .focus-info{flex:1;min-width:0;}
+  #dashboardRoot .focus-task{font-size:.82rem;color:var(--ink-soft);margin-bottom:8px;line-height:1.35;}
+  #dashboardRoot .focus-controls{display:flex;gap:8px;}
+  #dashboardRoot .btn-xs{height:32px;padding:0 13px;font-size:.76rem;}
+
+  /* ---------- calendar ---------- */
+  #dashboardRoot .calendar-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  #dashboardRoot .calendar-title{font-family:var(--font-display);font-size:1rem;color:var(--heading);}
+  #dashboardRoot .calendar-nav-btn{
+    width:28px;height:28px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--ink-soft);
+    cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:.2s var(--ease);
+  }
+  #dashboardRoot .calendar-nav-btn:hover{border-color:var(--amber);color:var(--amber);}
+  #dashboardRoot .calendar-weekdays{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:.7rem;color:var(--ink-faint);margin-bottom:6px;}
+  #dashboardRoot .calendar-days-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+  #dashboardRoot .calendar-day-cell{
+    aspect-ratio:1;display:flex;align-items:center;justify-content:center;position:relative;
+    font-size:.78rem;color:var(--ink);border-radius:8px;cursor:default;
+  }
+  #dashboardRoot .calendar-day-cell.empty-pad{color:var(--ink-faint);opacity:.4;}
+  #dashboardRoot .calendar-day-cell.is-today{background:var(--amber);color:var(--navy-deep);font-weight:700;}
+  #dashboardRoot .calendar-day-cell.has-session::after{
+    content:"";position:absolute;bottom:3px;left:50%;transform:translateX(-50%);
+    width:4px;height:4px;border-radius:50%;background:var(--navy);
+  }
+  #dashboardRoot .calendar-day-cell.is-today.has-session::after{background:var(--navy-deep);}
+
+  @keyframes dRise{to{opacity:1;transform:translateY(0);}}
+  @media(prefers-reduced-motion:reduce){
+    #dashboardRoot *{animation-duration:.001ms!important;transition-duration:.001ms!important;}
+  }
+</style>
+
+<div class="page-container dashboard-grid-container" id="dashboardRoot" data-theme="dark">
 
   <div class="dashboard-main-col">
     <div class="greeting-section">
-      <h2 class="greeting" id="greeting">Hey! 👋</h2>
+      <h2 class="greeting" id="greeting">Hey!</h2>
       <p class="greeting-sub">
         {% if profile.streak > 0 %}
-          You're on a 🔥 {{ profile.streak }}-day streak. Don't break it today!
+          You're on a {{ profile.streak }}-day streak. Don't break it today!
         {% else %}
           Start a session today to begin your streak!
         {% endif %}
@@ -35,50 +259,62 @@
 
     <div class="stats-row">
       <div class="stat-card">
-        <div class="stat-val">🔥 {{ profile.streak }}</div>
+        <svg class="ic-lg stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c1 3-2 4-2 7a4 4 0 0 0 8 0c0-1-.5-2-1-3 2 1 3 3.5 3 6a7 7 0 0 1-14 0c0-4 3-6 4-10 .3 1 1 2 2 0Z"/></svg>
+        <div class="stat-val">{{ profile.streak }}</div>
         <div class="stat-lbl">Day streak</div>
       </div>
       <div class="stat-card">
+        <svg class="ic-lg stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/></svg>
         <div class="stat-val">{{ profile.xp }}</div>
         <div class="stat-lbl">Total XP</div>
       </div>
       <div class="stat-card">
+        <svg class="ic-lg stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
         <div class="stat-val">{{ sessions_done }}</div>
         <div class="stat-lbl">Sessions done</div>
+      </div>
+      <div class="stat-card">
+        <svg class="ic-lg stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <div class="stat-val"><span id="masteryStatVal">—</span></div>
+        <div class="stat-lbl">Average mastery</div>
       </div>
     </div>
 
     {% if all_done %}
-<div class="today-card" style="background:linear-gradient(135deg,#1A3A5C,#0F2A42); border-color:rgba(245,166,35,0.4); margin-bottom:24px; text-align:center;">
-  <div style="font-size:40px; margin-bottom:8px">🎉</div>
-  <h3 style="color:var(--amber)">You've completed all your courses!</h3>
-  <p style="margin-bottom:16px">Amazing work this semester. When you're ready, move on to the next chapter.</p>
-  <a href="{% url 'profile_edit' %}" class="btn btn-primary">Update My Level / Semester →</a>
-</div>
-{% endif %}
-    <p class="section-label">📅 Today's Classes</p>
+    <div class="today-card all-done-banner">
+      <svg class="ic-lg done-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="34" height="34" style="margin-inline:auto;"><path d="M12 2 14.7 8.6 22 9.3l-5.5 4.8L18.2 21 12 17.3 5.8 21l1.7-6.9L2 9.3l7.3-.7L12 2Z"/></svg>
+      <h3>You've completed all your courses!</h3>
+      <p>Amazing work this semester. When you're ready, move on to the next chapter.</p>
+      <a href="{% url 'profile_edit' %}" class="btn btn-primary">Update my level / semester</a>
+    </div>
+    {% endif %}
+
+    <p class="section-label">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      Today's classes
+    </p>
 
     {% if todays_courses %}
       {% for course in todays_courses %}
-      <div class="today-card" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+      <div class="today-card">
         <div>
-          <div style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px; letter-spacing: -0.01em; margin-bottom: 2px; color: var(--text);">{{ course.course_code }}</div>
-          <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 6px;">{{ course.course_title }}</div>
-          <div style="font-size: 12px; color: var(--text-muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
-            <span>{{ course.time }}</span> · <span>Week {{ course.week_number }}</span> · <span>~20 mins</span> · <span style="color: var(--amber); font-weight: 600;">+50 XP</span>
+          <div class="tc-code">{{ course.course_code }}</div>
+          <div class="tc-title">{{ course.course_title }}</div>
+          <div class="tc-meta">
+            <span>{{ course.time }}</span> · <span>Week {{ course.week_number }}</span> · <span>~20 mins</span> · <span class="xp">+50 XP</span>
           </div>
         </div>
-        
-        <div style="display: flex; gap: 10px; align-items: center; flex-shrink: 0;">
+
+        <div class="tc-actions">
           {% if forloop.first %}
             {% if course.course_code in incomplete_sessions %}
-              <a href="{% url 'session' course.course_code %}" class="btn btn-primary" style="height: 40px; padding: 0 18px;">Resume →</a>
+              <a href="{% url 'session' course.course_code %}" class="btn btn-primary">Resume →</a>
             {% else %}
-              <a href="{% url 'session' course.course_code %}" class="btn btn-primary" style="height: 40px; padding: 0 18px;">Start →</a>
+              <a href="{% url 'session' course.course_code %}" class="btn btn-primary">Start →</a>
             {% endif %}
-            <form method="post" action="{% url 'reschedule' course.id %}" style="margin: 0;">
+            <form method="post" action="{% url 'reschedule' course.id %}" style="margin:0;">
               {% csrf_token %}
-              <button type="submit" class="btn btn-white-outline" style="height: 40px; padding: 0 18px;">Reschedule</button>
+              <button type="submit" class="btn btn-white-outline">Reschedule</button>
             </form>
           {% else %}
             <span class="badge badge-amber live-badge">Up Next</span>
@@ -88,23 +324,26 @@
       {% endfor %}
     {% else %}
       <div class="today-card today-done">
-        <h3>All sessions done for today! 🎉</h3>
+        <h3>
+          <svg class="ic-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--green);"><path d="M20 6 9 17l-5-5"/></svg>
+          All sessions done for today!
+        </h3>
         <p>Great work. Come back tomorrow to keep your streak going.</p>
       </div>
     {% endif %}
 
-    <p class="section-label">Your courses — {{ profile.level }}L · Semester {{ profile.semester }}</p>
-    <div class="course-list">
+    <p class="section-label" style="margin-top:32px;">Your courses — {{ profile.level }}L · Semester {{ profile.semester }}</p>
+    <div class="course-list" id="courseList">
       {% for course in courses %}
-      <a href="{% url 'session' course.code %}" class="course-pill">
-        <div style="display: flex; align-items: center; min-width: 0;">
+      <a href="{% url 'session' course.code %}" class="course-pill" data-course-search="{{ course.title|lower }} {{ course.code|lower }}">
+        <div style="display:flex;align-items:center;min-width:0;">
           <div>
             <div class="course-name">{{ course.title }}</div>
             <div class="course-code">{{ course.code }} · {{ course.units }} units</div>
           </div>
         </div>
-        
-        <div style="display: flex; align-items: center; gap: 16px; flex-shrink: 0;">
+
+        <div style="display:flex;align-items:center;gap:16px;flex-shrink:0;">
           <div class="progress-circle-container">
             <div class="progress-circle-outer" style="--progress-val: {% if course.progress_pct %}{{ course.progress_pct }}{% else %}0{% endif %};">
               <div class="progress-circle-inner">
@@ -112,36 +351,46 @@
               </div>
             </div>
           </div>
-          <span class="arrow">→</span>
+          <svg class="ic arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </div>
       </a>
+      {% empty %}
+      <div class="course-empty">
+        No courses added yet. <a href="{% url 'manage_courses' %}">Add your first course →</a>
+      </div>
       {% endfor %}
     </div>
+    <p id="courseSearchEmpty" class="course-empty" style="display:none;margin-top:12px;">No courses match that search.</p>
   </div>
 
   <div class="dashboard-side-col">
     <div class="search-header-row">
       <div class="search-container">
         <form method="GET" action="#" class="search-wrapper" onsubmit="event.preventDefault();">
-          <input type="text" name="q" placeholder="Search courses" class="search-input" autocomplete="off">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <label for="courseSearchInput" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;">Search courses</label>
+          <input type="text" name="q" placeholder="Search courses" class="search-input" id="courseSearchInput" autocomplete="off">
         </form>
       </div>
-      
+
       <div class="header-avatar-frame">
         {% if profile.avatar_url %}
-          <img src="{{ profile.avatar_url }}" alt="Profile Avatar">
+          <img src="{{ profile.avatar_url }}" alt="Profile avatar">
         {% else %}
-          <span class="header-avatar-fallback">🧑‍💻</span>
+          <span class="header-avatar-fallback">{{ user.first_name|slice:":1"|upper|default:"R" }}</span>
         {% endif %}
       </div>
     </div>
 
-    <p class="section-label">⚡ Session History</p>
+    <p class="section-label">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h8l-1 8 10-12h-8l1-8Z"/></svg>
+      Session history
+    </p>
     <div class="side-widget-card">
       {% if recent_sessions %}
       <div class="session-list">
         {% for s in recent_sessions %}
-        <div class="session-row" style="margin-bottom: 4px;">
+        <div class="session-row">
           <div>
             <div class="session-course">{{ s.course_code }}</div>
             <div class="session-date">Wk {{ s.week_number }} · {{ s.started_at|date:"d M" }}</div>
@@ -155,100 +404,112 @@
         {% endfor %}
       </div>
       {% else %}
-      <div style="text-align: center; color: var(--text-muted); font-size: 13.5px; padding: 1rem 0;">
+      <div style="text-align:center;color:var(--ink-faint);font-size:13.5px;padding:1rem 0;">
         No sessions tracked yet.
       </div>
       {% endif %}
     </div>
 
-    <p class="section-label">📅 Calendar Tracker</p>
-    <div class="calendar-widget">
+    <p class="section-label">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      Focus sprint
+    </p>
+    <div class="side-widget-card focus-widget">
+      <div class="focus-ring">
+        <svg width="64" height="64" viewBox="0 0 64 64">
+          <circle class="focus-ring-bg" cx="32" cy="32" r="28"/>
+          <circle class="focus-ring-fg" id="focusRingFg" cx="32" cy="32" r="28" stroke-dasharray="175.9" stroke-dashoffset="0"/>
+        </svg>
+        <div class="focus-time" id="focusTime">25:00</div>
+      </div>
+      <div class="focus-info">
+        <div class="focus-task" id="focusTask">
+          {% if todays_courses %}Next up: {{ todays_courses.0.course_title }}{% else %}Pick a course and start a sprint{% endif %}
+        </div>
+        <div class="focus-controls">
+          <button type="button" class="btn btn-primary btn-xs" id="focusStartBtn">Start</button>
+          <button type="button" class="btn btn-white-outline btn-xs" id="focusResetBtn">Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="section-label">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      Calendar tracker
+    </p>
+    <div class="calendar-widget side-widget-card">
       <div class="calendar-header">
-        <button class="calendar-nav-btn" id="calPrevBtn">〈</button>
+        <button class="calendar-nav-btn" id="calPrevBtn" aria-label="Previous month">‹</button>
         <span class="calendar-title" id="calendarMonthTitle">June, 2026</span>
-        <button class="calendar-nav-btn" id="calNextBtn">〉</button>
+        <button class="calendar-nav-btn" id="calNextBtn" aria-label="Next month">›</button>
       </div>
       <div class="calendar-weekdays">
         <div>S</div><div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div>
       </div>
       <div class="calendar-days-grid" id="calendarDaysGrid"></div>
     </div>
-    
-    <p class="section-label">⚙️ Quick Links</p>
-    <div class="side-widget-card" style="display: flex; flex-direction: column; gap: 8px;">
-        <a href="{% url 'manage_courses' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px; border-color: var(--amber); color: var(--amber);">🔧 Manage Courses</a>
-       <a href="{% url 'timetable' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px;">📅 Review Full Timetable</a>
-       <a href="{% url 'leaderboard' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px;">🏆 Open Leaderboard</a>
-       <a href="{% url 'profile_edit' %}" class="btn btn-white-outline btn-full" style="justify-content:flex-start; font-size:13px; border-color:var(--amber); color:var(--amber);">🎓 Change Level / Semester</a>
+
+    <p class="section-label">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-6"/></svg>
+      Quick links
+    </p>
+    <div class="side-widget-card" style="display:flex;flex-direction:column;gap:8px;">
+        <a href="{% url 'manage_courses' %}" class="btn btn-white-outline btn-full" style="border-color:var(--amber);color:var(--amber);">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14.7 6.3 3 3L8 19H5v-3Z"/><path d="m13 4 3 3"/></svg>
+          Manage courses
+        </a>
+       <a href="{% url 'timetable' %}" class="btn btn-white-outline btn-full">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+          Review full timetable
+       </a>
+       <a href="{% url 'leaderboard' %}" class="btn btn-white-outline btn-full">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4a3 3 0 0 0 3 5M17 6h3a3 3 0 0 1-3 5"/></svg>
+          Open leaderboard
+       </a>
+       <a href="{% url 'profile_edit' %}" class="btn btn-white-outline btn-full" style="border-color:var(--amber);color:var(--amber);">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10 12 4 2 10l10 6 10-6Z"/><path d="M6 12.5V17c0 1.5 2.7 3 6 3s6-1.5 6-3v-4.5"/></svg>
+          Change level / semester
+       </a>
     </div>
   </div>
-
-  <button id="backToTopBtn" class="btn btn-white-outline" title="Go to top" style="
-    display: none; 
-    position: fixed; 
-    bottom: 24px; 
-    right: 24px; 
-    z-index: 99; 
-    min-width: auto; 
-    padding: 10px 14px; 
-    border-radius: 50%; 
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
-    cursor: pointer;
-    transition: opacity 0.3s ease, transform 0.3s ease;
-  ">
-    ↑
-  </button>
 
 </div>
 
 <script>
-  // 1. App Greeting Selector Engine
+  // ---------- Theme sync: mirror the site-wide theme (base.html hamburger toggle) ----------
+  // base.html's inline pre-paint script already sets data-theme on <html>, and its
+  // drawer's #theme-toggle-btn updates it on click. We just mirror that value onto
+  // #dashboardRoot — no second toggle, no second localStorage key.
+  (function(){
+    const root = document.getElementById('dashboardRoot');
+    if(!root) return;
+
+    function syncTheme(){
+      const siteTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+      root.setAttribute('data-theme', siteTheme);
+    }
+
+    syncTheme();
+
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  })();
+
+  // ---------- App Greeting Selector Engine ----------
   (function() {
     const h = new Date().getHours();
     const gr = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-    const emoji = h < 12 ? "☀️" : h < 17 ? "👋" : "🌙";
-    
+
     const firstName = "{{ user.first_name|escapejs }}".trim();
-    
+
     if (firstName) {
-      document.getElementById("greeting").textContent = `${gr}, ${firstName}! ${emoji}`;
+      document.getElementById("greeting").textContent = `${gr}, ${firstName}!`;
     } else {
-      document.getElementById("greeting").textContent = `${gr}! ${emoji}`;
+      document.getElementById("greeting").textContent = `${gr}!`;
     }
   })();
 
-  // 2. Back To Top Floating Action Button System
-  const topBtn = document.getElementById("backToTopBtn");
-
-  window.onscroll = function() {
-    if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
-      topBtn.style.display = "block";
-    } else {
-      topBtn.style.display = "none";
-    }
-  };
-
-  topBtn.addEventListener("click", function() {
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-  });
-</script>
-
-<script>
- window.addEventListener("load", function() {
-    const loader = document.getElementById("Rovea-loader");
-    if (loader) {
-      setTimeout(function()  {
-        loader.classList.add("fade-out");
-      }, 2000);
-    }
- });
-</script>
-
-<script>
-  // 3. Calendar Tracking Widget Subsystem Engine
+  // ---------- Calendar Tracking Widget Subsystem Engine ----------
   (function() {
     const dateObj = new Date();
     let currentYear = dateObj.getFullYear();
@@ -261,6 +522,9 @@
     const daysGrid = document.getElementById("calendarDaysGrid");
     const prevBtn = document.getElementById("calPrevBtn");
     const nextBtn = document.getElementById("calNextBtn");
+
+    // Dates pulled straight from recent_sessions — no new backend field required.
+    const sessionDates = [{% for s in recent_sessions %}"{{ s.started_at|date:'Y-m-d' }}"{% if not forloop.last %},{% endif %}{% endfor %}];
 
     function renderCalendarGrid(year, month) {
       daysGrid.innerHTML = "";
@@ -284,6 +548,10 @@
         dayCell.textContent = day;
         if (day === today.getDate() && month === today.getMonth() && year === today.getFullYear()) {
           dayCell.classList.add("is-today");
+        }
+        const iso = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        if (sessionDates.indexOf(iso) !== -1) {
+          dayCell.classList.add("has-session");
         }
         daysGrid.appendChild(dayCell);
       }
@@ -311,6 +579,84 @@
     });
 
     renderCalendarGrid(currentYear, currentMonth);
+  })();
+
+  // ---------- Average mastery (computed from the rendered progress rings) ----------
+  (function(){
+    const rings = document.querySelectorAll('#dashboardRoot .progress-circle-outer');
+    const out = document.getElementById('masteryStatVal');
+    if (!out || !rings.length) return;
+    let total = 0;
+    rings.forEach(r => { total += parseFloat(r.style.getPropertyValue('--progress-val')) || 0; });
+    const avg = Math.round(total / rings.length);
+    out.textContent = avg + '%';
+  })();
+
+  // ---------- Live course search (client-side filter over rendered courses) ----------
+  (function(){
+    const input = document.getElementById('courseSearchInput');
+    const list = document.getElementById('courseList');
+    const emptyMsg = document.getElementById('courseSearchEmpty');
+    if (!input || !list) return;
+    const pills = Array.from(list.querySelectorAll('.course-pill'));
+
+    input.addEventListener('input', function(){
+      const q = input.value.trim().toLowerCase();
+      let visibleCount = 0;
+      pills.forEach(p => {
+        const match = !q || (p.dataset.courseSearch || '').indexOf(q) !== -1;
+        p.style.display = match ? '' : 'none';
+        if (match) visibleCount++;
+      });
+      if (emptyMsg) emptyMsg.style.display = (q && visibleCount === 0) ? 'block' : 'none';
+    });
+  })();
+
+  // ---------- Focus sprint timer (client-only, 25/5 Pomodoro) ----------
+  (function(){
+    const WORK = 25 * 60, BREAK = 5 * 60, CIRC = 175.9;
+    let secondsLeft = WORK, total = WORK, onBreak = false, interval = null;
+
+    const timeEl = document.getElementById('focusTime');
+    const ringEl = document.getElementById('focusRingFg');
+    const taskEl = document.getElementById('focusTask');
+    const startBtn = document.getElementById('focusStartBtn');
+    const resetBtn = document.getElementById('focusResetBtn');
+    if (!timeEl || !ringEl || !startBtn) return;
+
+    function render(){
+      const m = String(Math.floor(secondsLeft/60)).padStart(2,'0');
+      const s = String(Math.floor(secondsLeft%60)).padStart(2,'0');
+      timeEl.textContent = m + ':' + s;
+      const progress = 1 - secondsLeft/total;
+      ringEl.style.strokeDashoffset = String(CIRC * (1 - progress));
+    }
+    render();
+
+    startBtn.addEventListener('click', function(){
+      if (interval){
+        clearInterval(interval); interval = null; startBtn.textContent = 'Resume';
+      } else {
+        interval = setInterval(function(){
+          secondsLeft--;
+          if (secondsLeft < 0){
+            onBreak = !onBreak;
+            total = onBreak ? BREAK : WORK;
+            secondsLeft = total;
+            taskEl.textContent = onBreak ? 'Break time — step away for a bit.' : 'Back to it — next sprint.';
+          }
+          render();
+        }, 1000);
+        startBtn.textContent = 'Pause';
+      }
+    });
+
+    resetBtn.addEventListener('click', function(){
+      clearInterval(interval); interval = null;
+      onBreak = false; total = WORK; secondsLeft = WORK;
+      startBtn.textContent = 'Start';
+      render();
+    });
   })();
 </script>
 {% endblock %}
