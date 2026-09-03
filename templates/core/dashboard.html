@@ -270,10 +270,12 @@
     <div class="search-header-row search-header-row--top">
       <div class="search-container">
         <form method="GET" action="#" class="search-wrapper" onsubmit="event.preventDefault();">
-          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-          <label for="courseSearchInputTop" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;">Search courses</label>
-          <input type="text" name="q" placeholder="Search courses" class="search-input" id="courseSearchInputTop" autocomplete="off">
-        </form>
+  <button type="submit" class="search-icon-btn" aria-label="Search courses">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+  </button>
+  <label for="courseSearchInput" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;">Search courses</label>
+  <input type="text" name="q" placeholder="Search courses" class="search-input" id="courseSearchInput" autocomplete="off">
+</form>
       </div>
 
       <div class="header-avatar-frame">
@@ -625,30 +627,39 @@
   // greeting (mobile) — only one is ever visible, but both stay wired up
   // and in sync so switching viewport mid-session doesn't lose the query.
   (function(){
-    const inputs = Array.from(document.querySelectorAll('#dashboardRoot .search-input'));
-    const list = document.getElementById('courseList');
-    const emptyMsg = document.getElementById('courseSearchEmpty');
-    if (!inputs.length || !list) return;
-    const pills = Array.from(list.querySelectorAll('.course-pill'));
+  const inputs = Array.from(document.querySelectorAll('#dashboardRoot .search-input'));
+  const forms = Array.from(document.querySelectorAll('#dashboardRoot .search-wrapper'));
+  const list = document.getElementById('courseList');
+  const emptyMsg = document.getElementById('courseSearchEmpty');
+  if (!inputs.length || !list) return;
+  const pills = Array.from(list.querySelectorAll('.course-pill'));
 
-    function applyFilter(q){
-      q = q.trim().toLowerCase();
-      let visibleCount = 0;
-      pills.forEach(p => {
-        const match = !q || (p.dataset.courseSearch || '').indexOf(q) !== -1;
-        p.style.display = match ? '' : 'none';
-        if (match) visibleCount++;
-      });
-      if (emptyMsg) emptyMsg.style.display = (q && visibleCount === 0) ? 'block' : 'none';
-    }
-
-    inputs.forEach(input => {
-      input.addEventListener('input', function(){
-        inputs.forEach(other => { if (other !== input) other.value = input.value; });
-        applyFilter(input.value);
-      });
+  function applyFilter(q){
+    q = q.trim().toLowerCase();
+    let visibleCount = 0;
+    pills.forEach(p => {
+      const match = !q || (p.dataset.courseSearch || '').indexOf(q) !== -1;
+      p.style.display = match ? '' : 'none';
+      if (match) visibleCount++;
     });
-  })();
+    if (emptyMsg) emptyMsg.style.display = (q && visibleCount === 0) ? 'block' : 'none';
+  }
+
+  inputs.forEach(input => {
+    input.addEventListener('input', function(){
+      inputs.forEach(other => { if (other !== input) other.value = input.value; });
+      applyFilter(input.value);
+    });
+  });
+
+  forms.forEach(form => {
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      const input = form.querySelector('.search-input');
+      if (input) applyFilter(input.value);
+    });
+  });
+})();
 
   // ---------- Focus sprint timer (client-only, 25/5 Pomodoro) ----------
   (function(){

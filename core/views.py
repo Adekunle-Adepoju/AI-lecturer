@@ -4,6 +4,7 @@ from urllib import request
 import markdown
 import random
 from datetime import date, timedelta
+import re
 
 from django.contrib import messages
 from django.contrib.auth import login, logout
@@ -17,6 +18,7 @@ from google import genai
 from google.genai import types
 from django.http import StreamingHttpResponse
 from django.http import JsonResponse
+from django.db.models import F
 
 from .forms import SignupForm, OnboardingForm, ProfileEditForm, ElectiveSelectionForm
 from .models import (
@@ -24,7 +26,7 @@ from .models import (
     SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES, CourseDefinition, PastQuestion,
     
 )
-from .prompt import SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT
+from .prompt import SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, QUIZ_GENERATION_PROMPT
 from functools import wraps
 from .staff_forms import SlideUploadForm, CourseOutlineUploadForm, PastQuestionUploadForm, CourseDefinitionForm
 
@@ -33,6 +35,7 @@ from .staff_forms import SlideUploadForm, CourseOutlineUploadForm, PastQuestionU
 # ─── Gemini client ───────────────────────────────────────────────────────────────
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY_CHAT)
+IMAGE_MARKER_RE = re.compile(r'\[IMAGE:\s*(.*?)\]', re.IGNORECASE)
 
 def _build_history(topic_session):
     """Convert saved ChatMessages into Gemini content format."""
@@ -46,11 +49,21 @@ def _build_history(topic_session):
 def chat_message_view(request):
     topic_session_id = request.POST.get("topic_session_id")
     user_message = request.POST.get("message")
+    is_retry = request.POST.get("retry") == "true"
     topic_session = get_object_or_404(TopicSession, id=topic_session_id)
 
     is_start_trigger = (user_message == "__START__")
 
-    if not is_start_trigger:
+    if is_retry:
+        # Reuse the last saved user message instead of creating a new one —
+        # it was already saved before the previous Gemini call failed.
+        last_msg = topic_session.chatmessage_set.order_by("-created_at").first()
+        if last_msg and last_msg.role == "user":
+            user_message = last_msg.content
+        else:
+            is_retry = False  # nothing sensible to retry — fall back to normal flow
+
+    if not is_start_trigger and not is_retry:
         ChatMessage.objects.create(topic_session=topic_session, role="user", content=user_message)
 
     slide_context = ""
@@ -100,11 +113,28 @@ def chat_message_view(request):
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
             return
 
+        image_url = None
+        image_match = IMAGE_MARKER_RE.search(full_reply)
+        if image_match:
+            description = image_match.group(1).strip()
+            full_reply = IMAGE_MARKER_RE.sub("", full_reply)
+            if description:
+                try:
+                    from .lecture_images import generate_topic_image
+                    image_path = generate_topic_image(description, topic_session.session.course_code)
+                    if image_path:
+                        image_url = settings.MEDIA_URL + image_path
+                except Exception:
+                    import traceback
+                    traceback.print_exc()
+
         is_complete = "TOPIC_COMPLETE" in full_reply
         clean_reply = full_reply.replace("TOPIC_COMPLETE", "").strip()
-        ChatMessage.objects.create(topic_session=topic_session, role="ai", content=clean_reply)
+        ChatMessage.objects.create(
+            topic_session=topic_session, role="ai", content=clean_reply, image_url=image_url
+        )
 
-        yield f"data: {json.dumps({'done': True, 'topic_complete': is_complete})}\n\n"
+        yield f"data: {json.dumps({'done': True, 'topic_complete': is_complete, 'image_url': image_url})}\n\n"
 
     resp = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
     resp["Cache-Control"] = "no-cache"
@@ -502,6 +532,45 @@ def _parse_lecture(full_text):
         "explanation": explanation,
     }
 
+def _parse_quiz_json(text):
+    clean = text.replace("```json", "").replace("```", "").strip()
+    clean = clean.replace("\\*", "*").replace("\\%", "%")
+    start = clean.find("{")
+    end = clean.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        clean = clean[start:end + 1]
+
+    question = ""
+    options = ["Option A", "Option B", "Option C", "Option D"]
+    correct_index = 0
+    explanation = ""
+
+    try:
+        quiz_data = json.loads(clean)
+        question = quiz_data.get("question", "")
+        options = quiz_data.get("options", options)
+        correct_index = quiz_data.get("correct_index", 0)
+        explanation = quiz_data.get("explanation", "")
+    except json.JSONDecodeError:
+        q_match = re.search(r'"question"\s*:\s*"(.*?)"\s*,\s*"options"', clean, re.DOTALL)
+        if q_match:
+            question = q_match.group(1).strip()
+        opt_match = re.search(r'"options"\s*:\s*\[(.*?)\]', clean, re.DOTALL)
+        if opt_match:
+            found_opts = re.findall(r'"(.*?)"', opt_match.group(1))
+            if found_opts:
+                options = found_opts
+        idx_match = re.search(r'"correct_index"\s*:\s*(\d+)', clean)
+        if idx_match:
+            correct_index = int(idx_match.group(1))
+        exp_match = re.search(r'"explanation"\s*:\s*"(.*?)"\s*\}', clean, re.DOTALL)
+        if exp_match:
+            explanation = exp_match.group(1).strip()
+
+    if not question:
+        raise ValueError("No question could be parsed from quiz response")
+
+    return {"question": question, "options": options, "correct_index": correct_index, "explanation": explanation}
 
 # ─── Session ───────────────────────────────────────────────────────────────────
 
@@ -514,7 +583,16 @@ def session_view(request, course_code):
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
 
     if request.method == "GET":
-        topics = _get_topics_for_week(course_code, request.user.profile.level, entry.week_number)
+        existing_session = Session.objects.filter(
+            student=profile, course_code=course_code,
+            week_number=entry.week_number, is_complete=False,
+        ).first()
+        if existing_session:
+            # Already mid-week — resume straight into chat instead of
+            # showing the brief page and making them click Start again.
+            return _render_chat_session(request, entry, profile, existing_session)
+
+        topics = _get_topics_for_week(course_code, profile.level, entry.week_number)
         return render(request, "core/session.html", {
             "entry": entry,
             "chat_mode": False,
@@ -525,53 +603,16 @@ def session_view(request, course_code):
 
     if action == "start":
         existing_session = Session.objects.filter(
-            student=profile,
-            course_code=course_code,
-            week_number=entry.week_number,
-            is_complete=False,
+            student=profile, course_code=course_code,
+            week_number=entry.week_number, is_complete=False,
         ).first()
-
-        if existing_session:
-            current_index = existing_session.current_topic_index
-            topic_session = existing_session.topic_sessions.filter(
-                topic_index=current_index, is_complete=False,
-            ).first()
-            if not topic_session:
-                topic_session = TopicSession.objects.create(
-                    session=existing_session,
-                    topic_name=existing_session.topics[current_index],
-                    topic_index=current_index,
-                )
-        else:
+        if not existing_session:
             topics = _get_topics_for_week(course_code, profile.level, entry.week_number)
             existing_session = Session.objects.create(
-                student=profile,
-                course_code=course_code,
-                course_title=entry.course_title,
-                week_number=entry.week_number,
-                topics=topics,
-                current_topic_index=0,
+                student=profile, course_code=course_code, course_title=entry.course_title,
+                week_number=entry.week_number, topics=topics, current_topic_index=0,
             )
-            topic_session = TopicSession.objects.create(
-                session=existing_session,
-                topic_name=topics[0],
-                topic_index=0,
-            )
-
-        has_started_chat = topic_session.chatmessage_set.filter(role="ai").exists()
-        existing_messages = list(topic_session.chatmessage_set.order_by("created_at").values("role", "content"))
-
-        return render(request, "core/session.html", {
-            "entry": entry,
-            "session": existing_session,
-            "topic_session": topic_session,
-            "topic_number": topic_session.topic_index + 1,
-            "total_topics": len(existing_session.topics),
-            "topic_name": topic_session.topic_name,
-            "chat_mode": True,
-            "has_started_chat": has_started_chat,
-            "existing_messages_json": json.dumps(existing_messages),
-        })
+        return _render_chat_session(request, entry, profile, existing_session)
 
     if action == "show_lecture":
         topic_session_id = request.POST.get("topic_session_id")
@@ -724,6 +765,40 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
         "topic_name": topic_name,
     })
 
+def _render_chat_session(request, entry, profile, session):
+    """Render the live chat page for whichever topic is current, replaying
+    the FULL week's message history across all topics (not just this one)
+    so the chat reads as one continuous conversation, WhatsApp-style."""
+    current_index = session.current_topic_index
+    topic_session = session.topic_sessions.filter(
+        topic_index=current_index, is_complete=False,
+    ).first()
+    if not topic_session:
+        topic_session = TopicSession.objects.create(
+            session=session,
+            topic_name=session.topics[current_index],
+            topic_index=current_index,
+        )
+
+    has_started_chat = topic_session.chatmessage_set.filter(role="ai").exists()
+    existing_messages = list(
+        ChatMessage.objects.filter(topic_session__session=session)
+        .order_by("topic_session__topic_index", "created_at")
+        .values("role", "content", "image_url", topic_name=F("topic_session__topic_name"))
+    )
+
+    return render(request, "core/session.html", {
+        "entry": entry,
+        "session": session,
+        "topic_session": topic_session,
+        "topic_number": topic_session.topic_index + 1,
+        "total_topics": len(session.topics),
+        "topic_name": topic_session.topic_name,
+        "chat_mode": True,
+        "has_started_chat": has_started_chat,
+        "existing_messages_json": json.dumps(existing_messages),
+    })
+
 
 # ─── Quiz ──────────────────────────────────────────────────────────────────────
 
@@ -834,13 +909,11 @@ def next_topic_view(request):
 
     topic_session = get_object_or_404(TopicSession, id=topic_session_id, session__student=profile)
     session = topic_session.session
-    entry = get_object_or_404(TimetableEntry, student=profile, course_code=session.course_code)
 
     session.current_topic_index = next_index
     session.save()
 
-    topic_name = session.topics[next_index]
-    return _teach_topic(request, session, entry, profile, topic_name, next_index)
+    return redirect("session", course_code=session.course_code)
 
 
 # ─── Leaderboard ───────────────────────────────────────────────────────────────
@@ -1260,8 +1333,68 @@ def retry_slide_topics_view(request, slide_id):
 
     return redirect("staff_portal")
 
+@staff_required
+@require_POST
+def retry_outline_topics_view(request, outline_id):
+    """Retry AI topic parsing for a course outline that already has text saved."""
+    outline = get_object_or_404(CourseOutline, id=outline_id)
+
+    if not outline.extracted_text:
+        messages.warning(request, "Can't retry — no extracted text saved for this outline.")
+        return redirect("staff_portal")
+
+    try:
+        from .outline_parser import _parse_course_outline
+        _parse_course_outline(outline)
+        outline.refresh_from_db()
+        if outline.topics_json:
+            messages.success(request, "Outline topics parsed successfully.")
+        else:
+            messages.warning(request, "Retry ran but no topics were extracted — check the terminal for the underlying error.")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        messages.warning(request, f"Retry failed: {str(e)}")
+
+    return redirect("staff_portal")
+
 @require_POST
 def chat_next_topic_view(request):
     topic_session_id = request.POST.get("topic_session_id")
     topic_session = get_object_or_404(TopicSession, id=topic_session_id)
+
+    if not topic_session.quiz_question:
+        transcript = "\n".join(
+            f"{'Student' if m.role == 'user' else 'Rovea'}: {m.content}"
+            for m in topic_session.chatmessage_set.order_by("created_at")
+        )
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.7-flash",
+                contents=f"Topic taught: {topic_session.topic_name}\n\nCONVERSATION TRANSCRIPT:\n{transcript}",
+                config=types.GenerateContentConfig(
+                    system_instruction=QUIZ_GENERATION_PROMPT,
+                    max_output_tokens=1000,
+                ),
+            )
+            quiz_data = _parse_quiz_json(response.text)
+            topic_session.quiz_question = quiz_data["question"]
+            topic_session.quiz_options = quiz_data["options"]
+            topic_session.correct_answer_index = quiz_data["correct_index"]
+            topic_session.quiz_explanation = quiz_data["explanation"]
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            # Fallback so the quiz page is never blank, even if generation fails
+            topic_session.quiz_question = f"Which of the following best describes a key concept from '{topic_session.topic_name}'?"
+            topic_session.quiz_options = [
+                "A. The concept applies only in theory",
+                "B. The concept has direct practical applications",
+                "C. The concept is unrelated to engineering",
+                "D. The concept was recently discovered",
+            ]
+            topic_session.correct_answer_index = 1
+            topic_session.quiz_explanation = ""
+        topic_session.save()
+
     return JsonResponse({"redirect": f"/quiz/{topic_session.id}/"})

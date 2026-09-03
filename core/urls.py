@@ -36,4 +36,5 @@ urlpatterns = [
     path("course/<str:course_code>/outline/", views.course_outline_view, name="course_outline"),
     path("siwes/", views.siwes_view, name="siwes"),
     path("courses/manage/", views.manage_courses_view, name="manage_courses"),
+    path('staff/outlines/retry-topics/<int:outline_id>/', views.retry_outline_topics_view, name='retry_outline_topics'),
 ]

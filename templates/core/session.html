@@ -361,6 +361,10 @@
     html = html.replace(/\u0000MATH-(\d+)-\u0000/g, (_, i) => mathSpans[Number(i)]);
     return html;
   }
+  
+  function stripImageMarker(text) {
+  return text.replace(/\[IMAGE:.*?\]/gi, "");
+}
 
   // KaTeX only auto-renders document.body once, on initial page load (see base.html).
   // Chat bubbles are created afterwards, straight into the DOM via JS, so they were
@@ -405,11 +409,18 @@
     });
   }
 
-  async function sendMessage(message) {
-    if (message !== "__START__") {
+    async function sendMessage(message, options = {}) {
+    const { isRetry = false, skipUserBubble = false } = options;
+    if (message !== "__START__" && !skipUserBubble) {
       appendUserBubble(message);
     }
     const typingBubble = showTypingIndicator();
+
+    const bodyParts = [
+      `topic_session_id=${topicSessionId}`,
+      `message=${encodeURIComponent(message)}`,
+    ];
+    if (isRetry) bodyParts.push(`retry=true`);
 
     const response = await fetch("/chat/message/", {
       method: "POST",
@@ -417,9 +428,9 @@
         "Content-Type": "application/x-www-form-urlencoded",
         "X-CSRFToken": getCookie("csrftoken"),
       },
-      body: `topic_session_id=${topicSessionId}&message=${encodeURIComponent(message)}`,
+      body: bodyParts.join("&"),
     });
-
+    
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let aiBubble = null;
@@ -443,19 +454,26 @@
           return;
         }
 
-        if (payload.chunk) {
+          if (payload.chunk) {
           if (!aiBubble) {
             typingBubble.remove();
             aiBubble = createAiBubble();
           }
           rawText += payload.chunk;
-          aiBubble.textContent = rawText.replace("TOPIC_COMPLETE", "");
+          aiBubble.textContent = stripImageMarker(rawText.replace("TOPIC_COMPLETE", ""));
           scrollChatToBottom();
         }
 
         if (payload.done) {
-          aiBubble.innerHTML = renderMarkdown(rawText.replace("TOPIC_COMPLETE", ""));
+          aiBubble.innerHTML = renderMarkdown(stripImageMarker(rawText.replace("TOPIC_COMPLETE", "")));
           renderMathIn(aiBubble);
+          if (payload.image_url) {
+            const img = document.createElement("img");
+            img.src = payload.image_url;
+            img.alt = "Lecture illustration";
+            img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
+            aiBubble.appendChild(img);
+          }
           if (payload.topic_complete) {
             triggerQuizGeneration();
           } else {
@@ -490,21 +508,39 @@
   if (chatInput) chatInput.addEventListener("keydown", function(e){
     if (e.key === "Enter") { e.preventDefault(); sendTyped(); }
   });
-
+  
+  let lastRenderedTopic = null;
   document.addEventListener("DOMContentLoaded", function() {
     // Replay any existing conversation
     existingMessages.forEach(msg => {
+      if (msg.topic_name && msg.topic_name !== lastRenderedTopic) {
+        appendSystemBubble("— " + msg.topic_name + " —");
+        lastRenderedTopic = msg.topic_name;
+      }
       if (msg.role === "user") {
         appendUserBubble(msg.content);
       } else {
         const bubble = createAiBubble();
-        bubble.innerHTML = renderMarkdown(msg.content.replace("TOPIC_COMPLETE", ""));
+        bubble.innerHTML = renderMarkdown(stripImageMarker(msg.content.replace("TOPIC_COMPLETE", "")));
         renderMathIn(bubble);
+        if (msg.image_url) {
+          const img = document.createElement("img");
+          img.src = msg.image_url;
+          img.alt = "Lecture illustration";
+          img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
+          bubble.appendChild(img);
+        }
       }
     });
 
+    const lastMsg = existingMessages[existingMessages.length - 1];
+
     if (topicSessionId && !hasStartedChat) {
       sendMessage("__START__");
+    } else if (lastMsg && lastMsg.role === "user") {
+      // Last message never got an AI reply — likely a transient Gemini failure.
+      // Retry silently instead of making the student resend.
+      sendMessage(lastMsg.content, { isRetry: true, skipUserBubble: true });
     } else if (existingMessages.length > 0) {
       // Chat already in progress — show the understanding buttons again
       // so the student isn't stuck with no way to respond after a refresh
