@@ -1,0 +1,70 @@
+{% extends "core/base.html" %}
+{% block title %}Test Setup — Rovea{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <a href="{% url 'simulator_home' %}" style="font-size:13px; color:var(--text-secondary)">← Back to Simulator</a>
+
+  {% if mode == "auto" %}
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">📋 Test Week — {{ entry.course_code }}</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
+    This test covers everything you've studied in <strong>{{ entry.course_title }}</strong> from Weeks 1 to 6.
+    It is compulsory and cannot be skipped.
+  </p>
+  <div style="background:var(--navy-card); border:1px solid var(--border-accent); border-radius:var(--radius-xl); padding:1.5rem; margin-bottom:24px">
+    <div style="font-size:14px; color:var(--text-secondary); margin-bottom:8px">You will be tested on:</div>
+    <div style="font-weight:600; font-size:15px; color:var(--text)">{{ topic }}</div>
+  </div>
+  <form method="POST">
+    {% csrf_token %}
+    <input type="hidden" name="course_code" value="{{ entry.course_code }}">
+    <button type="submit" class="btn btn-primary btn-full">Begin Test →</button>
+  </form>
+
+  {% else %}
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">📝 Practice Test Setup</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">Pick a course and a specific topic to be tested on.</p>
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="message" style="margin-bottom:16px">{{ message }}</div>
+  {% endfor %}
+  {% endif %}
+
+  <form method="GET" action="" style="margin-bottom:20px">
+    <div class="form-group">
+      <label>Select Course</label>
+      <select name="course_code" onchange="this.form.submit()">
+        <option value="">— Pick a course —</option>
+        {% for entry in timetable %}
+        <option value="{{ entry.course_code }}" {% if entry.course_code == selected_code %}selected{% endif %}>
+          {{ entry.course_code }} — {{ entry.course_title }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  {% if selected_code and available_topics %}
+  <form method="POST">
+    {% csrf_token %}
+    <input type="hidden" name="course_code" value="{{ selected_code }}">
+    <div class="form-group">
+      <label>Select Topic</label>
+      <select name="topic" required>
+        <option value="">— Pick a topic —</option>
+        {% for topic in available_topics %}
+        <option value="{{ topic }}">{{ topic }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary btn-full" style="margin-top:8px">Generate Test →</button>
+  </form>
+  {% elif selected_code %}
+  <p style="color:var(--text-muted); font-size:13px">No topics found for this course yet — complete at least one lecture session first.</p>
+  {% endif %}
+  {% endif %}
+
+</div>
+{% endblock %}

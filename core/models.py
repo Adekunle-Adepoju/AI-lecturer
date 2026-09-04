@@ -471,6 +471,57 @@ class Exam(models.Model):
     def __str__(self):
         return f"{self.student.user.username} — {self.course_code} Exam (Week {self.week_triggered})"
 
+class SimulatorTest(models.Model):
+    """Student-initiated or auto-triggered test from the simulator"""
+    MODE_CHOICES = [
+        ("auto", "Automatic Test Week"),
+        ("voluntary", "Voluntary Practice Test"),
+    ]
+    FORMAT_CHOICES = [
+        ("mcq", "Multiple Choice"),
+        ("theory", "Theory / Calculation"),
+        ("mixed", "Mixed"),
+    ]
+    STATUS_CHOICES = [
+        ("in_progress", "In Progress"),
+        ("complete", "Complete"),
+    ]
+
+    student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="simulator_tests")
+    course_code = models.CharField(max_length=10)
+    course_title = models.CharField(max_length=100)
+    topic = models.CharField(max_length=200, blank=True)
+    mode = models.CharField(max_length=10, choices=MODE_CHOICES, default="voluntary")
+    question_format = models.CharField(max_length=10, choices=FORMAT_CHOICES, default="theory")
+    week_number = models.IntegerField(default=1)
+
+    # Questions stored as JSON list
+    # For MCQ: [{question, options, correct_index, explanation}]
+    # For theory/calc: [{question, marks, model_answer}]
+    questions = models.JSONField(default=list)
+
+    # Student's answers — list matching questions order
+    # For MCQ: list of chosen indices
+    # For theory: list of typed strings
+    answers = models.JSONField(default=list)
+
+    # Grading
+    ai_feedback = models.JSONField(default=list)   # per-question feedback from AI
+    overall_feedback = models.TextField(blank=True)
+    percentage_score = models.FloatField(default=0)
+    xp_earned = models.IntegerField(default=0)
+    grade = models.CharField(max_length=2, blank=True)
+
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default="in_progress")
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self):
+        return f"{self.student.user.username} — {self.course_code} {self.mode} test"
+
 
 class Challenge(models.Model):
     STATUS_CHOICES = [

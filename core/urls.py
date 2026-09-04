@@ -38,4 +38,10 @@ urlpatterns = [
     path("siwes/", views.siwes_view, name="siwes"),
     path("courses/manage/", views.manage_courses_view, name="manage_courses"),
     path('staff/outlines/retry-topics/<int:outline_id>/', views.retry_outline_topics_view, name='retry_outline_topics'),
+    path('staff/courses/bulk-delete/', views.staff_bulk_delete_courses_view, name='staff_bulk_delete_courses'),
+    path("simulator/", views.simulator_home_view, name="simulator_home"),
+    path("simulator/setup/<str:mode>/", views.simulator_setup_view, name="simulator_setup"),
+    path("simulator/test/<int:test_id>/", views.simulator_test_view, name="simulator_test"),
+    path("simulator/grade/<int:test_id>/", views.simulator_grade_view, name="simulator_grade"),
+    path("simulator/result/<int:test_id>/", views.simulator_result_view, name="simulator_result"),
 ]

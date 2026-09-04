@@ -1,0 +1,68 @@
+{% extends "core/base.html" %}
+{% block title %}Test Result — Rovea{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <!-- Score card -->
+  <div class="done-card" style="{% if test.grade == 'A' %}background:var(--teal-glow); border-color:rgba(26,158,122,0.3){% elif test.grade == 'F' %}background:var(--red-glow); border-color:var(--red-soft){% else %}background:var(--amber-glow); border-color:var(--border-accent){% endif %}">
+    <span class="done-emoji">{% if test.grade == 'A' %}🏆{% elif test.grade == 'B' %}👍{% elif test.grade == 'C' %}💪{% else %}📚{% endif %}</span>
+    <div class="done-title" style="{% if test.grade == 'F' %}color:#F08080{% elif test.grade != 'A' %}color:var(--amber){% endif %}">
+      {{ test.percentage_score }}% — Grade {{ test.grade }}
+    </div>
+    <div class="done-sub">{{ test.course_code }} · {{ test.topic }}</div>
+    <div style="margin-top:12px">
+      <span class="xp-badge">+{{ test.xp_earned }} XP earned</span>
+    </div>
+  </div>
+
+  <!-- AI overall feedback -->
+  <div style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-xl); padding:1.25rem 1.5rem; margin-bottom:24px">
+    <div style="font-size:12px; font-weight:700; color:var(--amber); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:10px">Rovea's Feedback</div>
+    <p style="font-size:14px; line-height:1.75; color:var(--text)">{{ test.overall_feedback }}</p>
+  </div>
+
+  <!-- Per-question breakdown -->
+  <p class="section-label">Question Breakdown</p>
+  {% for q, feedback in questions_with_feedback %}
+  <div style="background:var(--navy-card); border:1px solid {% if feedback.correct %}rgba(26,158,122,0.3){% else %}rgba(224,82,82,0.3){% endif %}; border-radius:var(--radius-xl); padding:1.25rem 1.5rem; margin-bottom:12px">
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px">
+      <span style="font-size:12px; font-weight:700; color:var(--text-muted)">Question {{ forloop.counter }}</span>
+      <div style="display:flex; align-items:center; gap:8px">
+        <span style="font-size:13px; font-weight:700; color:{% if feedback.correct %}var(--green-text){% else %}#F08080{% endif %}">
+          {{ feedback.score }}/{{ feedback.total_marks }} marks
+        </span>
+        {% if feedback.correct %}
+        <span class="badge badge-green">✓ Correct</span>
+        {% else %}
+        <span class="badge" style="background:var(--red-glow); color:#F08080; border:1px solid rgba(224,82,82,0.25)">✗ Incorrect</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <p style="font-size:14px; font-weight:600; color:var(--text); margin-bottom:10px">{{ q.question }}</p>
+
+    {% if test.question_format != "mcq" and q.model_answer %}
+    <div style="background:var(--navy); border-left:3px solid var(--amber); padding:10px 14px; border-radius:0 var(--radius-sm) var(--radius-sm) 0; margin-bottom:10px">
+      <div style="font-size:11px; font-weight:700; color:var(--amber); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em">Model Answer</div>
+      <p style="font-size:13px; color:var(--text-secondary); line-height:1.7; white-space:pre-wrap">{{ q.model_answer }}</p>
+    </div>
+    {% endif %}
+
+    <div style="background:{% if feedback.correct %}var(--teal-glow){% else %}var(--red-glow){% endif %}; border-radius:var(--radius-sm); padding:10px 14px">
+      <p style="font-size:13px; color:{% if feedback.correct %}var(--green-text){% else %}#F08080{% endif %}; line-height:1.65">
+        {{ feedback.feedback }}
+      </p>
+    </div>
+
+  </div>
+  {% endfor %}
+
+  <div style="display:flex; gap:12px; margin-top:24px">
+    <a href="{% url 'simulator_home' %}" class="btn btn-primary" style="flex:1; text-align:center">Back to Simulator</a>
+    <a href="{% url 'dashboard' %}" class="btn btn-white-outline" style="flex:1; text-align:center">Dashboard</a>
+  </div>
+
+</div>
+{% endblock %}

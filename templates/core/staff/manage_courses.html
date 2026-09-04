@@ -32,39 +32,99 @@
     <button type="submit" class="btn btn-primary" style="margin-top:16px">Add Course →</button>
   </form>
 
-  <!-- Course list -->
-  <p class="section-label">All Courses ({{ courses.count }})</p>
-  <div class="course-list">
-    {% for course in courses %}
-    <div class="course-pill" style="cursor:default; display:flex; justify-content:space-between; align-items:center;">
-      <div>
-        <div class="course-name">
-          {{ course.course_code }} — {{ course.course_title }}
-          {% if course.is_elective %}
-          <span class="badge badge-amber" style="margin-left:8px">Elective</span>
-          {% else %}
-          <span class="badge badge-green" style="margin-left:8px">Compulsory</span>
-          {% endif %}
-        </div>
-        <div class="course-code">Level {{ course.level }} · Semester {{ course.semester }} · {{ course.units }} units</div>
-      </div>
-      <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
-        <a href="{% url 'staff_edit_course' course.id %}" class="btn" style="font-size:12px; padding:6px 12px;">
-          ✏️ Edit
-        </a>
-        <form method="POST" action="{% url 'staff_delete_course' course.id %}" style="margin:0">
-          {% csrf_token %}
-          <button type="submit" class="btn" style="font-size:12px; padding:6px 12px; background:var(--red-glow); color:#F08080; border-color:var(--red-soft);"
-                  onclick="return confirm('Delete {{ course.course_code }}?')">
-            🗑️ Delete
-          </button>
-        </form>
-      </div>
+  <!-- Bulk delete form wraps the entire course list -->
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px">
+    <p class="section-label" style="margin:0">All Courses ({{ courses.count }})</p>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button type="button" class="btn" style="font-size:12px; padding:6px 12px;" onclick="toggleSelectAll()">
+        Select All
+      </button>
+      <button type="button" class="btn" style="font-size:12px; padding:6px 12px; background:var(--red-glow); color:#F08080; border-color:var(--red-soft);"
+              onclick="submitBulkDelete()">
+        🗑️ Delete Selected
+      </button>
     </div>
-    {% empty %}
-    <p style="color:var(--text-muted); font-size:13px">No courses defined yet.</p>
-    {% endfor %}
   </div>
 
+  <form id="bulkDeleteForm" method="POST" action="{% url 'staff_bulk_delete_courses' %}">
+    {% csrf_token %}
+    <input type="hidden" name="scroll_position" id="scrollPositionInput" value="0">
+    <div class="course-list">
+      {% for course in courses %}
+      <div class="course-pill" style="cursor:default; display:flex; justify-content:space-between; align-items:center;" id="course-row-{{ course.id }}">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <input type="checkbox" name="course_ids" value="{{ course.id }}"
+                 style="width:16px; height:16px; accent-color:var(--amber); cursor:pointer; flex-shrink:0;">
+          <div>
+            <div class="course-name">
+              {{ course.course_code }} — {{ course.course_title }}
+              {% if course.is_elective %}
+              <span class="badge badge-amber" style="margin-left:8px">Elective</span>
+              {% else %}
+              <span class="badge badge-green" style="margin-left:8px">Compulsory</span>
+              {% endif %}
+            </div>
+            <div class="course-code">Level {{ course.level }} · Semester {{ course.semester }} · {{ course.units }} units</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+          <a href="{% url 'staff_edit_course' course.id %}" class="btn" style="font-size:12px; padding:6px 12px;">
+            ✏️ Edit
+          </a>
+          <button type="button" class="btn"
+                  style="font-size:12px; padding:6px 12px; background:var(--red-glow); color:#F08080; border-color:var(--red-soft);"
+                  onclick="deleteSingle('{{ course.id }}', '{{ course.course_code }}')">
+            🗑️ Delete
+          </button>
+        </div>
+      </div>
+      {% empty %}
+      <p style="color:var(--text-muted); font-size:13px">No courses defined yet.</p>
+      {% endfor %}
+    </div>
+  </form>
+
 </div>
+
+<script>
+  // Restore scroll position after page reload
+  window.addEventListener('load', function () {
+    const saved = sessionStorage.getItem('manage_courses_scroll');
+    if (saved) {
+      window.scrollTo(0, parseInt(saved));
+      sessionStorage.removeItem('manage_courses_scroll');
+    }
+  });
+
+  function saveScrollAndSubmit(form) {
+    sessionStorage.setItem('manage_courses_scroll', window.scrollY);
+    form.submit();
+  }
+
+  function deleteSingle(courseId, courseCode) {
+    if (!confirm('Delete ' + courseCode + '?')) return;
+    const form = document.getElementById('bulkDeleteForm');
+    // Uncheck all, then check just this one
+    document.querySelectorAll('input[name="course_ids"]').forEach(cb => cb.checked = false);
+    document.querySelector('input[name="course_ids"][value="' + courseId + '"]').checked = true;
+    saveScrollAndSubmit(form);
+  }
+
+  function submitBulkDelete() {
+    const checked = document.querySelectorAll('input[name="course_ids"]:checked');
+    if (checked.length === 0) {
+      alert('Select at least one course to delete.');
+      return;
+    }
+    if (!confirm('Delete ' + checked.length + ' selected course(s)? This cannot be undone.')) return;
+    saveScrollAndSubmit(document.getElementById('bulkDeleteForm'));
+  }
+
+  let allSelected = false;
+  function toggleSelectAll() {
+    allSelected = !allSelected;
+    document.querySelectorAll('input[name="course_ids"]').forEach(cb => cb.checked = allSelected);
+    event.target.textContent = allSelected ? 'Deselect All' : 'Select All';
+  }
+</script>
 {% endblock %}
