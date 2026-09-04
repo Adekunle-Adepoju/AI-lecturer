@@ -7,7 +7,7 @@
   <a href="{% url 'staff_portal' %}" style="font-size:13px; color:var(--text-secondary)">← Back to portal</a>
 
   <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">📚 Manage Courses</h2>
-  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">Add or remove course definitions.</p>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">Add, edit or remove course definitions.</p>
 
   {% if messages %}
   {% for message in messages %}
@@ -36,7 +36,7 @@
   <p class="section-label">All Courses ({{ courses.count }})</p>
   <div class="course-list">
     {% for course in courses %}
-    <div class="course-pill" style="cursor:default">
+    <div class="course-pill" style="cursor:default; display:flex; justify-content:space-between; align-items:center;">
       <div>
         <div class="course-name">
           {{ course.course_code }} — {{ course.course_title }}
@@ -48,13 +48,18 @@
         </div>
         <div class="course-code">Level {{ course.level }} · Semester {{ course.semester }} · {{ course.units }} units</div>
       </div>
-      <form method="POST" action="{% url 'staff_delete_course' course.id %}">
-        {% csrf_token %}
-        <button type="submit" style="background:none; border:none; color:var(--red-soft); cursor:pointer; font-size:13px"
-                onclick="return confirm('Delete {{ course.course_code }}?')">
-          Delete
-        </button>
-      </form>
+      <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+        <a href="{% url 'staff_edit_course' course.id %}" class="btn" style="font-size:12px; padding:6px 12px;">
+          ✏️ Edit
+        </a>
+        <form method="POST" action="{% url 'staff_delete_course' course.id %}" style="margin:0">
+          {% csrf_token %}
+          <button type="submit" class="btn" style="font-size:12px; padding:6px 12px; background:var(--red-glow); color:#F08080; border-color:var(--red-soft);"
+                  onclick="return confirm('Delete {{ course.course_code }}?')">
+            🗑️ Delete
+          </button>
+        </form>
+      </div>
     </div>
     {% empty %}
     <p style="color:var(--text-muted); font-size:13px">No courses defined yet.</p>

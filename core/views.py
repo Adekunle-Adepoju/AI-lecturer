@@ -1242,6 +1242,23 @@ def staff_manage_courses_view(request):
         "courses": courses,
     })
 
+@staff_required
+def staff_edit_course_view(request, course_id):
+    course = get_object_or_404(CourseDefinition, id=course_id)
+    if request.method == "POST":
+        form = CourseDefinitionForm(request.POST, instance=course)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"{course.course_code} updated successfully.")
+            return redirect("staff_manage_courses")
+    else:
+        form = CourseDefinitionForm(instance=course)
+
+    return render(request, "core/staff/edit_course.html", {
+        "form": form,
+        "course": course,
+    })
+
 
 @staff_required
 def staff_delete_course_view(request, course_id):

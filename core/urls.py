@@ -25,6 +25,7 @@ urlpatterns = [
     path("staff/outline/upload/", views.staff_upload_outline_view, name="staff_upload_outline"),
     path("staff/past-questions/upload/", views.staff_upload_past_questions_view, name="staff_upload_past_questions"),
     path("staff/courses/", views.staff_manage_courses_view, name="staff_manage_courses"),
+    path('staff/courses/edit/<int:course_id>/', views.staff_edit_course_view, name='staff_edit_course'),
     path("staff/courses/delete/<int:course_id>/", views.staff_delete_course_view, name="staff_delete_course"),
     path('staff/slides/delete/<int:slide_id>/', views.delete_slide, name='delete_slide'),
     path('staff/slides/retry-topics/<int:slide_id>/', views.retry_slide_topics_view, name='retry_slide_topics'),

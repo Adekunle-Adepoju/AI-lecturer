@@ -1,0 +1,42 @@
+{% extends "core/base.html" %}
+{% block title %}Edit {{ course.course_code }} — Rovea{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <a href="{% url 'staff_manage_courses' %}" style="font-size:13px; color:var(--text-secondary)">← Back to courses</a>
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">✏️ Edit Course</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
+    Editing <strong>{{ course.course_code }} — {{ course.course_title }}</strong>
+  </p>
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="message" style="margin-bottom:16px">{{ message }}</div>
+  {% endfor %}
+  {% endif %}
+
+  <form method="POST" style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+    {% csrf_token %}
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+      {% for field in form %}
+      <div style="{% if field.field.widget.input_type == 'checkbox' %}grid-column:1/-1{% endif %}">
+        <label style="display:block; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em">
+          {{ field.label }}
+        </label>
+        {{ field }}
+        {% if field.errors %}
+        <div style="color:var(--red-soft); font-size:12px; margin-top:4px">{{ field.errors.0 }}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <div style="display:flex; gap:12px; margin-top:20px">
+      <button type="submit" class="btn btn-primary">Save Changes →</button>
+      <a href="{% url 'staff_manage_courses' %}" class="btn btn-white-outline">Cancel</a>
+    </div>
+  </form>
+
+</div>
+{% endblock %}
