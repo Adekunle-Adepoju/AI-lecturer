@@ -44,4 +44,7 @@ urlpatterns = [
     path("simulator/test/<int:test_id>/", views.simulator_test_view, name="simulator_test"),
     path("simulator/grade/<int:test_id>/", views.simulator_grade_view, name="simulator_grade"),
     path("simulator/result/<int:test_id>/", views.simulator_result_view, name="simulator_result"),
+    path("staff/lessons/generate/", views.staff_pregeneerate_lessons_view, name="staff_pregenerate_lessons"),
+    path("staff/lessons/publish/<int:lesson_id>/", views.staff_publish_lesson_view, name="staff_publish_lesson"),
+    path("staff/lessons/delete/<int:lesson_id>/", views.staff_delete_lesson_view, name="staff_delete_lesson"),
 ]

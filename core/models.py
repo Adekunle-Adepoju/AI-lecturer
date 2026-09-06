@@ -263,6 +263,26 @@ class CourseDefinition(models.Model):
         tag = "Elective" if self.is_elective else "Compulsory"
         return f"{self.course_code} — {self.course_title} ({tag})"
 
+class PreGeneratedLesson(models.Model):
+    course = models.ForeignKey(
+        CourseDefinition,
+        on_delete=models.CASCADE,
+        related_name="lessons"
+    )
+    week_number = models.IntegerField()
+    topic_title = models.CharField(max_length=200)
+    content_chunk = models.TextField()
+    is_published = models.BooleanField(default=False)
+    generated_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["week_number", "topic_title"]
+        unique_together = ["course", "week_number", "topic_title"]
+
+    def __str__(self):
+        return f"{self.course.course_code} — Week {self.week_number} — {self.topic_title}"
+
 
 class StudentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
@@ -282,6 +302,8 @@ class StudentProfile(models.Model):
     streak = models.IntegerField(default=0)
     last_session_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    queue_position = models.IntegerField(default=0)
+    queue_date = models.DateField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.user.username} — {self.level}L"
@@ -295,7 +317,7 @@ class TimetableEntry(models.Model):
     day = models.CharField(max_length=3, choices=DAYS)
     time = models.CharField(max_length=10, default="09:00")
     week_number = models.IntegerField(default=1)
-    total_weeks = models.IntegerField(default=15)
+    total_weeks = models.IntegerField(default=10)
     is_completed = models.BooleanField(default=False)
     is_missed = models.BooleanField(default=False)
     rescheduled_to = models.DateField(null=True, blank=True)
@@ -340,6 +362,7 @@ class TopicSession(models.Model):
     passed_quiz = models.BooleanField(default=False)
     xp_earned = models.IntegerField(default=0)
     is_complete = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["topic_index"]
@@ -358,7 +381,8 @@ class ChatMessage(models.Model):
     )
     role = models.CharField(max_length=10, choices=ROLE_CHOICES)
     content = models.TextField()
-    image_url = models.URLField(blank=True, null=True)   # ← new
+    image_url = models.URLField(blank=True, null=True)
+    is_pregenerated = models.BooleanField(default=False)   # ← new
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -384,6 +408,20 @@ class SlideDocument(models.Model):
 
     def __str__(self):
         return f"{self.course_code} — Slide Document"
+
+class SlideChunk(models.Model):
+    """One week's worth of slide content, split out from the full transcript
+    so lecture generation only receives what's relevant to that week."""
+    slide = models.ForeignKey(SlideDocument, on_delete=models.CASCADE, related_name="chunks")
+    week_number = models.IntegerField()
+    chunk_text = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["week_number"]
+        unique_together = ["slide", "week_number"]
+
+    def __str__(self):
+        return f"{self.slide.course_code} — Week {self.week_number} chunk"
 
 
 class CourseOutline(models.Model):

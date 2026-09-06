@@ -1,0 +1,93 @@
+{% extends "core/base.html" %}
+{% block title %}Pre-Generate Lessons — Rovea{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <a href="{% url 'staff_portal' %}" style="font-size:13px; color:var(--text-secondary)">← Back to portal</a>
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">⚡ Pre-Generate Lessons</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
+    Generate lecture content ahead of time. Students read from the database instantly — no live API calls during sessions.
+  </p>
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="message {{ message.tags }}" style="margin-bottom:12px">{{ message }}</div>
+  {% endfor %}
+  {% endif %}
+
+  <!-- Generation form -->
+  <p class="section-label">Generate New Lessons</p>
+  <form method="POST" style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; margin-bottom:32px">
+    {% csrf_token %}
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px">
+      <div>
+        <label style="display:block; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em">Course</label>
+        <select name="course_id" required>
+          <option value="">— Select a course —</option>
+          {% for course in courses %}
+          <option value="{{ course.id }}">{{ course.course_code }} — {{ course.course_title }} (Level {{ course.level }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="display:block; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em">Week Number</label>
+        <select name="week_number" required>
+          {% for week in week_range %}
+          <option value="{{ week }}">Week {{ week }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div style="background:var(--amber-glow); border:1px solid var(--border-accent); border-radius:var(--radius-md); padding:12px 16px; margin-bottom:16px; font-size:13px; color:var(--amber)">
+      ⚠️ This will call the Gemini API once per topic (usually 3 topics per week). Already-published lessons will be skipped. Review generated content before publishing.
+    </div>
+    <button type="submit" class="btn btn-primary">⚡ Generate Lessons →</button>
+  </form>
+
+  <!-- Existing lessons -->
+  <p class="section-label">Generated Lessons ({{ lessons.count }})</p>
+
+  {% if lessons %}
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    {% for lesson in lessons %}
+    <div style="background:var(--navy-card); border:1px solid {% if lesson.is_published %}rgba(26,158,122,0.3){% else %}var(--border){% endif %}; border-radius:var(--radius-lg); padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+      <div>
+        <div style="font-size:14px; font-weight:600; color:var(--text)">
+          {{ lesson.course.course_code }} — Week {{ lesson.week_number }} — {{ lesson.topic_title }}
+        </div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:3px">
+          Generated {{ lesson.generated_at|date:"d M Y H:i" }} ·
+          {{ lesson.content_chunk|length }} characters
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+        {% if lesson.is_published %}
+        <span class="badge badge-green">✓ Published</span>
+        {% else %}
+        <span class="badge" style="background:var(--amber-glow); color:var(--amber); border:1px solid rgba(245,166,35,0.25);">Draft</span>
+        {% endif %}
+        <form method="POST" action="{% url 'staff_publish_lesson' lesson.id %}" style="margin:0">
+          {% csrf_token %}
+          <button type="submit" class="btn" style="font-size:12px; padding:6px 12px;">
+            {% if lesson.is_published %}Unpublish{% else %}Publish{% endif %}
+          </button>
+        </form>
+        <form method="POST" action="{% url 'staff_delete_lesson' lesson.id %}" style="margin:0">
+          {% csrf_token %}
+          <button type="submit" class="btn" style="font-size:12px; padding:6px 12px; background:var(--red-glow); color:#F08080; border-color:var(--red-soft);"
+                  onclick="return confirm('Delete this lesson?')">
+            🗑️
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:var(--text-muted); font-size:13px">No lessons generated yet. Use the form above to generate your first batch.</p>
+  {% endif %}
+
+</div>
+{% endblock %}

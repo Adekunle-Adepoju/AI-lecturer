@@ -6,7 +6,7 @@ from .models import (
 from .outline_parser import _parse_course_outline
 from .past_question_parser import _parse_past_question_file
 from .slide_topic_extractor import _parse_slide_document
-
+from .models import PreGeneratedLesson, SlideChunk
 
 @admin.register(StudentProfile)
 class StudentProfileAdmin(admin.ModelAdmin):
@@ -51,6 +51,17 @@ class SlideDocumentAdmin(admin.ModelAdmin):
         except Exception as e:
             self.message_user(request, f"File saved but parsing failed: {str(e)}", level="warning")
 
+@admin.register(SlideChunk)
+class SlideChunkAdmin(admin.ModelAdmin):
+    list_display = ["slide", "week_number", "chunk_preview"]
+    list_filter = ["slide__course_code", "week_number"]
+    search_fields = ["slide__course_code", "slide__course_title"]
+    readonly_fields = ["slide", "week_number"]
+
+    def chunk_preview(self, obj):
+        return obj.chunk_text[:80] + "..." if len(obj.chunk_text) > 80 else obj.chunk_text
+    chunk_preview.short_description = "Preview"
+
 
 @admin.register(CourseOutline)
 class CourseOutlineAdmin(admin.ModelAdmin):
@@ -88,3 +99,11 @@ class CourseDefinitionAdmin(admin.ModelAdmin):
     list_filter = ["level", "semester", "is_elective", "school", "department"]
     search_fields = ["course_code", "course_title"]
     list_editable = ["is_elective"]
+
+@admin.register(PreGeneratedLesson)
+class PreGeneratedLessonAdmin(admin.ModelAdmin):
+    list_display = ["course", "week_number", "topic_title", "is_published", "generated_at"]
+    list_filter = ["course", "week_number", "is_published"]
+    search_fields = ["course__course_code", "topic_title"]
+    list_editable = ["is_published"]
+    readonly_fields = ["generated_at", "updated_at"]

@@ -1,7 +1,7 @@
 import os
 
 
-def extract_text_via_vision(file_path, course_code="", max_pages=5):
+def extract_text_via_vision(file_path, course_code="", batch_size=15):
     import fitz
     import tempfile
     import time
@@ -17,74 +17,83 @@ def extract_text_via_vision(file_path, course_code="", max_pages=5):
 
     doc = fitz.open(file_path)
     total_pages = len(doc)
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
-        temp_path = temp_pdf.name
-
-    if total_pages > max_pages:
-        print(f"[{course_code}] {total_pages} pages — trimming to {max_pages}.")
-        trimmed = fitz.open()
-        trimmed.insert_pdf(doc, from_page=0, to_page=max_pages - 1)
-        trimmed.save(temp_path)
-        trimmed.close()
-    else:
-        doc.save(temp_path)
     doc.close()
 
-    gemini_file = None
-    transcription = ""
+    print(f"[{course_code}] {total_pages} pages total — transcribing in batches of {batch_size}.")
 
-    try:
-        # Upload with retry
-        for attempt in range(3):
-            try:
-                print(f"[{course_code}] Upload attempt {attempt + 1}...")
-                with open(temp_path, "rb") as f:
-                    gemini_file = client.files.upload(file=f, config={"mime_type": "application/pdf"})
-                print(f"[{course_code}] Upload successful.")
-                break
-            except Exception as e:
-                print(f"[{course_code}] Upload attempt {attempt + 1} failed: {e}")
-                if attempt < 2:
-                    time.sleep(3)
-                else:
-                    raise
+    transcript_parts = []
 
-        print(f"[{course_code}] Transcribing...")
+    for batch_start in range(0, total_pages, batch_size):
+        batch_end = min(batch_start + batch_size, total_pages) - 1
+        print(f"[{course_code}] Batch pages {batch_start + 1}-{batch_end + 1}...")
 
-        for model in ["gemini-3.6-flash", "gemini-3.7-flash"]:
-            try:
-                response = client.models.generate_content(
-                    model=model,
-                    contents=[
-                        gemini_file,
-                        "Transcribe all text and handwriting in this document exactly as written, "
-                        "page by page, including formulas, headings, and diagram labels. "
-                        "Preserve structure with line breaks. Mark each page as '--- Page N ---'. "
-                        "For handwritten formulas, use plain text math notation. "
-                        "Do not summarize or explain — transcribe only.",
-                    ],
-                    config=types.GenerateContentConfig(max_output_tokens=8000),
-                )
-                transcription = response.text.strip()
-                print(f"[{course_code}] Transcription done using {model} ({len(transcription)} chars).")
-                break
-            except Exception as e:
-                print(f"[{course_code}] Model {model} failed: {e}. Trying next...")
+        doc = fitz.open(file_path)
+        batch_doc = fitz.open()
+        batch_doc.insert_pdf(doc, from_page=batch_start, to_page=batch_end)
+        doc.close()
 
-        if not transcription:
-            raise RuntimeError("All vision models failed to transcribe the document.")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+            temp_path = temp_pdf.name
+        batch_doc.save(temp_path)
+        batch_doc.close()
 
-    finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        if gemini_file:
-            try:
-                client.files.delete(name=gemini_file.name)
-            except Exception as e:
-                print(f"[{course_code}] Could not delete remote file: {e}")
+        gemini_file = None
+        batch_text = ""
 
-    return transcription
+        try:
+            for attempt in range(3):
+                try:
+                    with open(temp_path, "rb") as f:
+                        gemini_file = client.files.upload(file=f, config={"mime_type": "application/pdf"})
+                    break
+                except Exception as e:
+                    print(f"[{course_code}] Batch upload attempt {attempt + 1} failed: {e}")
+                    if attempt < 2:
+                        time.sleep(3)
+                    else:
+                        raise
+
+            for model in ["gemini-3.6-flash", "gemini-3.7-flash"]:
+                try:
+                    response = client.models.generate_content(
+                        model=model,
+                        contents=[
+                            gemini_file,
+                            f"Transcribe all text and handwriting in this document exactly as written, "
+                            f"page by page, including formulas, headings, and diagram labels. "
+                            f"Preserve structure with line breaks. Mark each page as '--- Page N ---', "
+                            f"using the ACTUAL page number in the full document (this batch starts at "
+                            f"page {batch_start + 1}). For handwritten formulas, use plain text math "
+                            f"notation. Do not summarize or explain — transcribe only.",
+                        ],
+                        config=types.GenerateContentConfig(max_output_tokens=8000),
+                    )
+                    batch_text = response.text.strip()
+                    print(f"[{course_code}] Batch done using {model} ({len(batch_text)} chars).")
+                    break
+                except Exception as e:
+                    print(f"[{course_code}] Model {model} failed on batch: {e}. Trying next...")
+
+            if not batch_text:
+                print(f"[{course_code}] WARNING: batch pages {batch_start + 1}-{batch_end + 1} produced no text.")
+
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            if gemini_file:
+                try:
+                    client.files.delete(name=gemini_file.name)
+                except Exception as e:
+                    print(f"[{course_code}] Could not delete remote batch file: {e}")
+
+        transcript_parts.append(batch_text)
+
+    full_transcript = "\n\n".join(transcript_parts)
+    if not full_transcript.strip():
+        raise RuntimeError("All batches failed to transcribe the document.")
+
+    print(f"[{course_code}] Full transcription complete: {len(full_transcript)} chars across {total_pages} pages.")
+    return full_transcript
 
 
 def extract_text_from_slide(file_path, course_code=""):

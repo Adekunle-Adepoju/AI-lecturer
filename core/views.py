@@ -5,6 +5,8 @@ import markdown
 import random
 from datetime import date, timedelta
 import re
+import math
+import time
 
 from django.contrib import messages
 from django.contrib.auth import login, logout
@@ -23,13 +25,12 @@ from django.db.models import F
 from .forms import SignupForm, OnboardingForm, ProfileEditForm, ElectiveSelectionForm
 from .models import (
     StudentProfile, TimetableEntry, Session, TopicSession, ChatMessage,
-    SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES, CourseDefinition, PastQuestion,
-    
+    SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES, CourseDefinition,
+    PastQuestion, SimulatorTest, PreGeneratedLesson,   
 )
 from .prompt import SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, QUIZ_GENERATION_PROMPT
 from functools import wraps
 from .staff_forms import SlideUploadForm, CourseOutlineUploadForm, PastQuestionUploadForm, CourseDefinitionForm
-from .models import SimulatorTest
 from .prompt import SIMULATOR_QUESTION_PROMPT, SIMULATOR_GRADING_PROMPT, SIMULATOR_OVERALL_FEEDBACK_PROMPT
 
 
@@ -49,35 +50,87 @@ def _build_history(topic_session):
         history.append({"role": role, "parts": [{"text": msg.content}]})
     return history
 
+def _check_daily_message_cap(topic_session, cap=10):
+    """Returns True if the student has hit their daily message cap."""
+    student = topic_session.session.student
+    today = date.today()
+    count = ChatMessage.objects.filter(
+        topic_session__session__student=student,
+        role="user",
+        created_at__date=today,
+    ).count()
+    return count >= cap
+
 def chat_message_view(request):
     topic_session_id = request.POST.get("topic_session_id")
     user_message = request.POST.get("message")
     is_retry = request.POST.get("retry") == "true"
     topic_session = get_object_or_404(TopicSession, id=topic_session_id)
-
     is_start_trigger = (user_message == "__START__")
 
+        # ── Daily message cap ─────────────────────────────────────────────────────
+    # Cap only applies to real student messages, not start trigger or retries —
+    # and never applies to staff/superuser accounts.
+    if not is_start_trigger and not is_retry and not _bypasses_restrictions(request):
+        if _check_daily_message_cap(topic_session):
+            return JsonResponse({
+                "error": "cap_reached",
+                "message": (
+                    "You've reached your 10 message limit for today. "
+                    "Come back tomorrow to continue — your progress is saved. 🙏"
+                )
+            }, status=429)
+
     if is_retry:
-        # Reuse the last saved user message instead of creating a new one —
-        # it was already saved before the previous Gemini call failed.
         last_msg = topic_session.chatmessage_set.order_by("-created_at").first()
         if last_msg and last_msg.role == "user":
             user_message = last_msg.content
         else:
-            is_retry = False  # nothing sensible to retry — fall back to normal flow
+            is_retry = False
 
     if not is_start_trigger and not is_retry:
-        ChatMessage.objects.create(topic_session=topic_session, role="user", content=user_message)
-
-    slide_context = ""
-    try:
-        slide_doc = SlideDocument.objects.get(
-            course_code=topic_session.session.course_code,
-            level=topic_session.session.student.level,
+        ChatMessage.objects.create(
+            topic_session=topic_session, role="user", content=user_message
         )
-        slide_context = slide_doc.extracted_text[:6000]
-    except SlideDocument.DoesNotExist:
-        pass
+
+    # ── Message count for remaining display ───────────────────────────────────
+    student = topic_session.session.student
+    today_count = ChatMessage.objects.filter(
+        topic_session__session__student=student,
+        role="user",
+        created_at__date=date.today(),
+    ).count()
+    remaining = max(0, 10 - today_count)
+
+    # ── Check for pre-generated content on __START__ ──────────────────────────
+    if is_start_trigger and topic_session.lecture_content:
+        stored_content = topic_session.lecture_content
+        pages = _split_into_pages(stored_content)
+
+        def pregenerated_stream():
+            ChatMessage.objects.create(
+                topic_session=topic_session,
+                role="ai",
+                content=stored_content,
+                image_url=None,
+                is_pregenerated=True,
+            )
+            import json as _json
+            yield f"data: {_json.dumps({'pages': pages, 'is_pregenerated': True})}\n\n"
+            yield f"data: {_json.dumps({'done': True, 'topic_complete': False, 'image_url': None, 'remaining_messages': remaining})}\n\n"
+
+        resp = StreamingHttpResponse(pregenerated_stream(), content_type="text/event-stream")
+        resp["Cache-Control"] = "no-cache"
+        resp["X-Accel-Buffering"] = "no"
+        return resp
+
+    # ── Normal live Gemini path ───────────────────────────────────────────────
+
+        slide_context = _find_slide_content_for_topic(
+        topic_session.session.course_code,
+        topic_session.session.student.level,
+        topic_session.topic_name,
+    )   
 
     system_instruction = CHAT_SYSTEM_PROMPT.format(
         student_name=topic_session.session.student.user.first_name or topic_session.session.student.user.username,
@@ -93,14 +146,14 @@ def chat_message_view(request):
         if is_start_trigger else user_message
     )
 
-    messages = history + [{"role": "user", "parts": [{"text": message_to_send}]}]
+    messages_to_send = history + [{"role": "user", "parts": [{"text": message_to_send}]}]
 
     def event_stream():
         full_reply = ""
         try:
             stream = client.models.generate_content_stream(
                 model="gemini-3.6-flash",
-                contents=messages,
+                contents=messages_to_send,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
                     max_output_tokens=2048,
@@ -124,7 +177,9 @@ def chat_message_view(request):
             if description:
                 try:
                     from .lecture_images import generate_topic_image
-                    image_path = generate_topic_image(description, topic_session.session.course_code)
+                    image_path = generate_topic_image(
+                        description, topic_session.session.course_code
+                    )
                     if image_path:
                         image_url = settings.MEDIA_URL + image_path
                 except Exception:
@@ -134,10 +189,12 @@ def chat_message_view(request):
         is_complete = "TOPIC_COMPLETE" in full_reply
         clean_reply = full_reply.replace("TOPIC_COMPLETE", "").strip()
         ChatMessage.objects.create(
-            topic_session=topic_session, role="ai", content=clean_reply, image_url=image_url
+            topic_session=topic_session,
+            role="ai",
+            content=clean_reply,
+            image_url=image_url,
         )
-
-        yield f"data: {json.dumps({'done': True, 'topic_complete': is_complete, 'image_url': image_url})}\n\n"
+        yield f"data: {json.dumps({'done': True, 'topic_complete': is_complete, 'image_url': image_url, 'remaining_messages': remaining})}\n\n"
 
     resp = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
     resp["Cache-Control"] = "no-cache"
@@ -299,7 +356,7 @@ def _generate_timetable(profile):
                 day=day,
                 time=time,
                 week_number=1,
-                total_weeks=15,
+                total_weeks=10,
             ))
         TimetableEntry.objects.bulk_create(entries)
         return
@@ -315,9 +372,34 @@ def _generate_timetable(profile):
             day=day,
             time=time,
             week_number=1,
-            total_weeks=15,
+            total_weeks=10,
         ))
     TimetableEntry.objects.bulk_create(entries)
+
+def _get_active_course_entry(profile):
+    """Today's course in the rolling queue. Advances one position per
+    Mon–Sat day elapsed; Sunday never advances and has no active course."""
+    courses = list(profile.timetable.order_by("course_code"))
+    if not courses:
+        return None
+
+    today = date.today()
+    if profile.queue_date != today:
+        if profile.queue_date is not None:
+            days_advanced = 0
+            d = profile.queue_date
+            while d < today:
+                d += timedelta(days=1)
+                if d.weekday() != 6:  # Sunday = 6, doesn't count
+                    days_advanced += 1
+            profile.queue_position = (profile.queue_position + days_advanced) % len(courses)
+        profile.queue_date = today
+        profile.save(update_fields=["queue_position", "queue_date"])
+
+    if today.weekday() == 6:  # Sunday — rest day, no course
+        return None
+
+    return courses[profile.queue_position % len(courses)]
 
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────────
@@ -354,8 +436,17 @@ def dashboard_view(request):
     recent_sessions = profile.sessions.all()[:5]
     leaderboard = StudentProfile.objects.select_related("user").order_by("-xp")[:10]
     sessions_done = profile.sessions.count()
-    today = timezone.now().strftime("%a")
-    todays_courses = profile.timetable.filter(day=today, is_completed=False)
+
+    active_entry = _get_active_course_entry(profile)
+    if active_entry:
+        todays_courses = [active_entry] if not active_entry.is_completed else []
+        today = active_entry.course_code
+        is_rest_day = False
+    else:
+        todays_courses = []
+        today = None
+        is_rest_day = True
+
     incomplete_sessions = {
         s.course_code: s
         for s in Session.objects.filter(student=profile, is_complete=False)
@@ -377,40 +468,147 @@ def dashboard_view(request):
         "today": today,
         "incomplete_sessions": incomplete_sessions,
         "all_done": all_done,
+        "is_rest_day": is_rest_day,
     })
 
 
 # ─── Helpers ───────────────────--------------------------------───────────────
 
-def _get_topics_for_week(course_code, level, week_number):
-    try:
-        slide = SlideDocument.objects.get(course_code=course_code, level=level, parsed=True)
-        if slide.extracted_topics:
-            start = (week_number - 1) * 3
-            end = start + 3
-            topics = slide.extracted_topics[start:end]
-            if topics:
-                return topics
-            if len(slide.extracted_topics) >= 3:
-                return slide.extracted_topics[-3:]
-    except SlideDocument.DoesNotExist:
-        pass
+TEACHING_ROUNDS_TARGET = 9   # target number of rounds to finish all topics — round 5 starts tests, round 9 is the teaching deadline
 
-    # Check AI-parsed course outline (uploaded via staff portal)
+def _get_total_topics_for_course(course_code, level):
+    """Full ordered topic list for a course. CourseOutline (the official
+    syllabus, if uploaded) determines ordering first — slide decks aren't
+    always arranged in teaching order. Slide-extracted topics are only a
+    fallback for courses with no outline uploaded yet."""
     try:
         outline = CourseOutline.objects.get(course_code=course_code, level=level, parsed=True)
         if outline.topics_json:
-            week_topics = outline.topics_json.get(str(week_number), [])
-            if week_topics:
-                return week_topics[:3]
-    except CourseOutline.DoesNotExist:
+            flat = []
+            for week in sorted(outline.topics_json.keys(), key=lambda w: int(w)):
+                flat.extend(outline.topics_json[week])
+            if flat:
+                return flat
+    except (CourseOutline.DoesNotExist, ValueError):
         pass
 
-    # Fallback — hardcoded outline
-    topics = COURSE_OUTLINES.get(course_code, {}).get(week_number, [])
+    try:
+        slide = SlideDocument.objects.get(course_code=course_code, level=level, parsed=True)
+        if slide.extracted_topics:
+            return list(slide.extracted_topics)
+    except SlideDocument.DoesNotExist:
+        pass
+
+    flat = []
+    for week in sorted(COURSE_OUTLINES.get(course_code, {}).keys()):
+        flat.extend(COURSE_OUTLINES[course_code][week])
+    if flat:
+        return flat
+
+    return ["Core Concepts", "Key Applications", "Problem Solving"]
+
+def _get_topic_source_week(course_code, level, topic_name):
+    """Find which CourseOutline week a topic belongs to, so we can fetch
+    the matching SlideChunk — needed since Session.week_number now tracks
+    teaching rounds, not literal outline weeks."""
+    try:
+        outline = CourseOutline.objects.get(course_code=course_code, level=level, parsed=True)
+        for week_str, topics in outline.topics_json.items():
+            if topic_name in topics:
+                try:
+                    return int(week_str)
+                except ValueError:
+                    continue
+    except CourseOutline.DoesNotExist:
+        pass
+    return None
+
+
+def _find_slide_content_for_topic(course_code, level, topic_name):
+    """Targeted retrieval: find the specific week's SlideChunk this topic
+    belongs to (small, ~15-20 pages) rather than searching the full deck
+    on every call — keeps payload size and API cost down."""
+    try:
+        slide = SlideDocument.objects.get(course_code=course_code, level=level, parsed=True)
+    except SlideDocument.DoesNotExist:
+        return ""
+
+    source_week = _get_topic_source_week(course_code, level, topic_name)
+    if source_week is not None:
+        chunk = slide.chunks.filter(week_number=source_week).first()
+        if chunk and chunk.chunk_text:
+            return chunk.chunk_text[:6000]
+
+    # Fallback only — topic isn't mapped to a chunked week (no outline, or
+    # chunking hasn't run yet). Small bounded search, not the whole deck.
+    text = slide.extracted_text
+    if not text:
+        return ""
+    keywords = re.findall(r"[A-Za-z]{4,}", topic_name)
+    lower_text = text.lower()
+    for kw in keywords:
+        idx = lower_text.find(kw.lower())
+        if idx != -1:
+            start = max(0, idx - 500)
+            return text[start:start + 3000]
+    return ""
+
+def _find_slide_content_for_topic(course_code, level, topic_name, window=3000):
+    """Search the slide deck's full transcript for content relevant to a
+    specific topic, wherever it actually sits in the deck — decks aren't
+    always ordered to match the official course outline, so we search by
+    content rather than trusting position/week number."""
+    try:
+        slide = SlideDocument.objects.get(course_code=course_code, level=level, parsed=True)
+    except SlideDocument.DoesNotExist:
+        return ""
+
+    text = slide.extracted_text
+    if not text:
+        return ""
+
+    keywords = [w for w in re.findall(r"[A-Za-z]{4,}", topic_name)]
+    if not keywords:
+        return ""
+
+    lower_text = text.lower()
+    match_pos = None
+    for kw in keywords:
+        idx = lower_text.find(kw.lower())
+        if idx != -1:
+            match_pos = idx
+            break
+
+    if match_pos is None:
+        return ""  # topic not found in the deck — AI teaches from its own knowledge instead
+
+    start = max(0, match_pos - 500)
+    end = min(len(text), match_pos + window)
+    return text[start:end]
+
+
+def _topics_per_turn_for_course(course_code, level):
+    total_topics = len(_get_total_topics_for_course(course_code, level))
+    return min(3, max(1, math.ceil(total_topics / TEACHING_ROUNDS_TARGET)))
+
+
+def _get_topics_for_week(course_code, level, week_number):
+    """'week_number' here tracks turn count for this course, not a literal
+    calendar week — how many topic groups it's completed so far. Group size
+    scales to the course's total topic count so light courses move at
+    1/turn and bulky ones at up to 3/turn, aiming to finish around the
+    same number of turns regardless of bulk."""
+    all_topics = _get_total_topics_for_course(course_code, level)
+    per_turn = _topics_per_turn_for_course(course_code, level)
+
+    start = (week_number - 1) * per_turn
+    end = start + per_turn
+    topics = all_topics[start:end]
+    if not topics and all_topics:
+        topics = all_topics[-per_turn:]
     if not topics:
         topics = ["Core Concepts", "Key Applications", "Problem Solving"]
-    return topics[:3]
+    return topics
 
 
 def _get_past_questions_for_topic(course_code, level, topic_name, limit=3):
@@ -450,23 +648,45 @@ def _generate_topic_lecture(course_code, course_title, topic_name, week, level, 
         f"Course: {course_code} — {course_title}\n"
         f"Topic to teach: {topic_name}\n"
         f"Topic number: {topic_index + 1} of 3 in this session\n"
-        f"Week: {week} of 15\n"
+        f"Week: {week} of 10\n"
         f"STRICT INSTRUCTION: Teach ONLY '{topic_name}'. Do not teach any other topic. "
         f"Follow the course outline strictly. This is the exact topic scheduled for this session."
         f"{slide_text}"
         f"{past_q_text}"
     )
 
-    response = client.models.generate_content(
-        model="gemini-3.7-flash",
-        contents=user_message,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
-            max_output_tokens=8000,
-        ),
-    )
+    last_error = None
+    for model in ["gemini-3.7-flash", "gemini-3.6-flash"]:
+        for attempt in range(3):
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=user_message,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_PROMPT,
+                        max_output_tokens=8000,
+                    ),
+                )
+                return response.text
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+                is_transient = any(marker in error_str for marker in [
+                    "503", "429", "UNAVAILABLE",
+                    "disconnected", "Disconnected",
+                    "timeout", "Timeout", "DEADLINE_EXCEEDED",
+                    "ConnectionError", "RemoteDisconnected",
+                ])
 
-    return response.text
+                if is_transient and attempt < 2:
+                    print(f"[{course_code}] {model} hit a transient error (attempt {attempt + 1}/3) — retrying in 10s...")
+                    time.sleep(10)
+                    continue
+
+                print(f"[{course_code}] {model} failed: {e}. {'Trying next model...' if model != 'gemini-3.6-flash' else ''}")
+                break
+
+    raise RuntimeError(f"All models and retries failed for lecture generation on {course_code} — {topic_name}: {last_error}")
 
 
 def _parse_lecture(full_text):
@@ -535,6 +755,25 @@ def _parse_lecture(full_text):
         "explanation": explanation,
     }
 
+def _split_into_pages(text, target_chars=700):
+    """Break a long pre-generated lecture into digestible pages, splitting
+    on paragraph boundaries only — never mid-sentence. Content itself is
+    completely unchanged, just grouped for sequential display."""
+    paragraphs = re.split(r"\n\s*\n", text.strip())
+    pages = []
+    current = ""
+    for para in paragraphs:
+        if not para.strip():
+            continue
+        if current and len(current) + len(para) > target_chars:
+            pages.append(current.strip())
+            current = para
+        else:
+            current = f"{current}\n\n{para}" if current else para
+    if current.strip():
+        pages.append(current.strip())
+    return pages if pages else [text]
+
 def _parse_quiz_json(text):
     clean = text.replace("```json", "").replace("```", "").strip()
     clean = clean.replace("\\*", "*").replace("\\%", "%")
@@ -585,14 +824,22 @@ def session_view(request, course_code):
     profile = request.user.profile
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
 
+        # ── Rolling queue gate ──────────────────────────────────────────────────
+    if not _bypasses_restrictions(request):
+        active_entry = _get_active_course_entry(profile)
+        if active_entry is None:
+            messages.info(request, "It's Sunday — rest day! Head to the Simulator to practice topics you've already covered.")
+            return redirect("simulator_home")
+        if active_entry.course_code != course_code:
+            messages.info(request, f"It's not {entry.course_code}'s turn yet — today's course is {active_entry.course_code}.")
+            return redirect("dashboard")
+
     if request.method == "GET":
         existing_session = Session.objects.filter(
             student=profile, course_code=course_code,
             week_number=entry.week_number, is_complete=False,
         ).first()
         if existing_session:
-            # Already mid-week — resume straight into chat instead of
-            # showing the brief page and making them click Start again.
             return _render_chat_session(request, entry, profile, existing_session)
 
         topics = _get_topics_for_week(course_code, profile.level, entry.week_number)
@@ -681,16 +928,9 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
     slide_text = ""
     outline_text = ""
 
-    try:
-        slide_doc = SlideDocument.objects.get(
-            course_code=session.course_code,
-            level=profile.level,
-            week_number=session.week_number,
-        )
-        if slide_doc.extracted_text:
-            slide_text = f"\n\nLECTURER SLIDES (focus only on content relevant to this topic):\n{slide_doc.extracted_text[:6000]}"
-    except SlideDocument.DoesNotExist:
-        pass
+    chunk_text = _find_slide_content_for_topic(session.course_code, profile.level, topic_name)
+    if chunk_text:
+        slide_text = f"\n\nLECTURER SLIDES (focus only on content relevant to this topic):\n{chunk_text}"
 
     try:
         outline = CourseOutline.objects.get(
@@ -769,25 +1009,54 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
     })
 
 def _render_chat_session(request, entry, profile, session):
-    """Render the live chat page for whichever topic is current, replaying
-    the FULL week's message history across all topics (not just this one)
-    so the chat reads as one continuous conversation, WhatsApp-style."""
+    """Render the live chat page for the current topic.
+    Checks for pre-generated content first — serves from DB instantly if available.
+    Falls back to live Gemini only if no published lesson exists."""
+
     current_index = session.current_topic_index
+    topic_name = session.topics[current_index]
+
     topic_session = session.topic_sessions.filter(
         topic_index=current_index, is_complete=False,
     ).first()
+
     if not topic_session:
         topic_session = TopicSession.objects.create(
             session=session,
-            topic_name=session.topics[current_index],
+            topic_name=topic_name,
             topic_index=current_index,
         )
 
+    # ── Check for pre-generated content ──────────────────────────────────────
+    pregenerated_intro = None
+    pregenerated_content = None
+    is_pregenerated = False
+
+    try:
+        lesson = PreGeneratedLesson.objects.get(
+            course__course_code=session.course_code,
+            week_number=session.week_number,
+            topic_title=topic_name,
+            is_published=True,
+        )
+        pregenerated_content = lesson.content_chunk
+        is_pregenerated = True
+
+        # If topic session has no stored content yet, save the pre-generated
+        # content into it so review, history, and quiz generation all work
+        if not topic_session.lecture_content:
+            topic_session.lecture_content = pregenerated_content
+            topic_session.save()
+
+    except PreGeneratedLesson.DoesNotExist:
+        pass
+
+    # ── Build existing chat history ───────────────────────────────────────────
     has_started_chat = topic_session.chatmessage_set.filter(role="ai").exists()
     existing_messages = list(
         ChatMessage.objects.filter(topic_session__session=session)
         .order_by("topic_session__topic_index", "created_at")
-        .values("role", "content", "image_url", topic_name=F("topic_session__topic_name"))
+        .values("role", "content", "image_url", "is_pregenerated", topic_name=F("topic_session__topic_name"))
     )
 
     return render(request, "core/session.html", {
@@ -796,10 +1065,12 @@ def _render_chat_session(request, entry, profile, session):
         "topic_session": topic_session,
         "topic_number": topic_session.topic_index + 1,
         "total_topics": len(session.topics),
-        "topic_name": topic_session.topic_name,
+        "topic_name": topic_name,
         "chat_mode": True,
         "has_started_chat": has_started_chat,
         "existing_messages_json": json.dumps(existing_messages),
+        "is_pregenerated": is_pregenerated,
+        "pregenerated_content": pregenerated_content,
     })
 
 
@@ -849,6 +1120,7 @@ def answer_view(request):
     topic_session.passed_quiz = correct
     topic_session.xp_earned = xp
     topic_session.is_complete = True
+    topic_session.completed_at = timezone.now()
     topic_session.save()
 
     profile.xp += xp
@@ -1108,7 +1380,7 @@ def manage_courses_view(request):
                     'day': 'Wed',
                     'time': '12:00',
                     'week_number': 1,
-                    'total_weeks': 12,
+                    'total_weeks': 10,
                 }
             )
 
@@ -1141,6 +1413,17 @@ def staff_required(view_func):
             return redirect("dashboard")
         return view_func(request, *args, **kwargs)
     return wrapper
+
+def _bypasses_restrictions(request):
+    """Staff and superuser accounts skip rolling-queue and daily-cap
+    restrictions entirely — those exist to pace paying subscribers, not
+    to block staff testing or reviewing the platform."""
+    if not request.user.is_authenticated:
+        return False
+    if request.user.is_superuser:
+        return True
+    profile = getattr(request.user, "profile", None)
+    return bool(profile and profile.is_staff_member)
 
 
 
@@ -1430,6 +1713,134 @@ def staff_bulk_delete_courses_view(request):
         messages.warning(request, "No courses were selected.")
     return redirect("staff_manage_courses")
 
+@staff_required
+def staff_pregeneerate_lessons_view(request):
+    """Staff portal — pre-generate lessons for a course and week"""
+    courses = CourseDefinition.objects.all().order_by("level", "semester", "course_code")
+
+    if request.method == "POST":
+        course_id = request.POST.get("course_id")
+        week_number = int(request.POST.get("week_number", 1))
+        course = get_object_or_404(CourseDefinition, id=course_id)
+
+        # Get topics for this course and week
+        topics = _get_topics_for_week(course.course_code, course.level, week_number)
+
+        if not topics:
+            messages.error(request, f"No topics found for {course.course_code} Week {week_number}. Upload a course outline first.")
+            return redirect("staff_pregenerate_lessons")
+
+        # Get slide text for context
+        slide_text = ""
+        try:
+            slide_doc = SlideDocument.objects.get(
+                course_code=course.course_code,
+                level=course.level,
+            )
+            if slide_doc.extracted_text:
+                slide_text = f"\n\nLECTURER SLIDES (focus only on content relevant to this topic):\n{slide_doc.extracted_text[:6000]}"
+        except SlideDocument.DoesNotExist:
+            pass
+
+        # Get outline text for context
+        outline_text = ""
+        try:
+            outline = CourseOutline.objects.get(
+                course_code=course.course_code,
+                level=course.level,
+                parsed=True,
+            )
+            if outline.extracted_text:
+                outline_text = f"\n\nCOURSE OUTLINE REFERENCE:\n{outline.extracted_text[:2000]}"
+        except CourseOutline.DoesNotExist:
+            pass
+
+        generated_count = 0
+        errors = []
+
+        for i, topic in enumerate(topics):
+            # Skip if content already exists (published or draft) — don't
+            # burn a second API call regenerating something we already have.
+            existing = PreGeneratedLesson.objects.filter(
+                course=course,
+                week_number=week_number,
+                topic_title=topic,
+            ).first()
+
+            if existing and existing.content_chunk.strip():
+                continue
+
+            try:
+                full_text = _generate_topic_lecture(
+                    course.course_code,
+                    course.course_title,
+                    topic,
+                    week_number,
+                    course.level,
+                    student_name="Student",
+                    topic_index=i,
+                    slide_text=slide_text + outline_text,
+                )
+
+                parsed = _parse_lecture(full_text)
+                content = parsed["lecture"] if parsed["lecture"] else full_text
+
+                PreGeneratedLesson.objects.update_or_create(
+                    course=course,
+                    week_number=week_number,
+                    topic_title=topic,
+                    defaults={
+                        "content_chunk": content,
+                        "is_published": False,
+                    }
+                )
+                generated_count += 1
+
+            except Exception as e:
+                errors.append(f"{topic}: {str(e)}")
+
+        if generated_count:
+            messages.success(request, f"Generated {generated_count} lesson(s) for {course.course_code} Week {week_number}. Review and publish them in the admin panel.")
+        if errors:
+            for error in errors:
+                messages.warning(request, f"Failed: {error}")
+
+        return redirect("staff_pregenerate_lessons")
+
+    # GET — show existing pre-generated lessons
+    lessons = PreGeneratedLesson.objects.select_related("course").order_by(
+        "course__level", "course__course_code", "week_number", "topic_title"
+    )
+
+    return render(request, "core/staff/pregenerate_lessons.html", {
+        "courses": courses,
+        "lessons": lessons,
+        "week_range": range(1, 11),  # Assuming 10 weeks max
+    })
+
+
+@staff_required
+@require_POST
+def staff_publish_lesson_view(request, lesson_id):
+    """Toggle publish status of a pre-generated lesson"""
+    lesson = get_object_or_404(PreGeneratedLesson, id=lesson_id)
+    lesson.is_published = not lesson.is_published
+    lesson.save()
+    status = "published" if lesson.is_published else "unpublished"
+    messages.success(request, f"'{lesson.topic_title}' {status}.")
+    return redirect("staff_pregenerate_lessons")
+
+
+@staff_required
+@require_POST
+def staff_delete_lesson_view(request, lesson_id):
+    """Delete a pre-generated lesson"""
+    lesson = get_object_or_404(PreGeneratedLesson, id=lesson_id)
+    topic = lesson.topic_title
+    lesson.delete()
+    messages.success(request, f"'{topic}' deleted.")
+    return redirect("staff_pregenerate_lessons")
+
 # ─── Simulator ─────────────────────────────────────────────────────────────────
 
 def _get_xp_and_grade(percentage):
@@ -1653,7 +2064,13 @@ def _start_simulator_test(request, profile, entry, mode, topic):
             weeks_covered, question_format,
         )
     except Exception as e:
-        messages.error(request, f"Could not generate test questions: {str(e)}")
+        error_str = str(e)
+        if "503" in error_str or "UNAVAILABLE" in error_str:
+            messages.error(request, "The AI is currently busy — this is temporary. Please wait a moment and try again.")
+        elif "429" in error_str or "quota" in error_str.lower():
+            messages.error(request, "Daily AI limit reached. Please try again later.")
+        else:
+            messages.error(request, f"Could not generate test questions: {error_str}")
         return redirect("simulator_home")
 
     test = SimulatorTest.objects.create(

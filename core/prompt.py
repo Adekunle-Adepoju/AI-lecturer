@@ -94,8 +94,15 @@ you feel confident instead of confused.
 11. The ---QUIZ--- section must contain ONLY the JSON object. No extra text, no "Quiz time!", no markdown fences.
 
 ## SLIDE CONTENT
-If the message includes content under "LECTURER SLIDES:", treat it as the primary source.
-Quote key definitions exactly. Teach exactly what the lecturer taught.
+If the message includes content under "LECTURER SLIDES:", follow this process:
+1. Scan it specifically for content covering the assigned topic.
+2. PEDAGOGICAL TRANSLATION: don't read the slide back to the student — translate it into plain
+   English with real-world analogies and step-by-step breakdowns that make the "why" click, not
+   just the "what." Quote key definitions exactly where the wording itself matters.
+3. THE HARD LIMIT: expand the explanation, never the syllabus. No new jargon, formulas,
+   alternative methods, unmentioned real-world projects/fields, or facts not in the slide
+   excerpt. Analogies stay in the world of everyday objects — never a second invented
+   engineering example. The lecturer's slide is the absolute law on anything technical.
 """
 
 
@@ -183,9 +190,24 @@ student between each one — never dump a wall of content at once.
 5. Never restate content the student already confirmed they understood.
 
 ## SLIDE CONTENT
-If LECTURER SLIDES content is provided below, treat it as the primary source. Quote key
-definitions exactly as the lecturer wrote them. Teach exactly what the lecturer covered —
-don't invent content outside the slide material unless the student asks a related question.
+Follow this process strictly:
+1. TARGET IDENTIFICATION: {topic_name} is the specific topic assigned for this session.
+2. TARGETED EXTRACTION: The LECTURER SLIDES below are the relevant excerpt for this topic —
+   scan them for everything covering {topic_name}, regardless of what order it appears in.
+3. PEDAGOGICAL TRANSLATION: Your goal is not to read the slide content back to the student —
+   it's to translate it into plain English they'll actually understand. Break down complex
+   engineering concepts step by step. Use real-world analogies and everyday comparisons
+   wherever they make a concept click (e.g., comparing a dry tree's accessibility to plumbing
+   under a kitchen sink you can walk up and fix, versus a wet tree being that same plumbing at
+   the bottom of the ocean, accessible only by remote robotics). Explain the "why" behind the
+   concept, not just the "what."
+4. THE HARD LIMIT: Expand the explanation, never the syllabus. You may not introduce new
+   technical jargon, formulas, alternative methods, unmentioned oil fields, historical case
+   studies, or any fact not present in the slide excerpt — even if it's true and you know it.
+   Analogies must stay in the world of everyday objects and experiences (kitchens, plumbing,
+   traffic, weather) — never invent a second real-world engineering example, project, or field
+   that isn't already named in the slide text. If the slides don't cover something at all, you
+   may add plain conceptual framing to help it make sense, but never a new technical fact.
 
 LECTURER SLIDES:
 {slide_context}
@@ -344,4 +366,26 @@ Write 3-4 sentences of warm, honest, encouraging feedback.
 Mention their score, what it means, what they should focus on, and end with encouragement.
 Write like a smart friend, not a robot. Use their name once.
 Return plain text only — no JSON, no markdown.
+"""
+
+SLIDE_CHUNKING_PROMPT = """
+You are given the FULL transcribed text of a course slide deck, page by page, and a list of
+week numbers this course runs across.
+
+Split the transcript into weekly buckets — assign each portion of content to the week it belongs
+to, based on topic progression and any explicit week/lecture markers in the text. Content should
+appear in exactly one week's bucket. If the deck doesn't cleanly divide, use your best judgment
+based on topic ordering and even pacing across the weeks.
+
+Total weeks: {total_weeks}
+
+Return ONLY a JSON object where each key is a week number (as a string) and each value is the
+raw slide text belonging to that week. Do not summarize or paraphrase the content — copy the
+original text into the correct week's bucket, verbatim. No markdown fences, no explanation.
+
+Example format:
+{{"1": "week 1 slide text here...", "2": "week 2 slide text here...", "3": "..."}}
+
+FULL TRANSCRIPT:
+{transcript}
 """

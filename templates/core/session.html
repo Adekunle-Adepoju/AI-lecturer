@@ -430,7 +430,20 @@
       },
       body: bodyParts.join("&"),
     });
-    
+
+    // Handle daily cap — returns JSON 429, not a stream
+    if (response.status === 429) {
+      typingBubble.remove();
+      const data = await response.json();
+      appendSystemBubble("⏳ " + data.message);
+      document.getElementById("chat-input").disabled = true;
+      document.getElementById("sendBtn").disabled = true;
+      document.getElementById("sendBtn").style.opacity = "0.4";
+      if (document.getElementById("gotItBtn")) document.getElementById("gotItBtn").style.display = "none";
+      if (document.getElementById("confusedBtn")) document.getElementById("confusedBtn").style.display = "none";
+      return;
+    }
+
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let aiBubble = null;
@@ -449,9 +462,25 @@
         const payload = JSON.parse(line.slice(6));
 
         if (payload.error) {
+  typingBubble.remove();
+  if (response.status === 429 || payload.error === "cap_reached") {
+    appendSystemBubble("⏳ " + payload.message);
+    // Disable input so student can't keep trying
+    document.getElementById("chat-input").disabled = true;
+    document.getElementById("sendBtn").disabled = true;
+    document.getElementById("sendBtn").style.opacity = "0.4";
+    if (document.getElementById("gotItBtn")) document.getElementById("gotItBtn").style.display = "none";
+    if (document.getElementById("confusedBtn")) document.getElementById("confusedBtn").style.display = "none";
+  } else {
+    appendSystemBubble("Error: " + payload.error);
+  }
+  return;
+}
+
+        if (payload.pages) {
           typingBubble.remove();
-          appendSystemBubble("Error: " + payload.error);
-          return;
+          createPaginatedAiBubble(payload.pages, null);
+          continue;
         }
 
           if (payload.chunk) {
@@ -465,21 +494,41 @@
         }
 
         if (payload.done) {
-          aiBubble.innerHTML = renderMarkdown(stripImageMarker(rawText.replace("TOPIC_COMPLETE", "")));
-          renderMathIn(aiBubble);
-          if (payload.image_url) {
-            const img = document.createElement("img");
-            img.src = payload.image_url;
-            img.alt = "Lecture illustration";
-            img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
-            aiBubble.appendChild(img);
-          }
-          if (payload.topic_complete) {
-            triggerQuizGeneration();
-          } else {
-            understandingControls.style.display = "flex";
-          }
-        }
+  aiBubble.innerHTML = renderMarkdown(stripImageMarker(rawText.replace("TOPIC_COMPLETE", "")));
+  renderMathIn(aiBubble);
+  if (payload.image_url) {
+    const img = document.createElement("img");
+    img.src = payload.image_url;
+    img.alt = "Lecture illustration";
+    img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
+    aiBubble.appendChild(img);
+  }
+
+  // ── Message counter ──────────────────────────────────────────────
+  if (payload.remaining_messages !== undefined) {
+    let counter = document.getElementById("message-counter");
+    if (!counter) {
+      counter = document.createElement("div");
+      counter.id = "message-counter";
+      counter.style.cssText = "font-size:12px;color:var(--ink-faint);text-align:right;padding:4px 22px 0;";
+      document.getElementById("input-row").prepend(counter);
+    }
+    counter.textContent = payload.remaining_messages + " messages remaining today";
+    if (payload.remaining_messages <= 3) {
+      counter.style.color = "var(--amber)";
+    }
+    if (payload.remaining_messages === 0) {
+      counter.textContent = "No messages remaining today — come back tomorrow 🙏";
+      counter.style.color = "var(--coral)";
+    }
+  }
+
+  if (payload.topic_complete) {
+    triggerQuizGeneration();
+  } else {
+    understandingControls.style.display = "flex";
+  }
+}
       }
     }
   }
@@ -512,13 +561,11 @@
   let lastRenderedTopic = null;
   document.addEventListener("DOMContentLoaded", function() {
     // Replay any existing conversation
-    existingMessages.forEach(msg => {
-      if (msg.topic_name && msg.topic_name !== lastRenderedTopic) {
-        appendSystemBubble("— " + msg.topic_name + " —");
-        lastRenderedTopic = msg.topic_name;
-      }
+        existingMessages.forEach(msg => {
       if (msg.role === "user") {
         appendUserBubble(msg.content);
+      } else if (msg.is_pregenerated) {
+        createPaginatedAiBubble(splitIntoPages(msg.content), msg.image_url || null);
       } else {
         const bubble = createAiBubble();
         bubble.innerHTML = renderMarkdown(stripImageMarker(msg.content.replace("TOPIC_COMPLETE", "")));
@@ -548,6 +595,77 @@
     }
   });
 })();
+
+  function splitIntoPages(text, targetChars = 700) {
+    const paragraphs = text.trim().split(/\n\s*\n/);
+    const pages = [];
+    let current = "";
+    for (const para of paragraphs) {
+      if (!para.trim()) continue;
+      if (current && current.length + para.length > targetChars) {
+        pages.push(current.trim());
+        current = para;
+      } else {
+        current = current ? current + "\n\n" + para : para;
+      }
+    }
+    if (current.trim()) pages.push(current.trim());
+    return pages.length ? pages : [text];
+  }
+
+  function createPaginatedAiBubble(pages, imageUrl) {
+    const row = document.createElement("div");
+    row.className = "msg-row ai";
+    row.innerHTML = aiAvatarHtml() +
+      '<div class="msg-bubble paginated-bubble">' +
+        '<div class="page-content"></div>' +
+        '<div class="page-nav" style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:10px;">' +
+          '<button type="button" class="btn btn-white-outline btn-page-back" style="padding:8px 16px;font-size:.82rem;">← Back</button>' +
+          '<span class="page-indicator" style="font-size:.78rem;color:var(--ink-faint);"></span>' +
+          '<button type="button" class="btn btn-primary btn-page-next" style="padding:8px 16px;font-size:.82rem;">Next →</button>' +
+        '</div>' +
+      '</div>';
+    chatWindow.appendChild(row);
+
+    const bubble = row.querySelector(".msg-bubble");
+    const contentEl = row.querySelector(".page-content");
+    const indicator = row.querySelector(".page-indicator");
+    const backBtn = row.querySelector(".btn-page-back");
+    const nextBtn = row.querySelector(".btn-page-next");
+    let index = 0;
+
+    function renderPage() {
+      const isLast = index === pages.length - 1;
+      contentEl.innerHTML = renderMarkdown(stripImageMarker(pages[index]));
+      renderMathIn(contentEl);
+      if (isLast && imageUrl) {
+        const img = document.createElement("img");
+        img.src = imageUrl;
+        img.alt = "Lecture illustration";
+        img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
+        contentEl.appendChild(img);
+      }
+      indicator.textContent = `Page ${index + 1} of ${pages.length}`;
+      backBtn.style.visibility = index === 0 ? "hidden" : "visible";
+      nextBtn.textContent = isLast ? "Done reading ✓" : "Next →";
+      scrollChatToBottom();
+    }
+
+    backBtn.addEventListener("click", () => { if (index > 0) { index--; renderPage(); } });
+    nextBtn.addEventListener("click", () => {
+      if (index < pages.length - 1) {
+        index++;
+        renderPage();
+      } else {
+        nextBtn.disabled = true;
+        backBtn.style.visibility = "hidden";
+        understandingControls.style.display = "flex";
+      }
+    });
+
+    renderPage();
+    return bubble;
+  }
 </script>
 {% endif %}
 {% endblock %}
