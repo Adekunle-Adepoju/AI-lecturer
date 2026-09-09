@@ -1,7 +1,7 @@
 import os
 
 
-def extract_text_via_vision(file_path, course_code="", batch_size=15):
+def extract_text_via_vision(file_path, course_code="", batch_size=40):
     import fitz
     import tempfile
     import time

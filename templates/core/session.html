@@ -138,6 +138,17 @@
   #sessionRoot .msg-row.system .msg-bubble{background:transparent;border:1px dashed var(--line);color:var(--ink-faint);font-size:.8rem;text-align:center;}
   #sessionRoot .msg-bubble sub{font-size:.75em;}
   #sessionRoot .msg-bubble sup{font-size:.72em;}
+  #sessionRoot .msg-bubble blockquote{
+  border-left:3px solid var(--amber);
+  padding:12px 16px;
+  margin:12px 0;
+  background:var(--bg-alt);
+  border-radius:0 var(--radius-md) var(--radius-md) 0;
+  font-size:.9rem;
+  line-height:1.7;
+}
+#sessionRoot .msg-bubble blockquote strong{color:var(--amber);}
+#sessionRoot .msg-bubble{padding:12px 17px;border-radius:16px;font-size:.94rem;line-height:1.6;word-wrap:break-word;overflow-wrap:anywhere;word-break:break-word;}
 
   #sessionRoot .typing-row .typing-dots{display:flex;gap:4px;align-items:center;background:var(--bubble-ai);border:1px solid var(--line);padding:13px 16px;border-radius:16px;border-bottom-left-radius:4px;}
   #sessionRoot .typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);animation:typingBounce 1.2s ease-in-out infinite;}
@@ -227,7 +238,7 @@
       <div id="understanding-controls" class="understanding-controls">
         <button type="button" id="gotItBtn" class="btn-understand btn-yes">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>
-          Got it
+          <span id="gotItLabel">Got it</span>
         </button>
         <button type="button" id="confusedBtn" class="btn-understand btn-no">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.5-2 1.8-2 3.3M12 17h.01"/></svg>
@@ -245,6 +256,11 @@
   {% endif %}
 
   {% if chat_mode %}
+  <a href="{% url 'history' %}" class="btn btn-white-outline btn-full" style="margin-bottom:12px;">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v5h5M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+    Review past topics
+  </a>
+
   <form method="post" action="{% url 'restart_session' course_code=entry.course_code week_number=entry.week_number %}" class="restart-form">
     {% csrf_token %}
     <button type="submit" class="btn btn-white-outline btn-full"
@@ -278,11 +294,14 @@
 (function(){
   "use strict";
   const root = document.getElementById("sessionRoot");
-
-  /* ---------- server-provided session state (unchanged contract) ---------- */
   const topicSessionId = {{ topic_session.id|default:"null" }};
   const hasStartedChat = {{ has_started_chat|yesno:"true,false" }};
   const existingMessages = {{ existing_messages_json|default:"[]"|safe }};
+  const isPregenerated = {{ is_pregenerated|yesno:"true,false" }};
+  let currentChunkIndex = {{ current_chunk_index|default:0 }};
+  let totalChunks = {{ total_chunks|default:0 }};
+  let isLastChunk = {{ is_last_chunk|yesno:"true,false" }};
+  const firstChunk = "{{ first_chunk|default:"''"|safe|escapejs }}";
 
   function getCookie(name) {
     const value = `; ${document.cookie}`;
@@ -292,12 +311,15 @@
 
   const chatWindow = document.getElementById("chat-window");
   const understandingControls = document.getElementById("understanding-controls");
+  const inputRow = document.getElementById("input-row");
+  const chatInput = document.getElementById("chat-input");
+  const sendBtn = document.getElementById("sendBtn");
 
   function scrollChatToBottom() {
     chatWindow.scrollTop = chatWindow.scrollHeight;
   }
 
-  function aiAvatarHtml(){
+  function aiAvatarHtml() {
     return '<div class="msg-avatar">' +
       '<img class="logo-light" src="data:image/png;base64,__NAVY_B64__" alt="" onerror="this.style.display=\'none\'">' +
       '<img class="logo-dark" src="data:image/png;base64,__CREAM_B64__" alt="" onerror="this.style.display=\'none\'">' +
@@ -336,41 +358,48 @@
   }
 
   function renderMarkdown(text) {
-    // Pull out LaTeX-delimited spans first so the chemistry-subscript / exponent
-    // regexes below can't mangle them (e.g. "$O2$" -> "$O<sub>2</sub>$" would
-    // break KaTeX's parse before it ever runs). Put the raw LaTeX back afterwards.
     const mathSpans = [];
     const protectedText = text.replace(
       /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\n]+?\$)/g,
-      (m) => {
-        mathSpans.push(m);
-        // Dashes on both sides of the index so this can't itself be caught by
-        // the letter+digit subscript regex below (e.g. "H0" would match it).
-        return "\u0000MATH-" + (mathSpans.length - 1) + "-\u0000";
-      }
+      (m) => { mathSpans.push(m); return "\u0000MATH-" + (mathSpans.length - 1) + "-\u0000"; }
     );
 
-    let html = protectedText
+    // Group consecutive "> " lines into blockquote blocks, matching how
+    // the server-side markdown.markdown() renderer (used in review/history)
+    // already treats the same "> formula" syntax — before this, this JS
+    // renderer had no blockquote handling at all, so it fell through as
+    // literal text with a stray ">" character.
+    const lines = protectedText.split("\n");
+    const parts = [];
+    let quoteBuffer = [];
+    function flushQuote() {
+      if (quoteBuffer.length) {
+        parts.push("\u0001BQ\u0001" + quoteBuffer.join("\n") + "\u0001/BQ\u0001");
+        quoteBuffer = [];
+      }
+    }
+    for (const line of lines) {
+      const m = line.match(/^\s*>\s?(.*)$/);
+      if (m) { quoteBuffer.push(m[1]); }
+      else { flushQuote(); parts.push(line); }
+    }
+    flushQuote();
+
+    let html = parts.join("\n")
       .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-      // Chemical/simple subscripts: letter followed by digits, e.g. H2O -> H<sub>2</sub>O
       .replace(/([A-Za-z])(\d+)/g, "$1<sub>$2</sub>")
-      // Simple exponents: x^2 -> x<sup>2</sup>
       .replace(/\^(\d+)/g, "<sup>$1</sup>")
       .replace(/\n/g, "<br>");
 
+    html = html.replace(/\u0001BQ\u0001([\s\S]*?)\u0001\/BQ\u0001/g, (_, inner) => `<blockquote>${inner}</blockquote>`);
     html = html.replace(/\u0000MATH-(\d+)-\u0000/g, (_, i) => mathSpans[Number(i)]);
     return html;
   }
-  
-  function stripImageMarker(text) {
-  return text.replace(/\[IMAGE:.*?\]/gi, "");
-}
 
-  // KaTeX only auto-renders document.body once, on initial page load (see base.html).
-  // Chat bubbles are created afterwards, straight into the DOM via JS, so they were
-  // never passed through KaTeX at all — that's why raw "\( ... \)" text was showing
-  // up verbatim instead of a rendered equation. Call this on an element right after
-  // its content is set.
+  function stripImageMarker(text) {
+    return text.replace(/\[IMAGE:.*?\]/gi, "");
+  }
+
   function renderMathIn(el) {
     if (!el || typeof window.renderMathInElement !== "function") return;
     try {
@@ -383,7 +412,7 @@
         ],
         throwOnError: false
       });
-    } catch (e) { /* malformed LaTeX from the model shouldn't break the chat */ }
+    } catch (e) {}
   }
 
   function showTypingIndicator() {
@@ -395,52 +424,95 @@
     return row;
   }
 
-  function triggerQuizGeneration() {
-    appendSystemBubble("Nice work! Generating your quiz...");
-    fetch("/chat/next-topic/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "X-CSRFToken": getCookie("csrftoken"),
-      },
-      body: `topic_session_id=${topicSessionId}&action=quiz`,
-    }).then(r => r.json()).then(data => {
-      if (data.redirect) window.location.href = data.redirect;
+  // ── Clarification box (shown when student clicks I don't understand) ──────
+  let clarifyBoxEl = null;
+
+    // ── Wrap an async fetch in a typing indicator + minimum "thinking" delay ──
+  // Pregenerated chunks return near-instantly from the DB, so without this
+  // they'd pop in with no sense of Rovea "composing" a reply. This shows
+  // the indicator immediately, then waits for whichever is longer: the
+  // real fetch time, or the artificial minimum — so slow networks never
+  // get an EXTRA 1200ms stacked on top of their own latency.
+  async function withTypingDelay(action, minMs = 1200, maxMs = 1500) {
+    const typingRow = showTypingIndicator();
+    const targetDelay = minMs + Math.random() * (maxMs - minMs);
+    const start = Date.now();
+
+    const result = await action();
+
+    const elapsed = Date.now() - start;
+    const remaining = Math.max(0, targetDelay - elapsed);
+    if (remaining > 0) {
+      await new Promise(resolve => setTimeout(resolve, remaining));
+    }
+
+    typingRow.remove();
+    return result;
+  }
+
+  function showClarifyBox() {
+    understandingControls.style.display = "none";
+
+    if (clarifyBoxEl) { clarifyBoxEl.remove(); }
+
+    clarifyBoxEl = document.createElement("div");
+    clarifyBoxEl.style.cssText = "padding:14px 22px 16px; border-top:1px solid var(--line-soft);";
+    clarifyBoxEl.innerHTML = `
+      <p style="font-size:.85rem;color:var(--ink-soft);margin-bottom:10px;">
+        What didn't make sense? Type your question or say "everything" 👇
+      </p>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <input id="clarify-input" type="text" placeholder="e.g. I didn't understand the formula..."
+          style="flex:1;border:1px solid var(--line);border-radius:999px;padding:11px 18px;
+                 background:var(--bg-alt);color:var(--ink);font-family:var(--font-body);
+                 font-size:.9rem;outline:none;">
+        <button id="clarify-send" type="button"
+          style="width:42px;height:42px;border-radius:50%;border:none;background:var(--amber);
+                 color:var(--navy-deep);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>`;
+
+    document.getElementById("chat-box").appendChild(clarifyBoxEl);
+
+    const clarifyInput = document.getElementById("clarify-input");
+    const clarifySend = document.getElementById("clarify-send");
+
+    clarifyInput.focus();
+
+    async function submitClarify() {
+      const msg = clarifyInput.value.trim();
+      if (!msg) return;
+      clarifyInput.value = "";
+      clarifyBoxEl.remove();
+      clarifyBoxEl = null;
+      await sendClarifyMessage(msg);
+    }
+
+    clarifySend.addEventListener("click", submitClarify);
+    clarifyInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); submitClarify(); }
     });
   }
 
-    async function sendMessage(message, options = {}) {
-    const { isRetry = false, skipUserBubble = false } = options;
-    if (message !== "__START__" && !skipUserBubble) {
-      appendUserBubble(message);
-    }
-    const typingBubble = showTypingIndicator();
+  // ── Send clarification to Gemini via SSE ─────────────────────────────────
+  async function sendClarifyMessage(message) {
+    appendUserBubble(message);
+    const typingRow = showTypingIndicator();
 
-    const bodyParts = [
-      `topic_session_id=${topicSessionId}`,
-      `message=${encodeURIComponent(message)}`,
-    ];
-    if (isRetry) bodyParts.push(`retry=true`);
-
-    const response = await fetch("/chat/message/", {
+    const response = await fetch("/chat/chunk-clarify/", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         "X-CSRFToken": getCookie("csrftoken"),
       },
-      body: bodyParts.join("&"),
+      body: `topic_session_id=${topicSessionId}&message=${encodeURIComponent(message)}`,
     });
 
-    // Handle daily cap — returns JSON 429, not a stream
     if (response.status === 429) {
-      typingBubble.remove();
+      typingRow.remove();
       const data = await response.json();
       appendSystemBubble("⏳ " + data.message);
-      document.getElementById("chat-input").disabled = true;
-      document.getElementById("sendBtn").disabled = true;
-      document.getElementById("sendBtn").style.opacity = "0.4";
-      if (document.getElementById("gotItBtn")) document.getElementById("gotItBtn").style.display = "none";
-      if (document.getElementById("confusedBtn")) document.getElementById("confusedBtn").style.display = "none";
       return;
     }
 
@@ -462,210 +534,294 @@
         const payload = JSON.parse(line.slice(6));
 
         if (payload.error) {
-  typingBubble.remove();
-  if (response.status === 429 || payload.error === "cap_reached") {
-    appendSystemBubble("⏳ " + payload.message);
-    // Disable input so student can't keep trying
-    document.getElementById("chat-input").disabled = true;
-    document.getElementById("sendBtn").disabled = true;
-    document.getElementById("sendBtn").style.opacity = "0.4";
-    if (document.getElementById("gotItBtn")) document.getElementById("gotItBtn").style.display = "none";
-    if (document.getElementById("confusedBtn")) document.getElementById("confusedBtn").style.display = "none";
-  } else {
-    appendSystemBubble("Error: " + payload.error);
-  }
-  return;
-}
-
-        if (payload.pages) {
-          typingBubble.remove();
-          createPaginatedAiBubble(payload.pages, null);
-          continue;
+          typingRow.remove();
+          appendSystemBubble("Error: " + payload.error);
+          return;
         }
 
-          if (payload.chunk) {
-          if (!aiBubble) {
-            typingBubble.remove();
-            aiBubble = createAiBubble();
-          }
+        if (payload.chunk) {
+          if (!aiBubble) { typingRow.remove(); aiBubble = createAiBubble(); }
+          rawText += payload.chunk;
+          aiBubble.textContent = rawText;
+          scrollChatToBottom();
+        }
+
+        if (payload.done) {
+          aiBubble.innerHTML = renderMarkdown(rawText);
+          renderMathIn(aiBubble);
+          // Show understanding buttons again after Gemini replies
+          understandingControls.style.display = "flex";
+        }
+      }
+    }
+  }
+
+    // ── Deliver a chunk as an AI bubble ──────────────────────────────────────
+    function deliverChunk(chunkText, chunkIndex, totalChunks, isLast, imageUrl) {
+    const bubble = createAiBubble();
+    bubble.innerHTML = renderMarkdown(stripImageMarker(chunkText));
+    renderMathIn(bubble);
+
+    if (imageUrl) {
+      const img = document.createElement("img");
+      img.src = imageUrl;
+      img.alt = "Lecture illustration";
+      img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
+      bubble.appendChild(img);
+    }
+
+    appendSystemBubble(`— Part ${chunkIndex + 1} of ${totalChunks} —`);
+    inputRow.style.display = "none";
+
+    isLastChunk = !!isLast;
+    const gotItLabel = document.getElementById("gotItLabel");
+    if (gotItLabel) {
+      gotItLabel.textContent = isLastChunk ? "Go to Quiz" : "Got it";
+    }
+
+    understandingControls.style.display = "flex";
+    scrollChatToBottom();
+  }
+
+    // ── Got it button ─────────────────────────────────────────────────────────
+    async function handleGotIt() {
+    understandingControls.style.display = "none";
+    if (clarifyBoxEl) { clarifyBoxEl.remove(); clarifyBoxEl = null; }
+
+    const data = await withTypingDelay(async () => {
+      const response = await fetch("/chat/chunk-next/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-CSRFToken": getCookie("csrftoken"),
+        },
+        body: `topic_session_id=${topicSessionId}`,
+      });
+      return response.json();
+    });
+
+    if (data.action === "quiz_time") {
+      triggerQuizGeneration();
+      return;
+    }
+
+    if (data.action === "next_chunk") {
+      currentChunkIndex = data.chunk_index;
+      totalChunks = data.total_chunks;
+      deliverChunk(data.chunk, data.chunk_index, data.total_chunks, data.is_last_chunk, data.image_url);
+    }
+  }
+
+  // ── Quiz trigger ──────────────────────────────────────────────────────────
+  function triggerQuizGeneration() {
+    appendSystemBubble("Nice work! Generating your quiz...");
+    fetch("/chat/next-topic/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-CSRFToken": getCookie("csrftoken"),
+      },
+      body: `topic_session_id=${topicSessionId}&action=quiz`,
+    }).then(r => r.json()).then(data => {
+      if (data.redirect) window.location.href = data.redirect;
+    });
+  }
+
+  // ── Live Gemini path (non-pregenerated) ──────────────────────────────────
+  async function sendMessage(message, options = {}) {
+    const { isRetry = false, skipUserBubble = false } = options;
+    if (message !== "__START__" && !skipUserBubble) appendUserBubble(message);
+    const typingRow = showTypingIndicator();
+
+    const bodyParts = [
+      `topic_session_id=${topicSessionId}`,
+      `message=${encodeURIComponent(message)}`,
+    ];
+    if (isRetry) bodyParts.push("retry=true");
+
+    const response = await fetch("/chat/message/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-CSRFToken": getCookie("csrftoken"),
+      },
+      body: bodyParts.join("&"),
+    });
+
+    if (response.status === 429) {
+      typingRow.remove();
+      const data = await response.json();
+      appendSystemBubble("⏳ " + data.message);
+      chatInput.disabled = true;
+      sendBtn.disabled = true;
+      sendBtn.style.opacity = "0.4";
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let aiBubble = null;
+    let buffer = "";
+    let rawText = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const payload = JSON.parse(line.slice(6));
+
+        if (payload.error) {
+          typingRow.remove();
+          appendSystemBubble("Error: " + payload.error);
+          return;
+        }
+
+        if (payload.chunk) {
+          if (!aiBubble) { typingRow.remove(); aiBubble = createAiBubble(); }
           rawText += payload.chunk;
           aiBubble.textContent = stripImageMarker(rawText.replace("TOPIC_COMPLETE", ""));
           scrollChatToBottom();
         }
 
         if (payload.done) {
-  aiBubble.innerHTML = renderMarkdown(stripImageMarker(rawText.replace("TOPIC_COMPLETE", "")));
-  renderMathIn(aiBubble);
-  if (payload.image_url) {
-    const img = document.createElement("img");
-    img.src = payload.image_url;
-    img.alt = "Lecture illustration";
-    img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
-    aiBubble.appendChild(img);
-  }
-
-  // ── Message counter ──────────────────────────────────────────────
-  if (payload.remaining_messages !== undefined) {
-    let counter = document.getElementById("message-counter");
-    if (!counter) {
-      counter = document.createElement("div");
-      counter.id = "message-counter";
-      counter.style.cssText = "font-size:12px;color:var(--ink-faint);text-align:right;padding:4px 22px 0;";
-      document.getElementById("input-row").prepend(counter);
-    }
-    counter.textContent = payload.remaining_messages + " messages remaining today";
-    if (payload.remaining_messages <= 3) {
-      counter.style.color = "var(--amber)";
-    }
-    if (payload.remaining_messages === 0) {
-      counter.textContent = "No messages remaining today — come back tomorrow 🙏";
-      counter.style.color = "var(--coral)";
-    }
-  }
-
-  if (payload.topic_complete) {
-    triggerQuizGeneration();
-  } else {
-    understandingControls.style.display = "flex";
-  }
-}
+          aiBubble.innerHTML = renderMarkdown(stripImageMarker(rawText.replace("TOPIC_COMPLETE", "")));
+          renderMathIn(aiBubble);
+          if (payload.image_url) {
+            const img = document.createElement("img");
+            img.src = payload.image_url;
+            img.alt = "Lecture illustration";
+            img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
+            aiBubble.appendChild(img);
+          }
+          if (payload.remaining_messages !== undefined) {
+            let counter = document.getElementById("message-counter");
+            if (!counter) {
+              counter = document.createElement("div");
+              counter.id = "message-counter";
+              counter.style.cssText = "font-size:12px;color:var(--ink-faint);text-align:right;padding:4px 22px 0;";
+              inputRow.prepend(counter);
+            }
+            counter.textContent = payload.remaining_messages + " messages remaining today";
+            if (payload.remaining_messages <= 3) counter.style.color = "var(--amber)";
+            if (payload.remaining_messages === 0) {
+              counter.textContent = "No messages remaining today — come back tomorrow 🙏";
+              counter.style.color = "var(--coral)";
+            }
+          }
+          if (payload.topic_complete) {
+            triggerQuizGeneration();
+          } else {
+            understandingControls.style.display = "flex";
+          }
+        }
       }
     }
-  }
-
-  async function sendCanned(text) {
-    understandingControls.style.display = "none";
-    await sendMessage(text);
   }
 
   async function sendTyped() {
-    const input = document.getElementById("chat-input");
-    const text = input.value.trim();
+    const text = chatInput.value.trim();
     if (!text) return;
-    input.value = "";
+    chatInput.value = "";
     understandingControls.style.display = "none";
     await sendMessage(text);
   }
 
+  // ── Wire up buttons ───────────────────────────────────────────────────────
   const gotItBtn = document.getElementById("gotItBtn");
   const confusedBtn = document.getElementById("confusedBtn");
-  const sendBtn = document.getElementById("sendBtn");
-  const chatInput = document.getElementById("chat-input");
-  if (gotItBtn) gotItBtn.addEventListener("click", () => sendCanned("Yes, I understand. Please continue."));
-  if (confusedBtn) confusedBtn.addEventListener("click", () => sendCanned("No, I'm confused."));
+
+  if (gotItBtn) gotItBtn.addEventListener("click", handleGotIt);
+  if (confusedBtn) confusedBtn.addEventListener("click", showClarifyBox);
   if (sendBtn) sendBtn.addEventListener("click", sendTyped);
-  if (chatInput) chatInput.addEventListener("keydown", function(e){
+  if (chatInput) chatInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); sendTyped(); }
   });
-  
-  let lastRenderedTopic = null;
-  document.addEventListener("DOMContentLoaded", function() {
-    // Replay any existing conversation
+
+  // ── On page load ──────────────────────────────────────────────────────────
+  document.addEventListener("DOMContentLoaded", function () {
+
+      if (isPregenerated) {
+      // Hide live chat input — students don't type during chunked delivery
+      inputRow.style.display = "none";
+
+      if (existingMessages.length > 0) {
+        // Replay every chunk (and any clarification Q&A) delivered so far.
+        // Chunk 0 is now saved server-side before this page even renders,
+        // so this branch runs on the very first view too — not just on
+        // refresh — meaning there's only one code path to keep correct.
+        const currentTopicName = "{{ topic_name|escapejs }}";
+        let pregenPartNumber = 0;
+
         existingMessages.forEach(msg => {
-      if (msg.role === "user") {
-        appendUserBubble(msg.content);
-      } else if (msg.is_pregenerated) {
-        createPaginatedAiBubble(splitIntoPages(msg.content), msg.image_url || null);
-      } else {
-        const bubble = createAiBubble();
-        bubble.innerHTML = renderMarkdown(stripImageMarker(msg.content.replace("TOPIC_COMPLETE", "")));
-        renderMathIn(bubble);
-        if (msg.image_url) {
-          const img = document.createElement("img");
-          img.src = msg.image_url;
-          img.alt = "Lecture illustration";
-          img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
-          bubble.appendChild(img);
+          if (msg.role === "user") {
+            appendUserBubble(msg.content);
+          } else {
+            // Only number chunks belonging to THIS topic — existingMessages
+            // spans the whole session, so earlier topics' chunks shouldn't
+            // count toward this topic's "Part X of Y" total.
+            if (msg.is_pregenerated && msg.topic_name === currentTopicName) {
+              pregenPartNumber += 1;
+              appendSystemBubble(`— Part ${pregenPartNumber} of ${totalChunks} —`);
+            }
+            const bubble = createAiBubble();
+            bubble.innerHTML = renderMarkdown(stripImageMarker(msg.content));
+            renderMathIn(bubble);
+            if (msg.image_url) {
+              const img = document.createElement("img");
+              img.src = msg.image_url;
+              img.alt = "Lecture illustration";
+              img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
+              bubble.appendChild(img);
+            }
+          }
+        });
+
+        const gotItLabel = document.getElementById("gotItLabel");
+        if (gotItLabel) {
+          gotItLabel.textContent = isLastChunk ? "Go to Quiz" : "Got it";
         }
+        understandingControls.style.display = "flex";
+      } else {
+        withTypingDelay(async () => null).then(() => {
+          deliverChunk(firstChunk, currentChunkIndex, totalChunks, isLastChunk);
+        });
       }
-    });
 
-    const lastMsg = existingMessages[existingMessages.length - 1];
+    } else {
+      // Live Gemini path — normal chat
+      existingMessages.forEach(msg => {
+        if (msg.role === "user") {
+          appendUserBubble(msg.content);
+        } else {
+          const bubble = createAiBubble();
+          bubble.innerHTML = renderMarkdown(stripImageMarker(msg.content.replace("TOPIC_COMPLETE", "")));
+          renderMathIn(bubble);
+          if (msg.image_url) {
+            const img = document.createElement("img");
+            img.src = msg.image_url;
+            img.alt = "Lecture illustration";
+            img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
+            bubble.appendChild(img);
+          }
+        }
+      });
 
-    if (topicSessionId && !hasStartedChat) {
-      sendMessage("__START__");
-    } else if (lastMsg && lastMsg.role === "user") {
-      // Last message never got an AI reply — likely a transient Gemini failure.
-      // Retry silently instead of making the student resend.
-      sendMessage(lastMsg.content, { isRetry: true, skipUserBubble: true });
-    } else if (existingMessages.length > 0) {
-      // Chat already in progress — show the understanding buttons again
-      // so the student isn't stuck with no way to respond after a refresh
-      understandingControls.style.display = "flex";
+      const lastMsg = existingMessages[existingMessages.length - 1];
+      if (topicSessionId && !hasStartedChat) {
+        sendMessage("__START__");
+      } else if (lastMsg && lastMsg.role === "user") {
+        sendMessage(lastMsg.content, { isRetry: true, skipUserBubble: true });
+      } else if (existingMessages.length > 0) {
+        understandingControls.style.display = "flex";
+      }
     }
   });
 })();
-
-  function splitIntoPages(text, targetChars = 700) {
-    const paragraphs = text.trim().split(/\n\s*\n/);
-    const pages = [];
-    let current = "";
-    for (const para of paragraphs) {
-      if (!para.trim()) continue;
-      if (current && current.length + para.length > targetChars) {
-        pages.push(current.trim());
-        current = para;
-      } else {
-        current = current ? current + "\n\n" + para : para;
-      }
-    }
-    if (current.trim()) pages.push(current.trim());
-    return pages.length ? pages : [text];
-  }
-
-  function createPaginatedAiBubble(pages, imageUrl) {
-    const row = document.createElement("div");
-    row.className = "msg-row ai";
-    row.innerHTML = aiAvatarHtml() +
-      '<div class="msg-bubble paginated-bubble">' +
-        '<div class="page-content"></div>' +
-        '<div class="page-nav" style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:10px;">' +
-          '<button type="button" class="btn btn-white-outline btn-page-back" style="padding:8px 16px;font-size:.82rem;">← Back</button>' +
-          '<span class="page-indicator" style="font-size:.78rem;color:var(--ink-faint);"></span>' +
-          '<button type="button" class="btn btn-primary btn-page-next" style="padding:8px 16px;font-size:.82rem;">Next →</button>' +
-        '</div>' +
-      '</div>';
-    chatWindow.appendChild(row);
-
-    const bubble = row.querySelector(".msg-bubble");
-    const contentEl = row.querySelector(".page-content");
-    const indicator = row.querySelector(".page-indicator");
-    const backBtn = row.querySelector(".btn-page-back");
-    const nextBtn = row.querySelector(".btn-page-next");
-    let index = 0;
-
-    function renderPage() {
-      const isLast = index === pages.length - 1;
-      contentEl.innerHTML = renderMarkdown(stripImageMarker(pages[index]));
-      renderMathIn(contentEl);
-      if (isLast && imageUrl) {
-        const img = document.createElement("img");
-        img.src = imageUrl;
-        img.alt = "Lecture illustration";
-        img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
-        contentEl.appendChild(img);
-      }
-      indicator.textContent = `Page ${index + 1} of ${pages.length}`;
-      backBtn.style.visibility = index === 0 ? "hidden" : "visible";
-      nextBtn.textContent = isLast ? "Done reading ✓" : "Next →";
-      scrollChatToBottom();
-    }
-
-    backBtn.addEventListener("click", () => { if (index > 0) { index--; renderPage(); } });
-    nextBtn.addEventListener("click", () => {
-      if (index < pages.length - 1) {
-        index++;
-        renderPage();
-      } else {
-        nextBtn.disabled = true;
-        backBtn.style.visibility = "hidden";
-        understandingControls.style.display = "flex";
-      }
-    });
-
-    renderPage();
-    return bubble;
-  }
 </script>
 {% endif %}
 {% endblock %}

@@ -47,4 +47,6 @@ urlpatterns = [
     path("staff/lessons/generate/", views.staff_pregeneerate_lessons_view, name="staff_pregenerate_lessons"),
     path("staff/lessons/publish/<int:lesson_id>/", views.staff_publish_lesson_view, name="staff_publish_lesson"),
     path("staff/lessons/delete/<int:lesson_id>/", views.staff_delete_lesson_view, name="staff_delete_lesson"),
+    path("chat/chunk-next/", views.chunk_next_view, name="chunk_next"),
+    path("chat/chunk-clarify/", views.chunk_clarify_view, name="chunk_clarify"),
 ]

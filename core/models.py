@@ -275,6 +275,8 @@ class PreGeneratedLesson(models.Model):
     is_published = models.BooleanField(default=False)
     generated_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_truncated = models.BooleanField(default=False)
+    continuation_attempts = models.PositiveSmallIntegerField(default=0)
 
     class Meta:
         ordering = ["week_number", "topic_title"]
@@ -354,6 +356,8 @@ class TopicSession(models.Model):
     topic_index = models.IntegerField(default=0)
     intro_content = models.TextField(blank=True)
     lecture_content = models.TextField(blank=True)
+    chunks = models.JSONField(default=list)           
+    current_chunk_index = models.IntegerField(default=0)
     quiz_question = models.TextField(blank=True)
     quiz_options = models.JSONField(default=list)
     correct_answer_index = models.IntegerField(default=0)
@@ -396,18 +400,48 @@ class SlideDocument(models.Model):
     course_code = models.CharField(max_length=10)
     course_title = models.CharField(max_length=100)
     level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
-    file = models.FileField(upload_to="slides/", max_length=500)
+    # File field is now optional because the document acts as a container for all uploaded slides
+    file = models.FileField(upload_to="slides/", max_length=500, blank=True, null=True) 
     extracted_text = models.TextField(blank=True)
     extracted_topics = models.JSONField(default=list)
+    topics_incomplete = models.BooleanField(default=False)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     parsed = models.BooleanField(default=False)
+    # New tracking field to count how many slide files have been appended
+    append_count = models.IntegerField(default=1)
 
     class Meta:
         ordering = ["course_code"]
         unique_together = ["course_code", "level"]
 
     def __str__(self):
-        return f"{self.course_code} — Slide Document"
+        return f"{self.course_code} — Slide Document (Appended {self.append_count} times)"
+
+class SlideExtractionChunk(models.Model):
+    """One macro-chunk of a slide deck's extracted text, tracked individually
+    so topic-extraction retries only reprocess chunks that failed or are
+    still pending — instead of restarting the whole document from scratch
+    and wasting API quota re-extracting chunks that already succeeded."""
+    STATUS_CHOICES = [
+        ("PENDING", "Pending"),
+        ("COMPLETED", "Completed"),
+        ("FAILED", "Failed"),
+    ]
+
+    slide = models.ForeignKey(SlideDocument, on_delete=models.CASCADE, related_name="extraction_chunks")
+    chunk_index = models.IntegerField()
+    chunk_text = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="PENDING")
+    extracted_topics = models.JSONField(default=list)
+    error_message = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["chunk_index"]
+        unique_together = ["slide", "chunk_index"]
+
+    def __str__(self):
+        return f"{self.slide.course_code} — Extraction Chunk {self.chunk_index} ({self.status})"
 
 class SlideChunk(models.Model):
     """One week's worth of slide content, split out from the full transcript

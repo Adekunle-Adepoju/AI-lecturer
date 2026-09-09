@@ -42,13 +42,23 @@
         <div class="course-name">{{ slide.course_code }} — {{ slide.course_title }}</div>
         <div class="course-code">
           Level {{ slide.level }} ·
-          {% if slide.parsed %}{{ slide.extracted_topics|length }} topics extracted ✓
-          {% else %}Not yet parsed{% endif %}
+          {% if slide.parsed %}
+          {% if slide.topics_incomplete %}
+            {{ slide.extracted_topics|length }} topics extracted (⚠️ incomplete)
+          {% else %}
+            {{ slide.extracted_topics|length }} topics extracted ✓
+          {% endif %}
+        {% else %}Not yet parsed{% endif %}
           · {{ slide.uploaded_at|date:"d M Y" }}
         </div>
       </div>
       <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
-        {% if slide.parsed and not slide.extracted_topics %}
+        {% if slide.parsed and slide.topics_incomplete %}
+        <form method="post" action="{% url 'retry_slide_topics' slide.id %}" style="margin:0">
+          {% csrf_token %}
+          <button type="submit" class="btn" style="font-size:12px; padding:6px 12px; background:var(--amber-glow); color:var(--amber); border-color:rgba(245,166,35,0.25);">⚠️ Incomplete — Retry Topics</button>
+        </form>
+        {% elif slide.parsed and not slide.extracted_topics %}
         <form method="post" action="{% url 'retry_slide_topics' slide.id %}" style="margin:0">
           {% csrf_token %}
           <button type="submit" class="btn btn-primary" style="font-size:12px; padding:6px 12px;">🔄 Retry Topics</button>

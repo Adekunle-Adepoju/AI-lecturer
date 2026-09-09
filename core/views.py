@@ -22,6 +22,7 @@ from django.http import StreamingHttpResponse
 from django.http import JsonResponse
 from django.db.models import F
 
+
 from .forms import SignupForm, OnboardingForm, ProfileEditForm, ElectiveSelectionForm
 from .models import (
     StudentProfile, TimetableEntry, Session, TopicSession, ChatMessage,
@@ -32,14 +33,56 @@ from .prompt import SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, QUIZ_GENERATION_PROMPT
 from functools import wraps
 from .staff_forms import SlideUploadForm, CourseOutlineUploadForm, PastQuestionUploadForm, CourseDefinitionForm
 from .prompt import SIMULATOR_QUESTION_PROMPT, SIMULATOR_GRADING_PROMPT, SIMULATOR_OVERALL_FEEDBACK_PROMPT
+from .slide_topic_extractor import safe_extract_topics_from_slide
+from .lecture_completeness import detect_likely_duplicate_reteach, is_lecture_truncated, find_safe_cutoff, continue_truncated_lecture, MAX_CONTINUATION_ATTEMPTS
 
 
-
-# ─── Gemini client ───────────────────────────────────────────────────────────────
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY_CHAT)
-IMAGE_MARKER_RE = re.compile(r'\[IMAGE:\s*(.*?)\]', re.IGNORECASE)
 simulator_client = genai.Client(api_key=settings.GEMINI_API_KEY_SIMULATOR)
+extraction_client = genai.Client(api_key=settings.GEMINI_API_KEY_EXTRACTION)
+generation_client = genai.Client(api_key=settings.GEMINI_API_KEY_GENERATION)
+IMAGE_MARKER_RE = re.compile(r'\[IMAGE:\s*(.*?)\]', re.IGNORECASE)
+
+MARKDOWN_IMAGE_RE = re.compile(r'!\[(.*?)\]\(https?://\S+\)')
+
+
+def _process_chunk_image(chunk_text, course_code):
+    """Extract an [IMAGE: ...] marker OR a hallucinated Markdown image
+    tag (![alt](url) — models sometimes fabricate real-looking URLs to
+    third-party image services despite instructions not to) from
+    pregenerated chunk text, generate the real image, and return
+    (clean_text, image_url). image_url is None if no marker is present
+    or generation fails — caller just gets clean text with no image,
+    never an error."""
+    image_url = None
+    description = None
+
+    match = IMAGE_MARKER_RE.search(chunk_text)
+    if match:
+        description = match.group(1).strip()
+        chunk_text = IMAGE_MARKER_RE.sub("", chunk_text).strip()
+    else:
+        md_match = MARKDOWN_IMAGE_RE.search(chunk_text)
+        if md_match:
+            # Salvage the alt text as a description, discard the
+            # fabricated URL entirely — it will never resolve to a
+            # real image, so it must never reach the student as text.
+            description = md_match.group(1).strip()
+            chunk_text = MARKDOWN_IMAGE_RE.sub("", chunk_text).strip()
+
+    if description:
+        try:
+            from .lecture_images import generate_topic_image
+            image_path = generate_topic_image(description, course_code)
+            if image_path:
+                image_url = settings.MEDIA_URL + image_path
+        except Exception:
+            import traceback
+            traceback.print_exc()
+
+    return chunk_text, image_url
+
 
 def _build_history(topic_session):
     """Convert saved ChatMessages into Gemini content format."""
@@ -126,7 +169,7 @@ def chat_message_view(request):
 
     # ── Normal live Gemini path ───────────────────────────────────────────────
 
-        slide_context = _find_slide_content_for_topic(
+    slide_context = _find_slide_content_for_topic(
         topic_session.session.course_code,
         topic_session.session.student.level,
         topic_session.topic_name,
@@ -553,39 +596,6 @@ def _find_slide_content_for_topic(course_code, level, topic_name):
             return text[start:start + 3000]
     return ""
 
-def _find_slide_content_for_topic(course_code, level, topic_name, window=3000):
-    """Search the slide deck's full transcript for content relevant to a
-    specific topic, wherever it actually sits in the deck — decks aren't
-    always ordered to match the official course outline, so we search by
-    content rather than trusting position/week number."""
-    try:
-        slide = SlideDocument.objects.get(course_code=course_code, level=level, parsed=True)
-    except SlideDocument.DoesNotExist:
-        return ""
-
-    text = slide.extracted_text
-    if not text:
-        return ""
-
-    keywords = [w for w in re.findall(r"[A-Za-z]{4,}", topic_name)]
-    if not keywords:
-        return ""
-
-    lower_text = text.lower()
-    match_pos = None
-    for kw in keywords:
-        idx = lower_text.find(kw.lower())
-        if idx != -1:
-            match_pos = idx
-            break
-
-    if match_pos is None:
-        return ""  # topic not found in the deck — AI teaches from its own knowledge instead
-
-    start = max(0, match_pos - 500)
-    end = min(len(text), match_pos + window)
-    return text[start:end]
-
 
 def _topics_per_turn_for_course(course_code, level):
     total_topics = len(_get_total_topics_for_course(course_code, level))
@@ -618,16 +628,15 @@ def _get_past_questions_for_topic(course_code, level, topic_name, limit=3):
     past_qs = PastQuestion.objects.filter(course_code=course_code, level=level, parsed=True)
     
     for pq in past_qs:
-        for q in pq.parsed_questions:
-            hint = q.get("topic_hint", "").lower()
+        for q in (pq.parsed_questions or []):
+            hint = (q.get("topic_hint") or "").lower()
             if any(word.lower() in hint for word in topic_name.split()):
                 relevant.append(q)
                 
-    # If no topic match, just grab random ones from the course as general style reference
     if not relevant:
         all_questions = []
         for pq in past_qs:
-            all_questions.extend(pq.parsed_questions)
+            all_questions.extend(pq.parsed_questions or [])
         relevant = all_questions
         
     random.shuffle(relevant)
@@ -656,38 +665,43 @@ def _generate_topic_lecture(course_code, course_title, topic_name, week, level, 
     )
 
     last_error = None
-    for model in ["gemini-3.7-flash", "gemini-3.6-flash"]:
-        for attempt in range(3):
-            try:
-                response = client.models.generate_content(
-                    model=model,
-                    contents=user_message,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SYSTEM_PROMPT,
-                        max_output_tokens=8000,
-                    ),
-                )
-                return response.text
-            except Exception as e:
-                last_error = e
-                error_str = str(e)
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = generation_client.models.generate_content(
+                model="gemini-3.8-flash",
+                contents=user_message,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    max_output_tokens=8000,
+                ),
+            )
+            text = response.text
+            if not text or not text.strip():
+                raise ValueError("Empty response from generation client")
+            return text
+        except Exception as e:
+            last_error = e
+            error_str = str(e)
+            is_rate_limit = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
+
+            if is_rate_limit:
+                print(f"[{course_code}] Lecture gen: 429 hit (attempt {attempt + 1}/{max_retries}) — sleeping 20s and retrying same topic...")
+                time.sleep(20)
+                continue
+            else:
                 is_transient = any(marker in error_str for marker in [
-                    "503", "429", "UNAVAILABLE",
-                    "disconnected", "Disconnected",
-                    "timeout", "Timeout", "DEADLINE_EXCEEDED",
+                    "503", "UNAVAILABLE", "timeout", "Timeout",
                     "ConnectionError", "RemoteDisconnected",
                 ])
-
-                if is_transient and attempt < 2:
-                    print(f"[{course_code}] {model} hit a transient error (attempt {attempt + 1}/3) — retrying in 10s...")
+                if is_transient and attempt < max_retries - 1:
+                    print(f"[{course_code}] Lecture gen: transient error (attempt {attempt + 1}/{max_retries}) — retrying in 10s...")
                     time.sleep(10)
                     continue
-
-                print(f"[{course_code}] {model} failed: {e}. {'Trying next model...' if model != 'gemini-3.6-flash' else ''}")
+                print(f"[{course_code}] Lecture gen failed: {e}")
                 break
 
-    raise RuntimeError(f"All models and retries failed for lecture generation on {course_code} — {topic_name}: {last_error}")
-
+    raise RuntimeError(f"Lecture generation failed for {course_code} — {topic_name}: {last_error}")
 
 def _parse_lecture(full_text):
     import re
@@ -706,7 +720,7 @@ def _parse_lecture(full_text):
         lecture_raw = lecture_and_quiz.strip()
         quiz_raw = ""
 
-    question = ""
+        question = ""
     options = ["Option A", "Option B", "Option C", "Option D"]
     correct_index = 0
     explanation = ""
@@ -714,19 +728,58 @@ def _parse_lecture(full_text):
     if quiz_raw:
         clean = quiz_raw.replace("```json", "").replace("```", "").strip()
         clean = clean.replace("\\*", "*").replace("\\%", "%")
-        start = clean.find("{")
-        end = clean.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            clean = clean[start:end + 1]
 
+        # Handle BOTH accepted shapes: a single {...} object (per prompt
+        # spec) OR a [...] array of question objects (observed drift —
+        # the model sometimes produces a mini-quiz array instead). Detect
+        # which one we actually got before trying to extract a substring.
+        first_brace = clean.find("{")
+        first_bracket = clean.find("[")
+        is_array = (
+            first_bracket != -1
+            and (first_brace == -1 or first_bracket < first_brace)
+        )
+
+        parsed_obj = None
         try:
-            quiz_data = json.loads(clean)
-            question = quiz_data.get("question", "")
-            options = quiz_data.get("options", options)
-            correct_index = quiz_data.get("correct_index", 0)
-            explanation = quiz_data.get("explanation", "")
+            if is_array:
+                start = clean.find("[")
+                end = clean.rfind("]")
+                if start != -1 and end != -1 and end > start:
+                    clean_array = clean[start:end + 1]
+                    quiz_array = json.loads(clean_array)
+                    if isinstance(quiz_array, list) and quiz_array:
+                        parsed_obj = quiz_array[0]  # use only the first question
+            else:
+                start = clean.find("{")
+                end = clean.rfind("}")
+                if start != -1 and end != -1 and end > start:
+                    clean_obj = clean[start:end + 1]
+                    parsed_obj = json.loads(clean_obj)
         except json.JSONDecodeError:
-            # Fallback: try regex to pull out the question and options manually
+            parsed_obj = None
+
+        if parsed_obj:
+            question = parsed_obj.get("question", "")
+            options = parsed_obj.get("options", options)
+            # Accept "correct_index" (spec) or "answer"/"correct_answer"
+            # (observed drift) so a renamed key doesn't silently default
+            # to 0 and mark the wrong option correct.
+            correct_index = (
+                parsed_obj.get("correct_index")
+                if parsed_obj.get("correct_index") is not None
+                else parsed_obj.get("answer")
+                if parsed_obj.get("answer") is not None
+                else parsed_obj.get("correct_answer", 0)
+            )
+            try:
+                correct_index = int(correct_index)
+            except (TypeError, ValueError):
+                correct_index = 0
+            explanation = parsed_obj.get("explanation", "")
+        else:
+            # Last-resort regex fallback — only reached if neither a
+            # single object nor an array parsed as valid JSON at all.
             q_match = re.search(r'"question"\s*:\s*"(.*?)"\s*,\s*"options"', clean, re.DOTALL)
             if q_match:
                 question = q_match.group(1).strip()
@@ -738,7 +791,7 @@ def _parse_lecture(full_text):
                 if found_opts:
                     options = found_opts
 
-            idx_match = re.search(r'"correct_index"\s*:\s*(\d+)', clean)
+            idx_match = re.search(r'"(?:correct_index|answer|correct_answer)"\s*:\s*(\d+)', clean)
             if idx_match:
                 correct_index = int(idx_match.group(1))
 
@@ -755,16 +808,23 @@ def _parse_lecture(full_text):
         "explanation": explanation,
     }
 
-def _split_into_pages(text, target_chars=700):
-    """Break a long pre-generated lecture into digestible pages, splitting
-    on paragraph boundaries only — never mid-sentence. Content itself is
-    completely unchanged, just grouped for sequential display."""
-    paragraphs = re.split(r"\n\s*\n", text.strip())
+
+def _split_into_pages(text, target_chars=1800):
+    """Break a long pre-generated lecture into digestible pages. Tries
+    paragraph boundaries first; if the text has no blank-line breaks at
+    all (single-newline formatting), falls back to sentence boundaries
+    so pagination always works regardless of how Gemini formatted it."""
+    text = text.strip()
+    paragraphs = [p for p in re.split(r"\n\s*\n", text) if p.strip()]
+
+    if len(paragraphs) <= 1:
+        # No real paragraph breaks found — split on sentences instead.
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        paragraphs = [s for s in sentences if s.strip()]
+
     pages = []
     current = ""
     for para in paragraphs:
-        if not para.strip():
-            continue
         if current and len(current) + len(para) > target_chars:
             pages.append(current.strip())
             current = para
@@ -791,7 +851,17 @@ def _parse_quiz_json(text):
         quiz_data = json.loads(clean)
         question = quiz_data.get("question", "")
         options = quiz_data.get("options", options)
-        correct_index = quiz_data.get("correct_index", 0)
+        correct_index = (
+            quiz_data.get("correct_index")
+            if quiz_data.get("correct_index") is not None
+            else quiz_data.get("answer")
+            if quiz_data.get("answer") is not None
+            else quiz_data.get("correct_answer", 0)
+        )
+        try:
+            correct_index = int(correct_index)
+        except (TypeError, ValueError):
+            correct_index = 0
         explanation = quiz_data.get("explanation", "")
     except json.JSONDecodeError:
         q_match = re.search(r'"question"\s*:\s*"(.*?)"\s*,\s*"options"', clean, re.DOTALL)
@@ -802,7 +872,7 @@ def _parse_quiz_json(text):
             found_opts = re.findall(r'"(.*?)"', opt_match.group(1))
             if found_opts:
                 options = found_opts
-        idx_match = re.search(r'"correct_index"\s*:\s*(\d+)', clean)
+        idx_match = re.search(r'"(?:correct_index|answer|correct_answer)"\s*:\s*(\d+)', clean)
         if idx_match:
             correct_index = int(idx_match.group(1))
         exp_match = re.search(r'"explanation"\s*:\s*"(.*?)"\s*\}', clean, re.DOTALL)
@@ -1009,10 +1079,6 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
     })
 
 def _render_chat_session(request, entry, profile, session):
-    """Render the live chat page for the current topic.
-    Checks for pre-generated content first — serves from DB instantly if available.
-    Falls back to live Gemini only if no published lesson exists."""
-
     current_index = session.current_topic_index
     topic_name = session.topics[current_index]
 
@@ -1028,35 +1094,78 @@ def _render_chat_session(request, entry, profile, session):
         )
 
     # ── Check for pre-generated content ──────────────────────────────────────
-    pregenerated_intro = None
-    pregenerated_content = None
     is_pregenerated = False
 
     try:
-        lesson = PreGeneratedLesson.objects.get(
-            course__course_code=session.course_code,
-            week_number=session.week_number,
-            topic_title=topic_name,
-            is_published=True,
-        )
-        pregenerated_content = lesson.content_chunk
-        is_pregenerated = True
+            lesson = PreGeneratedLesson.objects.get(
+                course__course_code=session.course_code,
+                week_number=session.week_number,
+                topic_title=topic_name,
+                is_published=True,
+            )
+            is_pregenerated = True
 
-        # If topic session has no stored content yet, save the pre-generated
-        # content into it so review, history, and quiz generation all work
-        if not topic_session.lecture_content:
-            topic_session.lecture_content = pregenerated_content
-            topic_session.save()
+            if not topic_session.lecture_content:
+                topic_session.lecture_content = lesson.content_chunk
+                pages = _split_into_pages(lesson.content_chunk, target_chars=1800)
+
+                student_name = profile.user.first_name or profile.user.username
+                greeting = (
+                    f"Hey {student_name}! 👋 How are you doing today? "
+                    f"Ready to tackle some engineering concepts together? "
+                    f"Let's dive into **{topic_name}**.\n\n"
+                )
+                if pages:
+                    pages[0] = greeting + pages[0]
+                else:
+                    pages = [greeting]
+
+                topic_session.chunks = pages
+                topic_session.save(update_fields=["lecture_content", "chunks"])
+            elif not topic_session.chunks:
+                topic_session.chunks = _split_into_pages(topic_session.lecture_content, target_chars=700)
+                topic_session.save(update_fields=["chunks"])
+
+            # ── Source of truth for progress is the actual saved ChatMessage
+            #    rows, NOT a separately-tracked integer. This makes position
+            #    immune to ever drifting out of sync — even if
+            #    current_chunk_index was wrong for any reason, this recomputes
+            #    it fresh from what's actually been delivered and persisted. ──
+            saved_chunk_count = topic_session.chatmessage_set.filter(
+                role="ai", is_pregenerated=True
+            ).count()
+
+            if saved_chunk_count == 0 and topic_session.chunks:
+                clean_text, image_url = _process_chunk_image(
+                    topic_session.chunks[0], session.course_code
+                )
+                ChatMessage.objects.create(
+                    topic_session=topic_session,
+                    role="ai",
+                    content=clean_text,
+                    image_url=image_url,
+                    is_pregenerated=True,
+                )
+                saved_chunk_count = 1
+
+            if topic_session.chunks:
+                correct_index = min(saved_chunk_count - 1, len(topic_session.chunks) - 1)
+            else:
+                correct_index = 0
+
+            if topic_session.current_chunk_index != correct_index:
+                topic_session.current_chunk_index = correct_index
+                topic_session.save(update_fields=["current_chunk_index"])
 
     except PreGeneratedLesson.DoesNotExist:
-        pass
+            pass
 
-    # ── Build existing chat history ───────────────────────────────────────────
     has_started_chat = topic_session.chatmessage_set.filter(role="ai").exists()
     existing_messages = list(
-        ChatMessage.objects.filter(topic_session__session=session)
-        .order_by("topic_session__topic_index", "created_at")
-        .values("role", "content", "image_url", "is_pregenerated", topic_name=F("topic_session__topic_name"))
+        ChatMessage.objects.filter(topic_session=topic_session)
+        .order_by("created_at")
+        .values("role", "content", "image_url", "is_pregenerated",
+                topic_name=F("topic_session__topic_name"))
     )
 
     return render(request, "core/session.html", {
@@ -1070,7 +1179,13 @@ def _render_chat_session(request, entry, profile, session):
         "has_started_chat": has_started_chat,
         "existing_messages_json": json.dumps(existing_messages),
         "is_pregenerated": is_pregenerated,
-        "pregenerated_content": pregenerated_content,
+        "current_chunk_index": topic_session.current_chunk_index,
+        "total_chunks": len(topic_session.chunks),
+        "first_chunk": topic_session.chunks[topic_session.current_chunk_index] if topic_session.chunks else "",
+        "is_last_chunk": (
+            bool(topic_session.chunks)
+            and topic_session.current_chunk_index == len(topic_session.chunks) - 1
+        ),
     })
 
 
@@ -1450,21 +1565,72 @@ def staff_upload_slide_view(request):
         form = SlideUploadForm(request.POST, request.FILES)
         print(f"Form valid: {form.is_valid()}")
         print(f"Form errors: {form.errors}")
+        
         if form.is_valid():
-            slide = form.save()
-            try:
-                from .slide_topic_extractor import _parse_slide_document
-                _parse_slide_document(slide)
-                messages.success(request, f"Slide uploaded and {len(slide.extracted_topics)} topics extracted.")
-            except Exception as e:
-                messages.warning(request, f"Slide saved but topic extraction failed: {str(e)}")
+            course_code = form.cleaned_data.get('course_code')
+            level = form.cleaned_data.get('level')
+            
+            # Check if a document already exists for this course
+            existing_slide = SlideDocument.objects.filter(course_code=course_code, level=level).first()
+            
+            if existing_slide:
+                # We have an existing slide deck. Let's process the new file temporarily.
+                new_slide_temp = form.save(commit=False)
+                
+                # THE TRICK: Change the level to a dummy value so the database doesn't block the temporary save
+                new_slide_temp.level = "999"
+                new_slide_temp.save() 
+                
+                # Keep track of the old text before we extract the new stuff
+                old_text = existing_slide.extracted_text
+                
+                try:
+                    from .slide_topic_extractor import _parse_slide_document
+                    _parse_slide_document(new_slide_temp)
+                    
+                    # Append the newly extracted text to the existing text
+                    existing_slide.extracted_text = f"{old_text}\n\n--- [Slide Continuation] ---\n\n{new_slide_temp.extracted_text}"
+                    
+                    # Merge topics without duplicates
+                    existing_topics = set(existing_slide.extracted_topics)
+                    new_topics = [t for t in new_slide_temp.extracted_topics if t not in existing_topics]
+                    existing_slide.extracted_topics.extend(new_topics)
+                    
+                    existing_slide.append_count += 1
+                    existing_slide.save()
+                    
+                    messages.success(request, f"Slide appended to existing {course_code} deck. {len(new_topics)} new topics added.")
+                
+                except Exception as e:
+                    messages.warning(request, f"Failed to append slide: {str(e)}")
+                    
+                finally:
+                    # ALWAYS clean up the temporary record and file, even if parsing succeeds or crashes
+                    if new_slide_temp.file and os.path.isfile(new_slide_temp.file.path):
+                        try:
+                            os.remove(new_slide_temp.file.path)
+                        except OSError:
+                            pass
+                    new_slide_temp.delete()
+                        
+            else:
+                # No existing slide, just save normally
+                slide = form.save()
+                try:
+                    from .slide_topic_extractor import _parse_slide_document
+                    _parse_slide_document(slide)
+                    messages.success(request, f"First slide for {course_code} uploaded and {len(slide.extracted_topics)} topics extracted.")
+                except Exception as e:
+                    messages.warning(request, f"Slide saved but topic extraction failed: {str(e)}")
+            
             return redirect("staff_portal")
     else:
         form = SlideUploadForm()
+        
     return render(request, "core/staff/upload_form.html", {
         "form": form,
         "title": "Upload Course Slide",
-        "description": "Upload the full course slide deck (PDF, DOCX or PPTX). Topics will be extracted automatically.",
+        "description": "Upload a course slide deck. If a deck already exists for this course, the new text will be continuously appended to it.",
     })
 
 @staff_required
@@ -1616,7 +1782,9 @@ def delete_course_definition(request, course_id):
 @staff_required
 @require_POST
 def retry_slide_topics_view(request, slide_id):
-    """Retry AI topic extraction for a slide that already has text saved."""
+    """Retry AI topic extraction for a slide — only reprocesses chunks that
+    previously failed or are still pending; already-completed chunks are
+    skipped, and their topics are preserved rather than overwritten."""
     slide = get_object_or_404(SlideDocument, id=slide_id)
 
     if not slide.extracted_text:
@@ -1624,11 +1792,12 @@ def retry_slide_topics_view(request, slide_id):
         return redirect("staff_portal")
 
     try:
-        from .slide_topic_extractor import extract_topics_from_slide
-        topics = extract_topics_from_slide(slide.course_code, slide.course_title, slide.extracted_text)
-        slide.extracted_topics = topics
-        slide.save()
-        messages.success(request, f"Topics extracted successfully — {len(topics)} topics found.")
+        from .slide_topic_extractor import extract_topics_for_slide_resumable
+        topics, incomplete = extract_topics_for_slide_resumable(slide)
+        if incomplete:
+            messages.warning(request, f"Retried — {len(topics)} topics found so far, but some chunks still failed. You may need to retry again.")
+        else:
+            messages.success(request, f"Topics extracted successfully — {len(topics)} topics found.")
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -1759,45 +1928,109 @@ def staff_pregeneerate_lessons_view(request):
         errors = []
 
         for i, topic in enumerate(topics):
-            # Skip if content already exists (published or draft) — don't
-            # burn a second API call regenerating something we already have.
             existing = PreGeneratedLesson.objects.filter(
-                course=course,
-                week_number=week_number,
-                topic_title=topic,
+                course=course, week_number=week_number, topic_title=topic,
             ).first()
 
-            if existing and existing.content_chunk.strip():
+            # Already complete — nothing to do.
+            if existing and existing.content_chunk.strip() and not existing.is_truncated:
                 continue
 
+            # Truncated with content already saved — CONTINUE from it,
+            # don't regenerate from scratch. This is what makes retries
+            # actually make progress instead of resetting every run.
+            if existing and existing.is_truncated and existing.content_chunk.strip():
+                if existing.continuation_attempts >= MAX_CONTINUATION_ATTEMPTS:
+                    errors.append(
+                        f"{topic}: still incomplete after {MAX_CONTINUATION_ATTEMPTS} "
+                        f"continuation attempts — needs manual review/edit in admin."
+                    )
+                    continue
+
+                try:
+                    continuation = continue_truncated_lecture(
+                        generation_client, course.course_code, course.course_title,
+                        topic, week_number, course.level,
+                        student_name="Student", topic_index=i,
+                        previous_content=existing.content_chunk,
+                        slide_text=slide_text + outline_text,
+                    )
+
+                    if detect_likely_duplicate_reteach(existing.content_chunk, continuation):
+                        errors.append(
+                            f"{topic}: continuation looked like it was re-teaching an "
+                            f"earlier section — discarded, not saved. Needs manual review "
+                            f"or a fresh regeneration instead of continuation."
+                        )
+                        time.sleep(3.5)
+                        continue  # don't merge/save it — leave existing.content_chunk untouched
+
+                    merged = existing.content_chunk.rstrip() + "\n\n" + continuation.strip()
+                    still_truncated = is_lecture_truncated(continuation)
+                    final_content = merged if not still_truncated else find_safe_cutoff(merged)
+
+                    existing.content_chunk = final_content
+                    existing.is_truncated = still_truncated
+                    existing.continuation_attempts += 1
+                    existing.save(update_fields=["content_chunk", "is_truncated", "continuation_attempts"])
+
+                    if still_truncated:
+                        remaining = MAX_CONTINUATION_ATTEMPTS - existing.continuation_attempts
+                        errors.append(
+                            f"{topic}: still truncated after continuation pass "
+                            f"({remaining} attempt(s) left) — will retry on next run."
+                        )
+                    else:
+                        generated_count += 1
+
+                    time.sleep(3.5)
+
+                except Exception as e:
+                    errors.append(f"{topic}: continuation failed — {str(e)}")
+                    time.sleep(3)
+
+                continue  # move to next topic — don't fall through to fresh generation
+
+            # No existing content at all — fresh generation.
             try:
                 full_text = _generate_topic_lecture(
-                    course.course_code,
-                    course.course_title,
-                    topic,
-                    week_number,
-                    course.level,
-                    student_name="Student",
-                    topic_index=i,
+                    course.course_code, course.course_title, topic, week_number,
+                    course.level, student_name="Student", topic_index=i,
                     slide_text=slide_text + outline_text,
                 )
 
+                if not full_text or not full_text.strip():
+                    errors.append(f"{topic}: AI returned empty response — skipping.")
+                    continue
+
+                truncated = is_lecture_truncated(full_text)
                 parsed = _parse_lecture(full_text)
-                content = parsed["lecture"] if parsed["lecture"] else full_text
+                content = parsed["lecture"] if parsed.get("lecture") else full_text
+                safe_content = content if not truncated else find_safe_cutoff(content)
+
+                if not safe_content or not safe_content.strip():
+                    errors.append(f"{topic}: Parsed content was empty — skipping.")
+                    continue
 
                 PreGeneratedLesson.objects.update_or_create(
-                    course=course,
-                    week_number=week_number,
-                    topic_title=topic,
+                    course=course, week_number=week_number, topic_title=topic,
                     defaults={
-                        "content_chunk": content,
+                        "content_chunk": safe_content,
                         "is_published": False,
+                        "is_truncated": truncated,
+                        "continuation_attempts": 0,
                     }
                 )
                 generated_count += 1
+                if truncated:
+                    errors.append(f"{topic}: generated but truncated — will continue on next run.")
+
+                time.sleep(3.5)
 
             except Exception as e:
                 errors.append(f"{topic}: {str(e)}")
+                time.sleep(3)
+                continue
 
         if generated_count:
             messages.success(request, f"Generated {generated_count} lesson(s) for {course.course_code} Week {week_number}. Review and publish them in the admin panel.")
@@ -1880,14 +2113,14 @@ def _get_past_q_reference(course_code, level, topic, limit=3):
     relevant = []
     pqs = PastQuestion.objects.filter(course_code=course_code, level=level, parsed=True)
     for pq in pqs:
-        for q in pq.parsed_questions:
-            hint = q.get("topic_hint", "").lower()
+        for q in (pq.parsed_questions or []):
+            hint = (q.get("topic_hint") or "").lower()
             if any(word.lower() in hint for word in topic.split()):
                 relevant.append(q)
     if not relevant:
         all_q = []
         for pq in pqs:
-            all_q.extend(pq.parsed_questions)
+            all_q.extend(pq.parsed_questions or [])
         relevant = all_q
     random.shuffle(relevant)
     sample = relevant[:limit]
@@ -2244,3 +2477,140 @@ def simulator_result_view(request, test_id):
         "questions_with_feedback": questions_with_feedback,
         "profile": profile,
     })
+
+# ─── Chunk navigation ──────────────────────────────────────────────────────────
+
+@require_POST
+def chunk_next_view(request):
+    """Student clicked Got it — advance to next chunk, no Gemini call for
+    text (image generation for [IMAGE:] markers, if present, still runs)."""
+    topic_session_id = request.POST.get("topic_session_id")
+    topic_session = get_object_or_404(TopicSession, id=topic_session_id)
+
+    total_chunks = len(topic_session.chunks)
+    saved_chunk_count = topic_session.chatmessage_set.filter(
+        role="ai", is_pregenerated=True
+    ).count()
+
+    next_index = saved_chunk_count
+
+    if next_index >= total_chunks:
+        return JsonResponse({"action": "quiz_time"})
+
+    raw_chunk_text = topic_session.chunks[next_index]
+    is_last = (next_index == total_chunks - 1)
+
+    clean_text, image_url = _process_chunk_image(
+        raw_chunk_text, topic_session.session.course_code
+    )
+
+    ChatMessage.objects.create(
+        topic_session=topic_session,
+        role="ai",
+        content=clean_text,
+        image_url=image_url,
+        is_pregenerated=True,
+    )
+
+    if topic_session.current_chunk_index != next_index:
+        topic_session.current_chunk_index = next_index
+        topic_session.save(update_fields=["current_chunk_index"])
+
+    return JsonResponse({
+        "action": "next_chunk",
+        "chunk": clean_text,
+        "image_url": image_url,
+        "chunk_index": next_index,
+        "total_chunks": total_chunks,
+        "is_last": is_last,
+        "is_last_chunk": is_last,
+    })
+
+
+@require_POST
+def chunk_clarify_view(request):
+    """Student asked a clarification question — call Gemini with chunk context."""
+    topic_session_id = request.POST.get("topic_session_id")
+    user_message = request.POST.get("message", "").strip()
+    topic_session = get_object_or_404(TopicSession, id=topic_session_id)
+
+    if not user_message:
+        return JsonResponse({"error": "No message provided"}, status=400)
+
+    # Cap check
+    if _check_daily_message_cap(topic_session):
+        return JsonResponse({
+            "error": "cap_reached",
+            "message": "You've reached your 10 message limit for today. Come back tomorrow — your progress is saved. 🙏"
+        }, status=429)
+
+    # Save the student's message
+    ChatMessage.objects.create(
+        topic_session=topic_session,
+        role="user",
+        content=user_message,
+    )
+
+    # Count remaining messages
+    student = topic_session.session.student
+    today_count = ChatMessage.objects.filter(
+        topic_session__session__student=student,
+        role="user",
+        created_at__date=date.today(),
+    ).count()
+    remaining = max(0, 10 - today_count)
+
+    # Current chunk as context for Gemini
+    current_chunk = ""
+    if topic_session.chunks and topic_session.current_chunk_index < len(topic_session.chunks):
+        current_chunk = topic_session.chunks[topic_session.current_chunk_index]
+
+    student_name = topic_session.session.student.user.first_name or topic_session.session.student.user.username
+    system_instruction = f"""You are Rovea, a brilliant AI lecturer for Petroleum and Gas Engineering students at UNILAG.
+
+You are helping {student_name}, who is studying the topic: "{topic_session.topic_name}" ({topic_session.session.course_code}).
+
+They have just read this chunk of the lecture:
+---
+{current_chunk}
+---
+
+The student has a question or needs clarification. Your job:
+- If they said they don't understand everything: re-explain the chunk above from a completely different angle. Use a new analogy, a Nigerian everyday example, or a step-by-step breakdown — NOT the same wording. Then ask "Better now?"
+- If they pointed to something specific: re-explain ONLY that specific part. Keep it short and clear. Then ask "Does that make sense?"
+- If they asked a question: answer it directly and clearly using the chunk as your reference. Then ask "Ready to continue?"
+
+Use {student_name}'s name occasionally in your reply — not every message, that gets robotic.
+Keep it conversational. Max 5-6 paragraphs. Never re-teach the whole chunk unless they said "everything".
+Never say "As an AI". Stay in character as Rovea."""
+
+    def event_stream():
+        full_reply = ""
+        try:
+            stream = client.models.generate_content_stream(
+                model="gemini-3.6-flash",
+                contents=[{"role": "user", "parts": [{"text": user_message}]}],
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    max_output_tokens=2048,
+                ),
+            )
+            for chunk in stream:
+                if chunk.text:
+                    full_reply += chunk.text
+                    yield f"data: {json.dumps({'chunk': chunk.text})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            return
+
+        ChatMessage.objects.create(
+            topic_session=topic_session,
+            role="ai",
+            content=full_reply,
+        )
+        yield f"data: {json.dumps({'done': True, 'remaining_messages': remaining})}\n\n"
+
+    resp = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
+    resp["Cache-Control"] = "no-cache"
+    resp["X-Accel-Buffering"] = "no"
+    return resp

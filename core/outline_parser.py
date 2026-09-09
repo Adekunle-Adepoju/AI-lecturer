@@ -1,8 +1,10 @@
 import json
 import traceback
+import time
 from google import genai
 from google.genai import types
 from django.conf import settings
+
 
 def extract_text_from_file(file_path):
     """Extract text from PDF or DOCX"""
@@ -26,8 +28,10 @@ def extract_text_from_file(file_path):
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             return f.read()
 
+
 def parse_outline_with_ai(course_code, course_title, outline_text):
-    """Use Gemini to parse the outline into 15 weeks x 3 topics"""
+    """Use Gemini to parse the outline into 15 weeks x 3 topics, with
+    429-aware retries."""
     api_key = getattr(settings, "GEMINI_API_KEY_EXTRACTION", None)
     if not api_key:
         raise ValueError("GEMINI_API_KEY_EXTRACTION is missing from Django settings.py.")
@@ -50,26 +54,44 @@ Course outline text:
 {outline_text[:6000]}
 """
 
-    response = client.models.generate_content(
-        model="gemini-3.7-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(max_output_tokens=4000),
-    )
+    max_retries = 3
+    raw = None
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(max_output_tokens=4000),
+            )
+            raw = response.text
+            break
+        except Exception as e:
+            error_str = str(e)
+            is_rate_limit = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
+            if is_rate_limit:
+                print(f"[{course_code}] Outline parse: 429 hit (attempt {attempt + 1}/{max_retries}) — sleeping 20s and retrying...")
+                time.sleep(20)
+                continue
+            print(f"[{course_code}] Outline parse: error ({e}), attempt {attempt + 1}/{max_retries}")
+            if attempt < max_retries - 1:
+                time.sleep(3)
+                continue
+            raise  # non-rate-limit failure on final attempt — bubble up to caller's try/except
 
-    raw = response.text.strip()
+    if not raw or not raw.strip():
+        raise ValueError("Empty response from extraction client while parsing outline")
+
     raw = raw.replace("```json", "").replace("```", "").strip()
     return json.loads(raw)
 
 
 def _parse_course_outline(outline_obj):
     """Extract text and parse topics from uploaded outline file"""
-    # 1. Fault Tolerance: Save text unconditionally first
     text = extract_text_from_file(outline_obj.file.path)
     outline_obj.extracted_text = text
     outline_obj.parsed = True
     outline_obj.save()
 
-    # 2. AI parsing is best-effort
     try:
         topics_json = parse_outline_with_ai(
             outline_obj.course_code,

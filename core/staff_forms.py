@@ -13,6 +13,13 @@ class SlideUploadForm(forms.ModelForm):
             "file": "Slide File (PDF, DOCX or PPTX)",
         }
 
+    def validate_unique(self):
+        """
+        Override this to bypass the unique_together check.
+        Our custom view logic handles appending to existing records instead.
+        """
+        pass
+
 
 class CourseOutlineUploadForm(forms.ModelForm):
     class Meta:
