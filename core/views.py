@@ -517,21 +517,19 @@ def dashboard_view(request):
 
 # ─── Helpers ───────────────────--------------------------------───────────────
 
-TEACHING_ROUNDS_TARGET = 9   # target number of rounds to finish all topics — round 5 starts tests, round 9 is the teaching deadline
+TOTAL_TEACHING_WEEKS = 15  # fixed course length in teaching rounds
+
 
 def _get_total_topics_for_course(course_code, level):
-    """Full ordered topic list for a course. CourseOutline (the official
-    syllabus, if uploaded) determines ordering first — slide decks aren't
-    always arranged in teaching order. Slide-extracted topics are only a
-    fallback for courses with no outline uploaded yet."""
+    """Full ordered topic list for a course. CourseOutline's flat,
+    validated topic list wins if present; SlideDocument.extracted_topics
+    is the fallback — and, in practice, the more trustworthy source,
+    since it's grounded directly in the deck."""
     try:
         outline = CourseOutline.objects.get(course_code=course_code, level=level, parsed=True)
-        if outline.topics_json:
-            flat = []
-            for week in sorted(outline.topics_json.keys(), key=lambda w: int(w)):
-                flat.extend(outline.topics_json[week])
-            if flat:
-                return flat
+        topics = (outline.topics_json or {}).get("topics")
+        if topics:
+            return list(topics)
     except (CourseOutline.DoesNotExist, ValueError):
         pass
 
@@ -550,40 +548,44 @@ def _get_total_topics_for_course(course_code, level):
 
     return ["Core Concepts", "Key Applications", "Problem Solving"]
 
-def _get_topic_source_week(course_code, level, topic_name):
-    """Find which CourseOutline week a topic belongs to, so we can fetch
-    the matching SlideChunk — needed since Session.week_number now tracks
-    teaching rounds, not literal outline weeks."""
-    try:
-        outline = CourseOutline.objects.get(course_code=course_code, level=level, parsed=True)
-        for week_str, topics in outline.topics_json.items():
-            if topic_name in topics:
-                try:
-                    return int(week_str)
-                except ValueError:
-                    continue
-    except CourseOutline.DoesNotExist:
-        pass
-    return None
+
+def _topic_round_sizes(total_topics, total_weeks=TOTAL_TEACHING_WEEKS):
+    """How many topics land in each of the 15 rounds, preserving order.
+    total_topics <= 15 → 1 per round, course finishes early once topics
+    run out. total_topics > 15 → base = total_topics // 15 per round,
+    remainder distributed one-per-round from round 1 — so a multi-topic
+    round is always a CONTIGUOUS slice (Lecture 1 & 2, never Lecture 1 & 7)."""
+    if total_topics <= 0:
+        return [0] * total_weeks
+    base, remainder = divmod(total_topics, total_weeks)
+    return [base + 1 if i < remainder else base for i in range(total_weeks)]
+
+
+def _get_topics_for_week(course_code, level, week_number):
+    """Ordered, contiguous slice of topics for this teaching round.
+    Empty list means the course has finished all its topics."""
+    all_topics = _get_total_topics_for_course(course_code, level)
+    sizes = _topic_round_sizes(len(all_topics))
+
+    if week_number < 1 or week_number > len(sizes):
+        return []
+
+    start = sum(sizes[:week_number - 1])
+    size = sizes[week_number - 1]
+    return all_topics[start:start + size] if size else []
 
 
 def _find_slide_content_for_topic(course_code, level, topic_name):
-    """Targeted retrieval: find the specific week's SlideChunk this topic
-    belongs to (small, ~15-20 pages) rather than searching the full deck
-    on every call — keeps payload size and API cost down."""
     try:
         slide = SlideDocument.objects.get(course_code=course_code, level=level, parsed=True)
     except SlideDocument.DoesNotExist:
         return ""
 
-    source_week = _get_topic_source_week(course_code, level, topic_name)
-    if source_week is not None:
-        chunk = slide.chunks.filter(week_number=source_week).first()
-        if chunk and chunk.chunk_text:
-            return chunk.chunk_text[:6000]
+    topic_chunk = slide.topic_chunks.filter(topic_name=topic_name).exclude(is_empty=True).first()
+    if topic_chunk and topic_chunk.chunk_text.strip():
+        return topic_chunk.chunk_text[:12000]
 
-    # Fallback only — topic isn't mapped to a chunked week (no outline, or
-    # chunking hasn't run yet). Small bounded search, not the whole deck.
+    # Last-resort keyword fallback only.
     text = slide.extracted_text
     if not text:
         return ""
@@ -595,30 +597,6 @@ def _find_slide_content_for_topic(course_code, level, topic_name):
             start = max(0, idx - 500)
             return text[start:start + 3000]
     return ""
-
-
-def _topics_per_turn_for_course(course_code, level):
-    total_topics = len(_get_total_topics_for_course(course_code, level))
-    return min(3, max(1, math.ceil(total_topics / TEACHING_ROUNDS_TARGET)))
-
-
-def _get_topics_for_week(course_code, level, week_number):
-    """'week_number' here tracks turn count for this course, not a literal
-    calendar week — how many topic groups it's completed so far. Group size
-    scales to the course's total topic count so light courses move at
-    1/turn and bulky ones at up to 3/turn, aiming to finish around the
-    same number of turns regardless of bulk."""
-    all_topics = _get_total_topics_for_course(course_code, level)
-    per_turn = _topics_per_turn_for_course(course_code, level)
-
-    start = (week_number - 1) * per_turn
-    end = start + per_turn
-    topics = all_topics[start:end]
-    if not topics and all_topics:
-        topics = all_topics[-per_turn:]
-    if not topics:
-        topics = ["Core Concepts", "Key Applications", "Problem Solving"]
-    return topics
 
 
 def _get_past_questions_for_topic(course_code, level, topic_name, limit=3):
@@ -643,7 +621,7 @@ def _get_past_questions_for_topic(course_code, level, topic_name, limit=3):
     return relevant[:limit]
 
 
-def _generate_topic_lecture(course_code, course_title, topic_name, week, level, student_name, topic_index=0, slide_text=""):
+def _generate_topic_lecture(course_code, course_title, topic_name, week, level, student_name, topic_index=0, slide_text="", total_topics_in_round=3):
     past_questions = _get_past_questions_for_topic(course_code, level, topic_name, limit=2)
     past_q_text = ""
     if past_questions:
@@ -656,7 +634,7 @@ def _generate_topic_lecture(course_code, course_title, topic_name, week, level, 
         f"Level: {level}L\n"
         f"Course: {course_code} — {course_title}\n"
         f"Topic to teach: {topic_name}\n"
-        f"Topic number: {topic_index + 1} of 3 in this session\n"
+        f"Topic number: {topic_index + 1} of {total_topics_in_round} in this session\n"
         f"Week: {week} of 10\n"
         f"STRICT INSTRUCTION: Teach ONLY '{topic_name}'. Do not teach any other topic. "
         f"Follow the course outline strictly. This is the exact topic scheduled for this session."
@@ -669,7 +647,7 @@ def _generate_topic_lecture(course_code, course_title, topic_name, week, level, 
     for attempt in range(max_retries):
         try:
             response = generation_client.models.generate_content(
-                model="gemini-3.8-flash",
+                model="gemini-3.6-flash",
                 contents=user_message,
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT,
@@ -913,6 +891,12 @@ def session_view(request, course_code):
             return _render_chat_session(request, entry, profile, existing_session)
 
         topics = _get_topics_for_week(course_code, profile.level, entry.week_number)
+        if not topics:
+            entry.is_completed = True
+            entry.save(update_fields=["is_completed"])
+            messages.success(request, f"You've completed all topics for {entry.course_code}! 🎉")
+            return redirect("dashboard")
+
         return render(request, "core/session.html", {
             "entry": entry,
             "chat_mode": False,
@@ -1020,7 +1004,8 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
             session.course_code, session.course_title,
             topic_name, session.week_number,
             profile.level, student_name, topic_index,
-            slide_text + outline_text
+            slide_text + outline_text,
+            total_topics_in_round=len(session.topics),
         )
     except Exception as e:
         return render(request, "core/session.html", {
@@ -1037,7 +1022,8 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
                 session.course_code, session.course_title,
                 topic_name, session.week_number,
                 profile.level, student_name, topic_index,
-                slide_text + outline_text
+                slide_text + outline_text,
+                total_topics_in_round=len(session.topics),
             )
             parsed = _parse_lecture(full_text)
         except Exception:
@@ -1807,6 +1793,26 @@ def retry_slide_topics_view(request, slide_id):
 
 @staff_required
 @require_POST
+def retry_slide_topic_split_view(request, slide_id):
+    slide = get_object_or_404(SlideDocument, id=slide_id)
+    if not slide.chunks.exists():
+        messages.warning(request, "Can't split by topic — no week-level chunks saved for this slide.")
+        return redirect("staff_portal")
+
+    from .slide_topic_extractor import split_all_weeks_by_topic
+    try:
+        split_all_weeks_by_topic(slide)
+        count = slide.topic_chunks.exclude(is_empty=True).count()
+        messages.success(request, f"Topic-level split complete — {count} non-empty topic chunks saved.")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        messages.warning(request, f"Topic split retry failed: {str(e)}")
+
+    return redirect("staff_portal")
+
+@staff_required
+@require_POST
 def retry_outline_topics_view(request, outline_id):
     """Retry AI topic parsing for a course outline that already has text saved."""
     outline = get_object_or_404(CourseOutline, id=outline_id)
@@ -1842,7 +1848,7 @@ def chat_next_topic_view(request):
         )
         try:
             response = client.models.generate_content(
-                model="gemini-3.7-flash",
+                model="gemini-3.6-flash",
                 contents=f"Topic taught: {topic_session.topic_name}\n\nCONVERSATION TRANSCRIPT:\n{transcript}",
                 config=types.GenerateContentConfig(
                     system_instruction=QUIZ_GENERATION_PROMPT,
@@ -1899,18 +1905,6 @@ def staff_pregeneerate_lessons_view(request):
             messages.error(request, f"No topics found for {course.course_code} Week {week_number}. Upload a course outline first.")
             return redirect("staff_pregenerate_lessons")
 
-        # Get slide text for context
-        slide_text = ""
-        try:
-            slide_doc = SlideDocument.objects.get(
-                course_code=course.course_code,
-                level=course.level,
-            )
-            if slide_doc.extracted_text:
-                slide_text = f"\n\nLECTURER SLIDES (focus only on content relevant to this topic):\n{slide_doc.extracted_text[:6000]}"
-        except SlideDocument.DoesNotExist:
-            pass
-
         # Get outline text for context
         outline_text = ""
         try:
@@ -1928,6 +1922,11 @@ def staff_pregeneerate_lessons_view(request):
         errors = []
 
         for i, topic in enumerate(topics):
+            chunk_text = _find_slide_content_for_topic(course.course_code, course.level, topic)
+            slide_text = (
+                f"\n\nLECTURER SLIDES (focus only on content relevant to this topic):\n{chunk_text}"
+                if chunk_text else ""
+            )
             existing = PreGeneratedLesson.objects.filter(
                 course=course, week_number=week_number, topic_title=topic,
             ).first()
@@ -1954,6 +1953,7 @@ def staff_pregeneerate_lessons_view(request):
                         student_name="Student", topic_index=i,
                         previous_content=existing.content_chunk,
                         slide_text=slide_text + outline_text,
+                        total_topics_in_round=len(topics),
                     )
 
                     if detect_likely_duplicate_reteach(existing.content_chunk, continuation):
@@ -1997,6 +1997,7 @@ def staff_pregeneerate_lessons_view(request):
                     course.course_code, course.course_title, topic, week_number,
                     course.level, student_name="Student", topic_index=i,
                     slide_text=slide_text + outline_text,
+                    total_topics_in_round=len(topics),
                 )
 
                 if not full_text or not full_text.strip():
@@ -2048,7 +2049,7 @@ def staff_pregeneerate_lessons_view(request):
     return render(request, "core/staff/pregenerate_lessons.html", {
         "courses": courses,
         "lessons": lessons,
-        "week_range": range(1, 11),  # Assuming 10 weeks max
+        "week_range": range(1, TOTAL_TEACHING_WEEKS + 1),
     })
 
 

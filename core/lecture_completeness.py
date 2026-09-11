@@ -239,7 +239,7 @@ def detect_likely_duplicate_reteach(previous_content, new_continuation, overlap_
 
 def continue_truncated_lecture(extraction_client, course_code, course_title, topic_name,
                                 week, level, student_name, topic_index,
-                                previous_content, slide_text=""):
+                                previous_content, slide_text="", total_topics_in_round=3):
     tail_context = previous_content[-1200:]
     word_count = len(previous_content.split())
 
@@ -289,7 +289,7 @@ def continue_truncated_lecture(extraction_client, course_code, course_title, top
         f"Topic: {topic_name}\n"
         f"Level: {level}L | Week: {week}\n"
         f"Student name: {student_name}\n"
-        f"Topic number: {topic_index + 1} of 3 in this session\n"
+        f"Topic number: {topic_index + 1} of {total_topics_in_round} in this session\n"
         f"{covered_block}"
         f"{length_instruction}\n"
         f"You were teaching this topic and got cut off before finishing. "
@@ -307,7 +307,7 @@ def continue_truncated_lecture(extraction_client, course_code, course_title, top
     for attempt in range(3):
         try:
             response = extraction_client.models.generate_content(
-                model="gemini-3.8-flash",
+                model="gemini-3.6-flash",
                 contents=continuation_message,
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT,

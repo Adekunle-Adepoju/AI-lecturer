@@ -174,72 +174,7 @@ COURSE_OUTLINES = {
         2: ["Writing Your SWEP Report", "Documenting Field Experience", "Presenting Technical Work"],
         3: ["Review of Field Experience", "Lessons from Industry", "Career Planning in Petroleum Engineering"],
     },
-        "GEG411": {
-        1: ["Technical Writing Fundamentals", "Report Writing and Documentation", "Oral Presentation Skills"],
-        2: ["Scientific Paper Writing", "Engineering Proposals and Memos", "Visual Communication and Data Presentation"],
-    },
-    "MME412": {
-        1: ["Introduction to Corrosion", "Electrochemical Principles", "Types of Corrosion"],
-        2: ["Corrosion in Oil and Gas Systems", "Corrosion Monitoring Techniques", "Corrosion Inhibitors"],
-        3: ["Cathodic and Anodic Protection", "Protective Coatings", "Material Selection for Corrosion Resistance"],
-        4: ["Corrosion in Pipelines and Offshore Structures", "Case Studies in Nigerian Oil Fields", "Review and Problem Solving"],
-    },
-    "PGG431": {
-        1: ["Reservoir Fluid Properties Review", "Material Balance Equation — Derivation", "Material Balance for Undersaturated Reservoirs"],
-        2: ["Material Balance for Gas Reservoirs", "Material Balance for Solution Gas Drive", "Havlena-Odeh Method"],
-        3: ["Decline Curve Analysis — Exponential", "Decline Curve Analysis — Hyperbolic and Harmonic", "Production Forecasting"],
-        4: ["Pressure Transient Analysis Fundamentals", "Buildup and Drawdown Tests", "Reservoir Limit Testing"],
-        5: ["Multiphase Flow in Reservoirs", "Relative Permeability Concepts", "Fractional Flow Theory"],
-        6: ["Review of EOR Methods", "Reservoir Simulation Overview", "Field Development Planning"],
-    },
-    "PGG432": {
-        1: ["Introduction to Production Engineering", "Inflow Performance Relationship — IPR", "Vogel and Standing Correlations"],
-        2: ["Tubing Performance and Nodal Analysis", "Multiphase Flow in Wellbores", "Vertical Lift Performance"],
-        3: ["Artificial Lift Methods — Overview", "Electric Submersible Pumps", "Gas Lift Design and Operation"],
-        4: ["Surface Production Facilities", "Wellhead and Christmas Tree Equipment", "Separators and Treaters"],
-        5: ["Production Chemicals and Flow Assurance", "Wax, Scale and Hydrate Management", "Pipeline Production Systems"],
-        6: ["Well Completion Design", "Perforation and Stimulation", "Production Optimization"],
-    },
-    "PGG433": {
-        1: ["Introduction to Gas Dynamics", "Thermodynamic Properties of Gases", "Compressible Flow Fundamentals"],
-        2: ["Isentropic Flow Relations", "Normal Shock Waves", "Oblique Shock Waves"],
-        3: ["Flow Through Nozzles and Diffusers", "Fanno Flow — Friction Effects", "Rayleigh Flow — Heat Transfer Effects"],
-        4: ["Gas Flow in Pipelines", "Compressor Station Design", "Gas Transmission Network Analysis"],
-        5: ["Pressure Drop Calculations in Gas Systems", "Transient Flow in Gas Pipelines", "Review and Problem Solving"],
-    },
-    "PGG434": {
-        1: ["Introduction to Well Logging", "Borehole Environment and Invasion", "Spontaneous Potential Log"],
-        2: ["Gamma Ray Log — Interpretation", "Resistivity Logs — Principles", "Resistivity Logs — Interpretation"],
-        3: ["Porosity Logs — Density Log", "Porosity Logs — Neutron Log", "Sonic Log and Acoustic Properties"],
-        4: ["Log Interpretation — Lithology Identification", "Water Saturation Determination — Archie's Equation", "Permeability Estimation from Logs"],
-        5: ["Formation Evaluation Workflow", "Cross-Plot Techniques", "Case Studies from Nigerian Formations"],
-    },
-    "PGG435": {
-        1: ["Lab Safety and Equipment Overview", "Core Flooding Experiments", "Special Core Analysis"],
-        2: ["PVT Cell Experiments", "Separator Test Procedures", "Well Test Data Analysis"],
-        3: ["Production Log Interpretation", "Reservoir Simulation Lab Exercises", "Final Lab Review and Report Writing"],
-    },
-    "PGG436": {
-        1: ["Introduction to Well Testing", "Pressure Transient Theory", "Wellbore Storage and Skin Effects"],
-        2: ["Pressure Buildup Analysis — Horner Method", "Drawdown Test Analysis", "Multi-Rate Testing"],
-        3: ["Interference and Pulse Testing", "Gas Well Testing", "Naturally Fractured Reservoir Testing"],
-        4: ["Modern Well Test Interpretation — Type Curves", "Derivative Analysis", "Case Studies and Field Examples"],
-    },
-    "PGG451": {
-        1: ["Introduction to Reservoir Simulation", "Grid Systems and Discretization", "Single Phase Flow Simulation"],
-        2: ["Multiphase Flow Simulation", "History Matching Fundamentals", "Sensitivity Analysis"],
-        3: ["Introduction to Petrel and Eclipse", "Building a Simulation Model", "Production Forecasting with Simulators"],
-        4: ["Introduction to PROSPER and GAP", "Nodal Analysis with Software", "Integrated Asset Modelling"],
-        5: ["Data Input and Quality Control", "Simulation Results Interpretation", "Field Development Scenarios"],
-    },
-    "PGG453": {
-        1: ["Introduction to Subsea Engineering", "Subsea Field Development Concepts", "Subsea Wellheads and Trees"],
-        2: ["Subsea Manifolds and Templates", "Flexible and Rigid Risers", "Umbilicals and Control Systems"],
-        3: ["Subsea Pipeline Design", "Flow Assurance in Subsea Systems", "Hydrate and Wax Management"],
-        4: ["Subsea Processing Systems", "Installation Methods and Vessels", "Nigerian Deepwater Case Studies — Bonga, Agbami, Egina"],
-        5: ["Integrity Management of Subsea Systems", "Inspection and Maintenance Strategies", "Review and Problem Solving"],
-    },
-}
+}       
 
 LEVEL_CHOICES = [("100", "100 Level"), ("200", "200 Level"), ("300", "300 Level"), ("400", "400 Level"), ("500", "500 Level")]
 SEMESTER_CHOICES = [("1", "First Semester"), ("2", "Second Semester")]
@@ -443,6 +378,32 @@ class SlideExtractionChunk(models.Model):
     def __str__(self):
         return f"{self.slide.course_code} — Extraction Chunk {self.chunk_index} ({self.status})"
 
+class SlideCleanupChunk(models.Model):
+    """One macro-chunk of a slide deck's raw extracted text, tracked individually
+    through the AI cleanup pass so a rate-limit failure or crash partway through
+    a large deck doesn't lose already-cleaned chunks — re-running cleanup only
+    reprocesses chunks that are still PENDING or FAILED."""
+    STATUS_CHOICES = [
+        ("PENDING", "Pending"),
+        ("COMPLETED", "Completed"),
+        ("FAILED", "Failed"),
+    ]
+
+    slide = models.ForeignKey(SlideDocument, on_delete=models.CASCADE, related_name="cleanup_chunks")
+    chunk_index = models.IntegerField()
+    chunk_text = models.TextField(blank=True)
+    cleaned_text = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="PENDING")
+    error_message = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["chunk_index"]
+        unique_together = ["slide", "chunk_index"]
+
+    def __str__(self):
+        return f"{self.slide.course_code} — Cleanup Chunk {self.chunk_index} ({self.status})"
+
 class SlideChunk(models.Model):
     """One week's worth of slide content, split out from the full transcript
     so lecture generation only receives what's relevant to that week."""
@@ -627,3 +588,22 @@ class Challenge(models.Model):
 
     def __str__(self):
         return f"{self.challenger.user.username} vs {self.opponent.user.username} — {self.course_code}"
+
+class SlideTopicChunk(models.Model):
+    """One topic's slice of a week's slide content — split out from the
+    week-level SlideChunk so lecture generation for a single topic never
+    receives the other 1-2 topics scheduled for the same week."""
+    slide = models.ForeignKey(SlideDocument, on_delete=models.CASCADE, related_name="topic_chunks")
+    week_number = models.IntegerField()
+    topic_name = models.CharField(max_length=200)
+    chunk_text = models.TextField(blank=True)
+    is_empty = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["week_number", "topic_name"]
+        unique_together = ["slide", "week_number", "topic_name"]
+
+    def __str__(self):
+        return f"{self.slide.course_code} — Week {self.week_number} — {self.topic_name} (topic chunk)"
