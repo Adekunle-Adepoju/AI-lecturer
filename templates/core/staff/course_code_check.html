@@ -1,0 +1,34 @@
+{% extends "core/base.html" %}
+{% block title %}Course Code Check — Rovea{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <a href="{% url 'staff_portal' %}" style="font-size:13px; color:var(--text-secondary)">← Back to portal</a>
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">🧩 Course Code Consistency Check</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
+    Flags course codes that differ across SlideDocument, CourseOutline, and CourseDefinition
+    (e.g. a stray space or inconsistent casing) — this kind of mismatch silently breaks
+    slide-content lookups without any error.
+  </p>
+
+  {% if mismatches %}
+  <div style="display:flex; flex-direction:column; gap:12px;">
+    {% for normalized, variants in mismatches.items %}
+    <div style="background:var(--navy-card); border:1px solid var(--red-soft); border-radius:var(--radius-lg); padding:16px;">
+      <div style="font-size:14px; font-weight:600; color:#F08080; margin-bottom:8px;">⚠ Mismatch found</div>
+      {% for source, code in variants %}
+      <div style="font-size:13px; color:var(--text); margin-bottom:4px;">
+        <strong>{{ source }}</strong>: <code>"{{ code }}"</code>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:var(--text-secondary); font-size:14px;">✓ No mismatches found — all course codes are consistent.</p>
+  {% endif %}
+
+</div>
+{% endblock %}

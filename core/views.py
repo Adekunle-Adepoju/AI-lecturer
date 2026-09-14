@@ -1530,17 +1530,23 @@ def _bypasses_restrictions(request):
 
 @staff_required
 def staff_portal_view(request):
-    """Staff portal home — overview of uploaded materials"""
     slides = SlideDocument.objects.all().order_by("-uploaded_at")[:10]
     outlines = CourseOutline.objects.all().order_by("-uploaded_at")[:10]
     past_questions = PastQuestion.objects.all().order_by("-uploaded_at")[:10]
     courses = CourseDefinition.objects.all().order_by("level", "semester", "course_code")
+
+    slide_split_status = {}
+    for slide in slides:
+        total = slide.topic_chunks.count()
+        empty = slide.topic_chunks.filter(is_empty=True).count()
+        slide_split_status[slide.id] = {"total": total, "empty": empty}
 
     return render(request, "core/staff/portal.html", {
         "slides": slides,
         "outlines": outlines,
         "past_questions": past_questions,
         "courses": courses,
+        "slide_split_status": slide_split_status,
     })
 
 
@@ -2615,3 +2621,122 @@ Never say "As an AI". Stay in character as Rovea."""
     resp["Cache-Control"] = "no-cache"
     resp["X-Accel-Buffering"] = "no"
     return resp
+
+@staff_required
+@require_POST
+def run_topic_split_view(request, slide_id):
+    """Runs (or resumes) the resumable topic split for a slide, then
+    automatically backfills any topics that came out empty. Safe to
+    click multiple times — it's resumable and idempotent."""
+    slide = get_object_or_404(SlideDocument, id=slide_id)
+
+    if not slide.extracted_topics or not slide.extracted_text.strip():
+        messages.warning(request, "Can't split — no extracted topics or text saved for this slide.")
+        return redirect("staff_portal")
+
+    from core.slide_topic_extractor import split_slide_by_extracted_topics, retry_missing_topic_splits
+
+    try:
+        success, count = split_slide_by_extracted_topics(slide)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        messages.warning(request, f"Topic split failed: {str(e)} — any progress made was saved, click again to resume.")
+        return redirect("staff_portal")
+
+    empty_topics = list(slide.topic_chunks.filter(is_empty=True).values_list("topic_name", flat=True))
+
+    if empty_topics:
+        try:
+            filled, filled_count = retry_missing_topic_splits(slide, topic_names=empty_topics)
+            still_empty = list(slide.topic_chunks.filter(is_empty=True).values_list("topic_name", flat=True))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            messages.warning(request, f"Split completed ({count} topics) but backfill failed: {str(e)}")
+            return redirect("staff_portal")
+
+        if still_empty:
+            messages.warning(
+                request,
+                f"Split complete — {count} topics saved, but {len(still_empty)} still have no "
+                f"content after backfill: {', '.join(still_empty[:5])}"
+                f"{'...' if len(still_empty) > 5 else ''}. Click 'Run Topic Split' again to retry, "
+                f"or check the source slides for these topics manually."
+            )
+        else:
+            messages.success(request, f"Split complete — all {count} topics have content. Ready to generate lectures.")
+    else:
+        messages.success(request, f"Split complete — all {count} topics have content. Ready to generate lectures.")
+
+    return redirect("staff_portal")
+
+@staff_required
+def staff_preview_lesson_view(request, lesson_id):
+    lesson = get_object_or_404(PreGeneratedLesson, id=lesson_id)
+    lecture_html = markdown.markdown(lesson.content_chunk, extensions=["extra"])
+    return render(request, "core/staff/preview_lesson.html", {
+        "lesson": lesson,
+        "lecture_html": lecture_html,
+        "char_count": len(lesson.content_chunk),
+        "is_truncated": lesson.is_truncated,
+    })
+
+@staff_required
+def staff_slide_diagnostics_view(request, slide_id):
+    slide = get_object_or_404(SlideDocument, id=slide_id)
+
+    topic_chunks = sorted(slide.topic_chunks.all(), key=lambda c: len(c.chunk_text), reverse=True)
+    chunk_data = [
+        {"topic_name": c.topic_name, "chars": len(c.chunk_text), "is_empty": c.is_empty}
+        for c in topic_chunks
+    ]
+
+    return render(request, "core/staff/slide_diagnostics.html", {
+        "slide": slide,
+        "extracted_text_length": len(slide.extracted_text or ""),
+        "extracted_topics_count": len(slide.extracted_topics or []),
+        "chunk_data": chunk_data,
+        "empty_count": sum(1 for c in chunk_data if c["is_empty"]),
+        "extraction_chunks": slide.extraction_chunks.all(),
+        "cleanup_chunks": slide.cleanup_chunks.all(),
+        "topic_split_chunks": slide.topic_split_chunks.all() if hasattr(slide, "topic_split_chunks") else [],
+    })
+
+@staff_required
+def staff_course_code_check_view(request):
+    from collections import defaultdict
+    codes_by_source = defaultdict(set)
+
+    for s in SlideDocument.objects.all():
+        codes_by_source[s.course_code.strip().upper().replace(" ", "")].add(("SlideDocument", s.course_code))
+    for o in CourseOutline.objects.all():
+        codes_by_source[o.course_code.strip().upper().replace(" ", "")].add(("CourseOutline", o.course_code))
+    for c in CourseDefinition.objects.all():
+        codes_by_source[c.course_code.strip().upper().replace(" ", "")].add(("CourseDefinition", c.course_code))
+
+    mismatches = {
+        normalized: variants for normalized, variants in codes_by_source.items()
+        if len({v[1] for v in variants}) > 1
+    }
+
+    return render(request, "core/staff/course_code_check.html", {"mismatches": mismatches})
+
+@staff_required
+@require_POST
+def staff_reset_course_view(request, course_id):
+    course = get_object_or_404(CourseDefinition, id=course_id)
+
+    lessons_deleted, _ = PreGeneratedLesson.objects.filter(course=course).delete()
+    sessions_deleted, _ = Session.objects.filter(course_code=course.course_code).delete()
+    entries_updated = TimetableEntry.objects.filter(course_code=course.course_code).update(
+        week_number=1, is_completed=False
+    )
+
+    messages.success(
+        request,
+        f"Reset {course.course_code}: {lessons_deleted} lesson(s) deleted, "
+        f"{sessions_deleted} session(s) deleted, {entries_updated} timetable entr"
+        f"{'y' if entries_updated == 1 else 'ies'} reset to week 1."
+    )
+    return redirect("staff_manage_courses")

@@ -68,21 +68,29 @@
           </div>
         </div>
         <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
-          <a href="{% url 'staff_edit_course' course.id %}" class="btn" style="font-size:12px; padding:6px 12px;">
-            ✏️ Edit
-          </a>
-          <button type="button" class="btn"
-                  style="font-size:12px; padding:6px 12px; background:var(--red-glow); color:#F08080; border-color:var(--red-soft);"
-                  onclick="deleteSingle('{{ course.id }}', '{{ course.course_code }}')">
-            🗑️ Delete
-          </button>
-        </div>
+  <a href="{% url 'staff_edit_course' course.id %}" class="btn" style="font-size:12px; padding:6px 12px;">
+    ✏️ Edit
+  </a>
+  <button type="button" class="btn"
+          style="font-size:12px; padding:6px 12px; background:var(--amber-glow); color:var(--amber); border-color:rgba(245,166,35,0.25);"
+          onclick="resetCourseProgress('{{ course.id }}', '{{ course.course_code }}')">
+    ↺ Reset Progress
+  </button>
+  <button type="button" class="btn"
+          style="font-size:12px; padding:6px 12px; background:var(--red-glow); color:#F08080; border-color:var(--red-soft);"
+          onclick="deleteSingle('{{ course.id }}', '{{ course.course_code }}')">
+    🗑️ Delete
+  </button>
+</div>
       </div>
       {% empty %}
       <p style="color:var(--text-muted); font-size:13px">No courses defined yet.</p>
       {% endfor %}
     </div>
   </form>
+  <form id="resetCourseForm" method="POST" action="">
+  {% csrf_token %}
+</form>
 
 </div>
 
@@ -109,6 +117,13 @@
     document.querySelector('input[name="course_ids"][value="' + courseId + '"]').checked = true;
     saveScrollAndSubmit(form);
   }
+
+  function resetCourseProgress(courseId, courseCode) {
+  if (!confirm('This will delete all lessons and student progress for ' + courseCode + '. Are you sure?')) return;
+  const form = document.getElementById('resetCourseForm');
+  form.action = '/staff/course/' + courseId + '/reset/';  // matches your reset URL pattern
+  saveScrollAndSubmit(form);
+}
 
   function submitBulkDelete() {
     const checked = document.querySelectorAll('input[name="course_ids"]:checked');

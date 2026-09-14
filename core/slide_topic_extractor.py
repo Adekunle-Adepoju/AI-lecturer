@@ -6,6 +6,7 @@ from google.genai import types
 from django.conf import settings
 import math
 from .models import SlideDocument, SlideExtractionChunk, SlideTopicChunk, CourseOutline
+from .models import SlideTopicSplitChunk
 
 
 def _get_batch_client():
@@ -641,22 +642,37 @@ def split_all_weeks_by_topic(slide):
     topics — CourseOutline no longer supplies week-grouped topic buckets."""
     split_slide_by_extracted_topics(slide)
 
+def _get_or_create_topic_split_chunks(slide):
+    existing = list(slide.topic_split_chunks.all())
+    if existing:
+        return existing
+
+    chunks_text = _macro_chunk_text(slide.extracted_text, target_chunk_size=9000, min_chunks=1, max_chunks=None)
+    created = []
+    for idx, chunk_text in enumerate(chunks_text):
+        obj = SlideTopicSplitChunk.objects.create(
+            slide=slide, chunk_index=idx, chunk_text=chunk_text, status="PENDING",
+        )
+        created.append(obj)
+    return created
+
+
 def split_slide_by_extracted_topics(slide):
+    """Resumable: each chunk's split result is saved to
+    SlideTopicSplitChunk immediately on success. Re-calling this after a
+    quota exhaustion, crash, or manual interrupt skips chunks already
+    COMPLETED and only spends API calls on what's left."""
     if not slide.extracted_topics or not slide.extracted_text.strip():
         return False, 0
 
     batch_client = _get_batch_client()
     topics_list_str = "\n".join(f"- {t}" for t in slide.extracted_topics)
 
-    # Smaller chunks — verbatim reproduction of dense LaTeX/formula text
-    # inflates output size well beyond the source char count, so keep
-    # input chunks conservative to leave headroom under max_output_tokens.
-    source_chunks = _macro_chunk_text(slide.extracted_text, target_chunk_size=4000, min_chunks=1, max_chunks=None)
-    if not source_chunks:
-        return False, 0
+    chunk_rows = _get_or_create_topic_split_chunks(slide)
+    pending_rows = [c for c in chunk_rows if c.status != "COMPLETED"]
 
-    accumulated = {t: [] for t in slide.extracted_topics}
-    any_success = False
+    if not pending_rows:
+        print(f"[{slide.course_code}] All {len(chunk_rows)} topic-split chunks already completed.")
 
     def _try_parse(raw):
         if not raw or not raw.strip():
@@ -667,8 +683,6 @@ def split_slide_by_extracted_topics(slide):
             if clean.startswith("json"):
                 clean = clean[4:]
         clean = clean.strip()
-        # Robustness: if there's leading/trailing junk around the JSON
-        # object, slice to the outermost braces before parsing.
         start = clean.find("{")
         end = clean.rfind("}")
         if start != -1 and end != -1 and end > start:
@@ -679,9 +693,11 @@ def split_slide_by_extracted_topics(slide):
         except json.JSONDecodeError:
             return None
 
-    for idx, source_chunk in enumerate(source_chunks):
+    for chunk_row in pending_rows:
+        chunk_label = f"Topic split — chunk {chunk_row.chunk_index + 1}/{len(chunk_rows)}"
         split_map = None
-        for attempt in range(3):  # retry on parse failure, not just API error
+
+        for attempt in range(3):
             raw = _call_gemini_with_retry(
                 client=batch_client,
                 model="gemini-3.6-flash",
@@ -690,37 +706,40 @@ def split_slide_by_extracted_topics(slide):
                     f"Full topic list for this course (only some may appear in "
                     f"this excerpt — return an empty string for any topic not "
                     f"present here):\n{topics_list_str}\n\n"
-                    f"Slide text excerpt {idx + 1} of {len(source_chunks)}:\n{source_chunk}"
+                    f"Slide text excerpt {chunk_row.chunk_index + 1} of {len(chunk_rows)}:\n{chunk_row.chunk_text}"
                 ),
                 config=types.GenerateContentConfig(
                     system_instruction=TOPIC_SPLIT_SYSTEM_INSTRUCTION,
                     max_output_tokens=8000,
                 ),
                 course_code=slide.course_code,
-                chunk_label=f"Topic split — excerpt {idx + 1}/{len(source_chunks)} (attempt {attempt + 1})",
+                chunk_label=f"{chunk_label} (attempt {attempt + 1})",
             )
             split_map = _try_parse(raw)
             if split_map is not None:
                 break
-            print(f"[{slide.course_code}] Excerpt {idx + 1} attempt {attempt + 1}: parse failed, retrying...")
             time.sleep(3)
 
         if split_map is None:
-            print(f"[{slide.course_code}] Excerpt {idx + 1}: all attempts failed — content for this excerpt lost.")
+            chunk_row.status = "FAILED"
+            chunk_row.error_message = "All parse attempts failed (rate limit, network, or bad JSON)."
+            chunk_row.save(update_fields=["status", "error_message", "updated_at"])
             time.sleep(3)
             continue
 
-        for topic_name in slide.extracted_topics:
-            piece = str(split_map.get(topic_name, "")).strip()
-            if piece:
-                accumulated[topic_name].append(piece)
-
-        any_success = True
+        chunk_row.status = "COMPLETED"
+        chunk_row.split_result = split_map
+        chunk_row.error_message = ""
+        chunk_row.save(update_fields=["status", "split_result", "error_message", "updated_at"])
         time.sleep(3)
 
-    if not any_success:
-        print(f"[{slide.course_code}] Topic split (no outline): all excerpts failed.")
-        return False, 0
+    # Aggregate from every COMPLETED chunk (old + newly processed)
+    accumulated = {t: [] for t in slide.extracted_topics}
+    for row in slide.topic_split_chunks.filter(status="COMPLETED"):
+        for topic_name in slide.extracted_topics:
+            piece = str(row.split_result.get(topic_name, "")).strip()
+            if piece:
+                accumulated[topic_name].append(piece)
 
     created = 0
     for topic_name in slide.extracted_topics:
@@ -731,7 +750,9 @@ def split_slide_by_extracted_topics(slide):
         )
         created += 1
 
-    print(f"[{slide.course_code}] Topic split (no outline): {created} topic chunks saved.")
+    any_failed = slide.topic_split_chunks.filter(status="FAILED").exists()
+    print(f"[{slide.course_code}] Topic split: {created} topic chunks saved"
+          f"{' (some source chunks still FAILED — retry to fill gaps)' if any_failed else ''}.")
     return True, created
 
 def retry_missing_topic_splits(slide, topic_names=None):
@@ -750,7 +771,7 @@ def retry_missing_topic_splits(slide, topic_names=None):
 
     batch_client = _get_batch_client()
     topics_list_str = "\n".join(f"- {t}" for t in topic_names)
-    source_chunks = _macro_chunk_text(slide.extracted_text, target_chunk_size=4000, min_chunks=1, max_chunks=None)
+    source_chunks = _macro_chunk_text(slide.extracted_text, target_chunk_size=9000, min_chunks=1, max_chunks=None)
 
     accumulated = {t: [] for t in topic_names}
 

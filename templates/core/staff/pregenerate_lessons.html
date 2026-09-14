@@ -63,12 +63,15 @@
         </div>
       </div>
       <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
-        {% if lesson.is_published %}
-        <span class="badge badge-green">✓ Published</span>
-        {% else %}
-        <span class="badge" style="background:var(--amber-glow); color:var(--amber); border:1px solid rgba(245,166,35,0.25);">Draft</span>
-        {% endif %}
-        <form method="POST" action="{% url 'staff_publish_lesson' lesson.id %}" style="margin:0">
+  {% if lesson.is_published %}
+  <span class="badge badge-green">✓ Published</span>
+  {% else %}
+  <span class="badge" style="background:var(--amber-glow); color:var(--amber); border:1px solid rgba(245,166,35,0.25);">Draft</span>
+  {% endif %}
+  <a href="{% url 'staff_preview_lesson' lesson.id %}" class="btn" style="font-size:12px; padding:6px 12px;">
+    👁️ Preview
+  </a>
+  <form method="POST" action="{% url 'staff_publish_lesson' lesson.id %}" style="margin:0">
           {% csrf_token %}
           <button type="submit" class="btn" style="font-size:12px; padding:6px 12px;">
             {% if lesson.is_published %}Unpublish{% else %}Publish{% endif %}

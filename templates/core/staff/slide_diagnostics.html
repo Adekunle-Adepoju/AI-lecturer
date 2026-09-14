@@ -1,0 +1,64 @@
+{% extends "core/base.html" %}
+{% block title %}Slide Diagnostics — Rovea{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <a href="{% url 'staff_portal' %}" style="font-size:13px; color:var(--text-secondary)">← Back to portal</a>
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">
+    🔍 {{ slide.course_code }} — Slide Diagnostics
+  </h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
+    {{ extracted_text_length }} characters extracted · {{ extracted_topics_count }} topics found ·
+    {{ empty_count }} topic{{ empty_count|pluralize }} still empty
+  </p>
+
+  <form method="POST" action="{% url 'run_topic_split' slide.id %}" style="margin-bottom:24px">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary">
+      {% if empty_count > 0 %}↺ Backfill {{ empty_count }} Empty Topic{{ empty_count|pluralize }}{% else %}Re-run Topic Split{% endif %}
+    </button>
+  </form>
+
+  <p class="section-label">Topic Chunks ({{ chunk_data|length }})</p>
+  <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:32px;">
+    {% for chunk in chunk_data %}
+    <div style="background:var(--navy-card); border:1px solid {% if chunk.is_empty %}var(--red-soft){% else %}var(--border){% endif %}; border-radius:var(--radius-md); padding:10px 14px; display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-size:13px; color:var(--text)">{{ chunk.topic_name }}</span>
+      <span style="font-size:12px;">
+        {% if chunk.is_empty %}
+          <span style="color:#F08080;">⚠ EMPTY</span>
+        {% else %}
+          <span style="color:var(--text-secondary);">{{ chunk.chars }} chars</span>
+        {% endif %}
+      </span>
+    </div>
+    {% empty %}
+    <p style="color:var(--text-muted); font-size:13px">No topic split has been run yet.</p>
+    {% endfor %}
+  </div>
+
+  <p class="section-label">Pipeline Stage Status</p>
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+    <div style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-md); padding:14px;">
+      <div style="font-size:12px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.06em;">Cleanup Chunks</div>
+      <div style="font-size:20px; font-weight:600; margin-top:4px;">
+        {{ cleanup_chunks|length }}
+        <span style="font-size:12px; color:var(--text-muted); font-weight:400;">
+          ({{ cleanup_chunks|dictsortreversed:"status"|length }} total)
+        </span>
+      </div>
+    </div>
+    <div style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-md); padding:14px;">
+      <div style="font-size:12px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.06em;">Extraction Chunks</div>
+      <div style="font-size:20px; font-weight:600; margin-top:4px;">{{ extraction_chunks|length }}</div>
+    </div>
+    <div style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-md); padding:14px;">
+      <div style="font-size:12px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.06em;">Topic Split Chunks</div>
+      <div style="font-size:20px; font-weight:600; margin-top:4px;">{{ topic_split_chunks|length }}</div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

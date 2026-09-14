@@ -1698,3 +1698,28 @@ hr {
   0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
   40% { transform: scale(1); opacity: 1; }
 }
+
+/* ── Staff Portal: slide split rows ─────────────────────────────── */
+.slide-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  background: var(--navy-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.slide-row strong {
+  font-family: 'Space Grotesk', sans-serif;
+  min-width: 90px;
+  color: var(--text);
+}
+
+.slide-row .topics-count {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.slide-row form { margin-left: auto; }

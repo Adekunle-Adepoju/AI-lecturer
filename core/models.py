@@ -607,3 +607,29 @@ class SlideTopicChunk(models.Model):
 
     def __str__(self):
         return f"{self.slide.course_code} — Week {self.week_number} — {self.topic_name} (topic chunk)"
+
+class SlideTopicSplitChunk(models.Model):
+    """One macro-chunk of a slide deck's text, tracked individually through
+    the topic-split pass so a quota exhaustion or crash partway through a
+    large deck doesn't lose already-split chunks — re-running only
+    reprocesses chunks still PENDING or FAILED."""
+    STATUS_CHOICES = [
+        ("PENDING", "Pending"),
+        ("COMPLETED", "Completed"),
+        ("FAILED", "Failed"),
+    ]
+
+    slide = models.ForeignKey(SlideDocument, on_delete=models.CASCADE, related_name="topic_split_chunks")
+    chunk_index = models.IntegerField()
+    chunk_text = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="PENDING")
+    split_result = models.JSONField(default=dict)  # {"Topic A": "...", "Topic B": "..."}
+    error_message = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["chunk_index"]
+        unique_together = ["slide", "chunk_index"]
+
+    def __str__(self):
+        return f"{self.slide.course_code} — Topic Split Chunk {self.chunk_index} ({self.status})"

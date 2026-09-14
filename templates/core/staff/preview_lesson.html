@@ -1,0 +1,24 @@
+{% extends "core/base.html" %}
+{% block title %}Preview Lesson — Rovea{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <a href="{% url 'staff_pregenerate_lessons' %}" style="font-size:13px; color:var(--text-secondary)">← Back to lessons</a>
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">
+    {{ lesson.course.course_code }} — Week {{ lesson.week_number }} — {{ lesson.topic_title }}
+  </h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
+    {{ char_count }} characters
+    {% if is_truncated %}
+      · <span style="color:var(--amber)">⚠ Flagged as truncated</span>
+    {% endif %}
+  </p>
+
+  <div style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:24px; line-height:1.6;">
+    {{ lecture_html|safe }}
+  </div>
+
+</div>
+{% endblock %}
