@@ -224,10 +224,95 @@
     }
   }
 
-    /* Add this inside the <style> block of your signup page */
 .Rovea-footer {
   display: none !important;
 }
+
+  /* Password toggle */
+  .password-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 460px;
+  }
+
+  .password-wrapper input {
+    padding-right: 44px !important; /* room for the icon */
+  }
+
+  .toggle-password-btn {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    color: #64748b;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .toggle-password-btn:hover {
+    color: #0f172a;
+  }
+
+    /* Google OAuth button + divider */
+  .btn-google {
+    width: 100%;
+    background-color: #ffffff;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 50px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    text-decoration: none;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+    margin-bottom: 24px;
+  }
+
+  .btn-google:hover {
+    background-color: #f8fafc;
+    border-color: #cbd5e1;
+  }
+
+  .btn-google img {
+    width: 18px;
+    height: 18px;
+  }
+
+  .auth-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 24px;
+  }
+
+  .auth-divider::before,
+  .auth-divider::after {
+    content: "";
+    flex: 1;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .auth-divider:not(:empty)::before {
+    margin-right: 12px;
+  }
+
+  .auth-divider:not(:empty)::after {
+    margin-left: 12px;
+  }
 </style>
 
 <div class="auth-container">
@@ -249,6 +334,13 @@
     <h3 class="form-title">Welcome Back</h3>
     <p class="form-subtitle">Log in to continue your learning streak.</p>
 
+        <a href="{% url 'google_login' %}" class="btn-google">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+      Continue with Google
+    </a>
+
+    <div class="auth-divider">or log in with email</div>
+
     <form method="post">
       {% csrf_token %}
       
@@ -257,9 +349,12 @@
         {{ form.username }}
       </div>
       
-      <div class="form-group">
+            <div class="form-group">
         <label>Password</label>
-        {{ form.password }}
+        <div class="password-wrapper">
+          {{ form.password }}
+          <button type="button" class="toggle-password-btn" id="togglePassword">👁️</button>
+        </div>
       </div>
       
       {% if form.errors %}
@@ -273,4 +368,19 @@
   </div>
 
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const toggleBtn = document.getElementById('togglePassword');
+    const passwordField = document.getElementById('id_password');
+
+    if (toggleBtn && passwordField) {
+        toggleBtn.addEventListener('click', function () {
+            const isHidden = passwordField.getAttribute('type') === 'password';
+            passwordField.setAttribute('type', isHidden ? 'text' : 'password');
+            toggleBtn.textContent = isHidden ? '🙈' : '👁️';
+        });
+    }
+});
+</script>
 {% endblock %}

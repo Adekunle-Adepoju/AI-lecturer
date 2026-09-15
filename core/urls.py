@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include
 from core import views
 
 urlpatterns = [
@@ -55,4 +55,7 @@ urlpatterns = [
     path("chat/chunk-clarify/", views.chunk_clarify_view, name="chunk_clarify"),
     path("staff/slide/<int:slide_id>/diagnostics/", views.staff_slide_diagnostics_view, name="staff_slide_diagnostics"),
     path("staff/course-code-check/", views.staff_course_code_check_view, name="staff_course_code_check"),
+    path("accounts/", include("allauth.urls")),
+    path("lecture/<int:topic_session_id>/", views.topic_lecture_view, name="topic_lecture"),
+    path("result/<int:topic_session_id>/", views.quiz_result_view, name="quiz_result"),
 ]

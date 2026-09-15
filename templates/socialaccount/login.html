@@ -1,0 +1,23 @@
+{% extends "core/base.html" %}
+{% load i18n %}
+{% block title %}Continue with Google — Rovea{% endblock %}
+
+{% block content %}
+<div style="max-width: 480px; margin: 100px auto; text-align: center; font-family: system-ui, sans-serif;">
+  <h2 style="font-size: 24px; font-weight: 700; color: #0f172a; margin-bottom: 12px;">
+    Continue with Google
+  </h2>
+  <p style="color: #64748b; margin-bottom: 32px;">
+    You're about to sign in to Rovea using your Google account.
+  </p>
+
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit" 
+      style="background-color: #e58a00; color: #ffffff; border: none; padding: 14px 32px; 
+             font-size: 15px; font-weight: 600; border-radius: 50px; cursor: pointer;">
+      Continue →
+    </button>
+  </form>
+</div>
+{% endblock %}

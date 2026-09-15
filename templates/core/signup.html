@@ -206,6 +206,63 @@
 .Rovea-footer {
   display: none !important;
 }
+
+  /* Google OAuth button + divider */
+  .btn-google {
+    width: 100%;
+    background-color: #ffffff;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 50px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    text-decoration: none;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+    margin-bottom: 24px;
+  }
+
+  .btn-google:hover {
+    background-color: #f8fafc;
+    border-color: #cbd5e1;
+  }
+
+  .btn-google img {
+    width: 18px;
+    height: 18px;
+  }
+
+  .auth-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 24px;
+  }
+
+  .auth-divider::before,
+  .auth-divider::after {
+    content: "";
+    flex: 1;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .auth-divider:not(:empty)::before {
+    margin-right: 12px;
+  }
+
+  .auth-divider:not(:empty)::after {
+    margin-left: 12px;
+  }
 </style>
 
 <div class="auth-container">
@@ -226,6 +283,12 @@
   <div class="form-side">
     <h3 class="form-title">Create Account</h3>
     <p class="form-subtitle">Join your peers and step up your academic tracking streak.</p>
+    <a href="{% url 'google_login' %}" class="btn-google">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+      Continue with Google
+    </a>
+
+    <div class="auth-divider">or sign up with email</div>
 
     <form method="post">
       {% csrf_token %}

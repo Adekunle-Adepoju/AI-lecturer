@@ -419,30 +419,68 @@ def _generate_timetable(profile):
         ))
     TimetableEntry.objects.bulk_create(entries)
 
+def _generate_course_schedule_preview(profile, num_days=14):
+    """Project which course lands on each of the next `num_days` calendar
+    days, using the same rolling-queue math as _get_active_course_entry —
+    one course per non-Sunday day, Sunday is always a rest day. Syncs the
+    profile's queue position to today first, so the preview always starts
+    from the actual current state."""
+    courses = list(profile.timetable.order_by("course_code"))
+    if not courses:
+        return []
+
+    _get_active_course_entry(profile)  # syncs queue_position/queue_date to today
+
+    today = date.today()
+    pos = profile.queue_position % len(courses)
+    schedule = []
+
+    for i in range(num_days):
+        d = today + timedelta(days=i)
+        if i > 0:
+            prev_day = d - timedelta(days=1)
+            if prev_day.weekday() != 6:  # Sunday never advances the queue
+                pos = (pos + 1) % len(courses)
+
+        if d.weekday() == 6:
+            schedule.append({"date": d, "course": None, "is_rest": True})
+        else:
+            schedule.append({"date": d, "course": courses[pos], "is_rest": False})
+
+    return schedule
+
 def _get_active_course_entry(profile):
-    """Today's course in the rolling queue. Advances one position per
-    Mon–Sat day elapsed; Sunday never advances and has no active course."""
+    """Today's course in the rolling queue — purely date-driven, so every
+    student with the same enrolled course list gets the same course on
+    the same calendar day."""
     courses = list(profile.timetable.order_by("course_code"))
     if not courses:
         return None
 
+    idx = _teaching_day_index(date.today())
+    if idx is None:
+        return None  # Sunday — rest day
+
+    return courses[idx % len(courses)]
+
+def _generate_course_schedule_preview(profile, num_days=14):
+    """Project which course lands on each of the next `num_days` calendar
+    days, using the same pure date→course mapping as
+    _get_active_course_entry, so the preview always matches reality."""
+    courses = list(profile.timetable.order_by("course_code"))
+    if not courses:
+        return []
+
     today = date.today()
-    if profile.queue_date != today:
-        if profile.queue_date is not None:
-            days_advanced = 0
-            d = profile.queue_date
-            while d < today:
-                d += timedelta(days=1)
-                if d.weekday() != 6:  # Sunday = 6, doesn't count
-                    days_advanced += 1
-            profile.queue_position = (profile.queue_position + days_advanced) % len(courses)
-        profile.queue_date = today
-        profile.save(update_fields=["queue_position", "queue_date"])
-
-    if today.weekday() == 6:  # Sunday — rest day, no course
-        return None
-
-    return courses[profile.queue_position % len(courses)]
+    schedule = []
+    for i in range(num_days):
+        d = today + timedelta(days=i)
+        idx = _teaching_day_index(d)
+        if idx is None:
+            schedule.append({"date": d, "course": None, "is_rest": True})
+        else:
+            schedule.append({"date": d, "course": courses[idx % len(courses)], "is_rest": False})
+    return schedule
 
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────────
@@ -516,6 +554,22 @@ def dashboard_view(request):
 
 
 # ─── Helpers ───────────────────--------------------------------───────────────
+# Fixed Monday anchor for the rolling course queue. Every student's
+# rotation is computed purely from today's date relative to this epoch —
+# never from individual login/signup history — so students with the same
+# course list always land on the same course on the same calendar day.
+TIMETABLE_EPOCH = date.fromisocalendar(2026, 1, 1)  # guaranteed Monday
+
+
+def _teaching_day_index(target_date):
+    """Zero-based teaching-day count (Mon–Sat) since TIMETABLE_EPOCH.
+    Sunday returns None (rest day). Pure function of the date — no
+    per-student state involved."""
+    if target_date.weekday() == 6:
+        return None
+    delta_days = (target_date - TIMETABLE_EPOCH).days
+    full_weeks, remainder = divmod(delta_days, 7)
+    return full_weeks * 6 + remainder
 
 TOTAL_TEACHING_WEEKS = 15  # fixed course length in teaching rounds
 
@@ -777,6 +831,9 @@ def _parse_lecture(full_text):
             if exp_match:
                 explanation = exp_match.group(1).strip()
 
+    if options and options != ["Option A", "Option B", "Option C", "Option D"]:
+        options, correct_index = _shuffle_quiz_options(options, correct_index)
+
     return {
         "intro": intro_raw,
         "lecture": lecture_raw,
@@ -860,6 +917,8 @@ def _parse_quiz_json(text):
     if not question:
         raise ValueError("No question could be parsed from quiz response")
 
+    if options and options != ["Option A", "Option B", "Option C", "Option D"]:
+        options, correct_index = _shuffle_quiz_options(options, correct_index)
     return {"question": question, "options": options, "correct_index": correct_index, "explanation": explanation}
 
 # ─── Session ───────────────────────────────────────────────────────────────────
@@ -916,25 +975,12 @@ def session_view(request, course_code):
                 student=profile, course_code=course_code, course_title=entry.course_title,
                 week_number=entry.week_number, topics=topics, current_topic_index=0,
             )
-        return _render_chat_session(request, entry, profile, existing_session)
+        return redirect("session", course_code=course_code)
 
     if action == "show_lecture":
         topic_session_id = request.POST.get("topic_session_id")
-        topic_session = get_object_or_404(TopicSession, id=topic_session_id, session__student=profile)
-        session = topic_session.session
-        lecture_html = markdown.markdown(topic_session.lecture_content, extensions=["extra"])
-        return render(request, "core/session.html", {
-            "entry": entry,
-            "session": session,
-            "topic_session": topic_session,
-            "lecture": lecture_html,
-            "topic_number": topic_session.topic_index + 1,
-            "total_topics": len(session.topics),
-            "topic_name": topic_session.topic_name,
-            "show_quiz": True,
-        })
-
-    return redirect("session_view", course_code=course_code)
+        return redirect("topic_lecture", topic_session_id=topic_session_id)
+    return redirect("session", course_code=course_code)
 
 @login_required
 def course_outline_view(request, course_code):
@@ -1255,20 +1301,7 @@ def answer_view(request):
         entry.week_number += 1
         entry.save()
 
-    return render(request, "core/result.html", {
-        "entry": entry,
-        "session": session,
-        "topic_session": topic_session,
-        "correct": correct,
-        "xp_earned": xp,
-        "feedback": feedback,
-        "explanation": topic_session.quiz_explanation,
-        "next_topic_index": next_index,
-        "next_topic_name": session.topics[next_index] if not is_last_topic else None,
-        "is_last_topic": is_last_topic,
-        "total_topics": total_topics,
-        "topic_number": topic_session.topic_index + 1,
-    })
+    return redirect("quiz_result", topic_session_id=topic_session.id)   # ← was: return render(request, "core/result.html", {...})
 
 
 # ─── Next topic ────────────────────────────────────────────────────────────────
@@ -1308,7 +1341,13 @@ def timetable_view(request):
         return redirect("onboarding")
     profile = request.user.profile
     timetable = profile.timetable.all()
-    return render(request, "core/timetable.html", {"timetable": timetable, "profile": profile})
+    schedule_preview = _generate_course_schedule_preview(profile, num_days=14)
+    return render(request, "core/timetable.html", {
+        "timetable": timetable,
+        "profile": profile,
+        "schedule_preview": schedule_preview,
+        "today": date.today(),
+    })
 
 
 # ─── Reschedule ────────────────────────────────────────────────────────────────
@@ -1444,12 +1483,13 @@ def manage_courses_view(request):
 
     profile = request.user.profile
 
+    # Show ALL courses in the student's department/school, regardless of
+    # level/semester — carry-over students may need to pick up a course
+    # from an earlier level alongside their current ones.
     available_courses = CourseDefinition.objects.filter(
-        level=profile.level,
-        semester=profile.semester,
         school=profile.school,
         department=profile.department,
-    )
+    ).order_by("level", "semester", "course_code")
 
     active_course_codes = TimetableEntry.objects.filter(
         student=profile,
@@ -1459,7 +1499,6 @@ def manage_courses_view(request):
     if request.method == "POST":
         selected_codes = request.POST.getlist('selected_courses')
 
-        # Remove timetable/session rows for anything unchecked
         TimetableEntry.objects.filter(
             student=profile,
             course_code__in=available_courses.values_list('course_code', flat=True)
@@ -1470,14 +1509,13 @@ def manage_courses_view(request):
             course_code__in=available_courses.values_list('course_code', flat=True)
         ).exclude(course_code__in=selected_codes).delete()
 
-        # Add timetable rows for anything newly checked
         for code in selected_codes:
             course = available_courses.get(course_code=code)
             TimetableEntry.objects.get_or_create(
                 student=profile,
                 course_code=course.course_code,
                 course_title=course.course_title,
-                                defaults={
+                defaults={
                     'day': 'Wed',
                     'time': '12:00',
                     'week_number': 1,
@@ -1488,8 +1526,13 @@ def manage_courses_view(request):
         messages.success(request, "Your course selections have been updated successfully!")
         return redirect('dashboard')
 
+    # Group by level for display, so the template can render level headers
+    courses_by_level = {}
+    for course in available_courses:
+        courses_by_level.setdefault(course.level, []).append(course)
+
     context = {
-        'courses': available_courses,
+        'courses_by_level': courses_by_level,
         'active_course_codes': list(active_course_codes),
     }
     return render(request, 'core/manage_courses.html', context)
@@ -2085,11 +2128,15 @@ def staff_delete_lesson_view(request, lesson_id):
 
 def _get_xp_and_grade(percentage):
     if percentage >= 70:
-        return "A", 150
+        return "A", 200
+    elif percentage >= 60:
+        return "B", 150
     elif percentage >= 50:
-        return "B", 100
+        return "C", 100
+    elif percentage >= 45:
+        return "D", 50
     elif percentage >= 40:
-        return "C", 50
+        return "E", 30
     else:
         return "F", 10
 
@@ -2740,3 +2787,79 @@ def staff_reset_course_view(request, course_id):
         f"{'y' if entries_updated == 1 else 'ies'} reset to week 1."
     )
     return redirect("staff_manage_courses")
+
+def _shuffle_quiz_options(options, correct_index):
+    """Re-randomize option order so the correct answer isn't always in
+    the same position, regardless of any bias in the AI's output.
+    Strips existing 'A. '/'B. ' prefixes and re-applies them after
+    shuffling, so labels stay consistent with the new order."""
+    letters = ["A", "B", "C", "D"]
+    # Strip any existing letter prefix like "A. " or "B) "
+    stripped = [re.sub(r"^[A-Da-d][\.\)]\s*", "", opt).strip() for opt in options]
+
+    if not (0 <= correct_index < len(stripped)):
+        correct_index = 0
+
+    correct_text = stripped[correct_index]
+    indices = list(range(len(stripped)))
+    random.shuffle(indices)
+
+    shuffled = [stripped[i] for i in indices]
+    new_correct_index = shuffled.index(correct_text)
+
+    labeled = [f"{letters[i]}. {opt}" for i, opt in enumerate(shuffled)]
+    return labeled, new_correct_index
+
+@login_required
+def topic_lecture_view(request, topic_session_id):
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
+    profile = request.user.profile
+    topic_session = get_object_or_404(TopicSession, id=topic_session_id, session__student=profile)
+    session = topic_session.session
+    entry = get_object_or_404(TimetableEntry, student=profile, course_code=session.course_code)
+    lecture_html = markdown.markdown(topic_session.lecture_content, extensions=["extra"])
+    return render(request, "core/session.html", {
+        "entry": entry,
+        "session": session,
+        "topic_session": topic_session,
+        "lecture": lecture_html,
+        "topic_number": topic_session.topic_index + 1,
+        "total_topics": len(session.topics),
+        "topic_name": topic_session.topic_name,
+        "show_quiz": True,
+    })
+
+@login_required
+def quiz_result_view(request, topic_session_id):
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
+    profile = request.user.profile
+    topic_session = get_object_or_404(TopicSession, id=topic_session_id, session__student=profile)
+    session = topic_session.session
+    entry = get_object_or_404(TimetableEntry, student=profile, course_code=session.course_code)
+
+    correct = topic_session.passed_quiz
+    correct_option = topic_session.quiz_options[topic_session.correct_answer_index]
+    feedback = (
+        "Correct! Well done! 🎉" if correct
+        else f"Not quite — the correct answer was {correct_option}. Keep going! 💪"
+    )
+    next_index = topic_session.topic_index + 1
+    total_topics = len(session.topics)
+    is_last_topic = next_index >= total_topics
+
+    return render(request, "core/result.html", {
+        "entry": entry,
+        "session": session,
+        "topic_session": topic_session,
+        "correct": correct,
+        "xp_earned": topic_session.xp_earned,
+        "feedback": feedback,
+        "explanation": topic_session.quiz_explanation,
+        "next_topic_index": next_index,
+        "next_topic_name": session.topics[next_index] if not is_last_topic else None,
+        "is_last_topic": is_last_topic,
+        "total_topics": total_topics,
+        "topic_number": topic_session.topic_index + 1,
+    })

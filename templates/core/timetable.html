@@ -10,39 +10,32 @@
       <p class="greeting-sub" style="margin-bottom:1.5rem">{{ profile.level }}L · Semester {{ profile.semester }} · 15 weeks</p>
     </div>
 
-    {% regroup timetable by day as day_list %}
-    {% for day in day_list %}
-      <p class="section-label" style="animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.05s;">{{ day.grouper }}</p>
-      
-      <div class="session-list" style="animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.1s;">
-        {% for entry in day.list %}
-        <div class="tt-row {% if entry.is_completed %}tt-done{% elif entry.is_missed %}tt-missed{% endif %}" 
-             style="transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s, box-shadow 0.2s; cursor: pointer;"
-             onmouseenter="this.style.transform='translateY(-2px)'; this.style.borderColor='var(--border-accent)'; this.style.boxShadow='var(--shadow-card)';"
-             onmouseleave="this.style.transform='translateY(0)'; this.style.borderColor='var(--border)'; this.style.boxShadow='none';">
-          <div class="tt-time">{{ entry.time }}</div>
-          <div class="tt-info">
-            <div class="tt-course">{{ entry.course_code }} — {{ entry.course_title }}</div>
-            <div class="tt-week">Week {{ entry.week_number }} of {{ entry.total_weeks }}</div>
-          </div>
-          <div>
-            {% if entry.is_completed %}
-              <span class="badge badge-green">Done ✓</span>
-            {% elif entry.is_missed %}
-              <span class="badge badge-amber">Rescheduled</span>
-            {% else %}
-              <a href="{% url 'session' entry.course_code %}" class="badge badge-blue" style="display: inline-block; text-align: center; transition: transform 0.15s;" onmouseenter="this.style.transform='scale(1.05)'" onmouseleave="this.style.transform='scale(1)'">Start →</a>
-            {% endif %}
-          </div>
-        </div>
-        {% endfor %}
+<p class="section-label" style="margin-top:0;">📅 Upcoming Rotation</p>
+<div class="session-list" style="margin-bottom: 2rem;">
+  {% for day in schedule_preview %}
+    <div class="tt-row {% if day.is_rest %}tt-done{% endif %}">
+      <div class="tt-time">{{ day.date|date:"D, M j" }}</div>
+      <div class="tt-info">
+        {% if day.is_rest %}
+          <div class="tt-course">Rest day 🌤️</div>
+          <div class="tt-week">No course scheduled — free day or practice in the Simulator</div>
+        {% else %}
+          <div class="tt-course">{{ day.course.course_code }} — {{ day.course.course_title }}</div>
+          <div class="tt-week">Week {{ day.course.week_number }} of {{ day.course.total_weeks }}</div>
+        {% endif %}
       </div>
-      
-    {% empty %}
-      <div class="side-widget-card" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-        <p>No timetable items configured yet. Complete your profile setup to generate your learning track.</p>
+      <div>
+        {% if day.date == today %}<span class="badge badge-amber">Today</span>{% endif %}
       </div>
-    {% endfor %}
+    </div>
+  {% endfor %}
+</div>
+
+    {% if not timetable %}
+  <div class="side-widget-card" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+    <p>No timetable items configured yet. Complete your profile setup to generate your learning track.</p>
+  </div>
+{% endif %}
   </div>
 
   <div class="dashboard-side-col">

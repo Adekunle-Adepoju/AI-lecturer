@@ -1,0 +1,62 @@
+{% extends "core/base.html" %}
+{% block content %}
+<div class="page-container">
+  <div class="greeting-section">
+    <div class="greeting">Manage Your Courses</div>
+    <div class="greeting-sub">
+      Select the courses you're enrolled in. Carry-over? You can pick up courses from any level below.
+    </div>
+  </div>
+
+  {% if messages %}
+    <div class="messages" style="margin:0 0 1.5rem;padding:0;max-width:none;">
+      {% for message in messages %}
+        <div class="message">{{ message }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+
+    {% for level, courses in courses_by_level.items %}
+      <div class="section-label" {% if forloop.first %}style="margin-top:0;"{% endif %}>
+        {{ level }} Level
+      </div>
+      <div class="course-list" style="margin-bottom: 1.5rem;">
+        {% for course in courses %}
+          <label class="course-pill" style="cursor:pointer;">
+            <div style="display:flex;align-items:center;gap:14px;">
+              <input
+                type="checkbox"
+                name="selected_courses"
+                value="{{ course.course_code }}"
+                {% if course.course_code in active_course_codes %}checked{% endif %}
+                style="width:18px;height:18px;accent-color:var(--amber);flex-shrink:0;"
+              >
+              <div>
+                <div class="course-name">{{ course.course_title }}</div>
+                <div class="course-code">
+                  {{ course.course_code }} · {{ course.units }} unit{{ course.units|pluralize }}
+                </div>
+              </div>
+            </div>
+            {% if course.is_elective %}
+              <span class="badge badge-amber">Elective</span>
+            {% endif %}
+          </label>
+        {% endfor %}
+      </div>
+    {% empty %}
+      <div class="course-pill" style="justify-content:center;color:var(--text-muted);">
+        No courses are available for your department yet.
+      </div>
+    {% endfor %}
+
+    <div style="display:flex;gap:10px;margin-top:0.5rem;">
+      <button type="submit" class="btn btn-primary">Save Selections</button>
+      <a href="{% url 'dashboard' %}" class="btn">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
