@@ -183,10 +183,49 @@
     width:46px;height:46px;border-radius:50%;flex:none;border:none;background:var(--amber);color:var(--navy-deep);
     display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .2s var(--ease),background .2s var(--ease);
   }
+  #sessionRoot .btn-send svg{display:block;flex:none;pointer-events:none;}
   #sessionRoot .btn-send:hover{background:var(--amber-deep);transform:translateY(-2px);}
 
   /* ---------- restart ---------- */
   #sessionRoot .restart-form{max-width:var(--content-max);margin:24px auto 0;}
+
+  /* =========================================================
+     Mobile — everything above assumed desktop-width padding.
+     Nested padding (root 32/48px + header 28px + chat-window 28px
+     etc.) was compounding to eat most of a phone's width, which is
+     why the title was wrapping to 3 lines and squeezing the badge.
+     ========================================================= */
+  @media (max-width: 640px){
+    #sessionRoot{ padding:14px 8px 90px; }
+
+    #sessionRoot .session-header{ padding:14px 14px; flex-wrap:wrap; row-gap:10px; }
+    #sessionRoot .ai-avatar{ width:38px; height:38px; padding:7px; }
+    #sessionRoot .session-title{ font-size:1.05rem; line-height:1.3; }
+    #sessionRoot .session-sub{ font-size:.76rem; }
+    /* Force the badge onto its own row instead of squeezing beside the title */
+    #sessionRoot .header-spacer{ flex-basis:100%; height:0; }
+    #sessionRoot .badge{ margin-left:auto; }
+
+    #sessionRoot .brief-card{ padding:20px 14px; }
+    #sessionRoot .brief-card h3{ font-size:1.05rem; }
+    #sessionRoot .topic-brief-list li{ font-size:.9rem; }
+
+    #sessionRoot .prog-label{ font-size:.8rem; }
+
+    #sessionRoot .chat-box{ border-radius:16px; }
+    #sessionRoot #chat-window{ height:min(62vh,560px); padding:16px 10px; gap:12px; }
+    #sessionRoot .msg-row{ max-width:94%; gap:8px; }
+    #sessionRoot .msg-avatar{ width:22px; height:22px; padding:4px; }
+    #sessionRoot .msg-bubble{ padding:10px 14px; font-size:.9rem; }
+
+    #sessionRoot .understanding-controls{ padding:14px 12px 0; gap:8px; }
+    #sessionRoot .btn-understand{ flex:1; padding:10px 6px; font-size:.8rem; white-space:nowrap; }
+
+    #sessionRoot .chat-input-row{ padding:14px 12px; gap:8px; }
+    #sessionRoot .chat-input{ padding:11px 14px; font-size:.9rem; }
+    #sessionRoot .btn-send{ width:42px; height:42px; }
+    #sessionRoot .btn-send svg{ width:18px; height:18px; }
+  }
 </style>
 
 <div class="page-container" id="sessionRoot" data-theme="dark">
@@ -254,7 +293,7 @@
       <div id="input-row" class="chat-input-row">
         <input id="chat-input" type="text" placeholder="Type here…" class="chat-input" autocomplete="off" />
         <button type="button" id="sendBtn" class="btn-send" aria-label="Send message">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#0A2E4D"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         </button>
       </div>
     </div>
@@ -535,7 +574,7 @@
         <button id="clarify-send" type="button"
           style="width:42px;height:42px;border-radius:50%;border:none;background:var(--amber);
                  color:var(--navy-deep);display:flex;align-items:center;justify-content:center;cursor:pointer;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#0A2E4D"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         </button>
       </div>`;
 
