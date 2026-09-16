@@ -212,11 +212,21 @@
 
     #sessionRoot .prog-label{ font-size:.8rem; }
 
-    #sessionRoot .chat-box{ border-radius:16px; }
-    #sessionRoot #chat-window{ height:min(62vh,560px); padding:16px 10px; gap:12px; }
-    #sessionRoot .msg-row{ max-width:94%; gap:8px; }
-    #sessionRoot .msg-avatar{ width:22px; height:22px; padding:4px; }
-    #sessionRoot .msg-bubble{ padding:10px 14px; font-size:.9rem; }
+    /* Break the chat box out to the full screen edge instead of sitting as a
+       card inset inside the page padding — this is what actually makes it
+       read as "a chat", not a widget on a page. Header/brief card above stay
+       as cards; only the conversation itself goes edge-to-edge. */
+    #sessionRoot .chat-box{
+      margin-left:-8px; margin-right:-8px;
+      width:calc(100% + 16px);
+      border-radius:0; border-left:none; border-right:none;
+    }
+    #sessionRoot #chat-window{ height:min(66vh,620px); padding:14px 10px; gap:10px; }
+    #sessionRoot .msg-row{ max-width:97%; gap:6px; }
+    /* Drop the per-bubble avatar on mobile, like a real 1:1 chat thread —
+       it was eating ~30px of width on every single AI message. */
+    #sessionRoot .msg-avatar{ display:none; }
+    #sessionRoot .msg-bubble{ padding:10px 13px; font-size:.92rem; }
 
     #sessionRoot .understanding-controls{ padding:14px 12px 0; gap:8px; }
     #sessionRoot .btn-understand{ flex:1; padding:10px 6px; font-size:.8rem; white-space:nowrap; }

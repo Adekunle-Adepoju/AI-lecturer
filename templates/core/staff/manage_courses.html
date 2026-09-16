@@ -2,95 +2,212 @@
 {% block title %}Manage Courses — Rovea{% endblock %}
 
 {% block content %}
-<div class="page-container">
+<style>
+  #manageRoot{
+    --bg:#0F1D2B; --bg-alt:#16283A; --surface:#13212F; --surface-2:#1A2C3D;
+    --ink:#ECEFF3; --ink-soft:#B7C2CB; --ink-faint:#8A97A0;
+    --line:rgba(236,239,243,.14); --line-soft:rgba(236,239,243,.08);
+    --navy:#0F4677; --navy-deep:#0A2E4D; --heading:#E7EDF3;
+    --amber:#E2A63B; --amber-deep:#C98A22; --coral:#D96A45; --green:#4A9D74;
+    --font-display:'Newsreader',serif; --font-body:'Inter',sans-serif;
+    --ease:cubic-bezier(.22,.61,.36,1); --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
+    color-scheme:dark; background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    line-height:1.55; padding:clamp(36px,6vh,64px) clamp(14px,3vw,32px) 70px;
+    border-radius:0 0 var(--radius-lg) var(--radius-lg);
+    transition:background .35s var(--ease),color .35s var(--ease);
+  }
+  #manageRoot[data-theme="light"]{
+    --bg:#F1EFE6; --bg-alt:#E7E2D3; --surface:#FBFAF4; --surface-2:#FFFFFF;
+    --ink:#17212B; --ink-soft:#54626D; --ink-faint:#818D94;
+    --line:rgba(23,33,43,.14); --line-soft:rgba(23,33,43,.07); --heading:#0A2E4D;
+    color-scheme:light;
+  }
+  #manageRoot *{box-sizing:border-box;}
+  #manageRoot a{color:inherit;text-decoration:none;}
+  #manageRoot :focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:4px;}
+  #manageRoot h1,#manageRoot h2,#manageRoot h3{font-family:var(--font-display);font-weight:500;color:var(--heading);letter-spacing:-.01em;margin:0;}
+  #manageRoot .max{max-width:1240px;margin-inline:auto;}
+  #manageRoot .ic{width:15px;height:15px;flex:none;}
+  @keyframes mRise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+  @media(prefers-reduced-motion:reduce){#manageRoot *{animation-duration:.001ms!important;transition-duration:.001ms!important;}}
 
-  <a href="{% url 'staff_portal' %}" style="font-size:13px; color:var(--text-secondary)">← Back to portal</a>
+  #manageRoot .back-link{max-width:1240px;margin:0 auto 16px;display:inline-flex;align-items:center;gap:6px;font-size:.85rem;color:var(--ink-soft);}
+  #manageRoot .back-link:hover{color:var(--amber);}
+  #manageRoot .page-head{max-width:1240px;margin:0 auto 26px;}
+  #manageRoot .page-head h2{font-size:clamp(1.5rem,3vw,2rem);display:flex;align-items:center;gap:10px;}
+  #manageRoot .page-head p{color:var(--ink-soft);font-size:.9rem;margin-top:6px;}
 
-  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">📚 Manage Courses</h2>
-  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">Add, edit or remove course definitions.</p>
+  #manageRoot .messages{max-width:1240px;margin:0 auto 18px;}
+  #manageRoot .message{background:rgba(74,157,116,.12);border:1px solid rgba(74,157,116,.3);color:var(--green);padding:11px 16px;border-radius:var(--radius-sm);font-size:.86rem;margin-bottom:8px;}
+
+  #manageRoot .section-label{display:flex;align-items:center;gap:8px;font-size:.82rem;font-weight:600;color:var(--ink-soft);margin:0 0 12px;max-width:1240px;margin-inline:auto;}
+
+  /* ---------- add course form ---------- */
+  #manageRoot .add-form{
+    max-width:1240px;margin:0 auto 32px;background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--radius-lg);padding:22px;opacity:0;transform:translateY(8px);animation:mRise .5s var(--ease) forwards;
+  }
+  #manageRoot .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  #manageRoot .field-full{grid-column:1/-1;}
+  #manageRoot .field-label{display:block;font-size:.72rem;font-weight:700;color:var(--ink-faint);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;}
+  #manageRoot .add-form input[type=text], #manageRoot .add-form input[type=number], #manageRoot .add-form select, #manageRoot .add-form textarea{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-alt);color:var(--ink);
+    font-family:var(--font-body);font-size:.88rem;outline:none;transition:border-color .2s var(--ease);
+  }
+  #manageRoot .add-form input:focus, #manageRoot .add-form select:focus, #manageRoot .add-form textarea:focus{border-color:var(--navy);}
+  #manageRoot .add-form input[type=checkbox]{width:16px;height:16px;accent-color:var(--amber);}
+
+  /* ---------- toolbar ---------- */
+  #manageRoot .list-toolbar{max-width:1240px;margin:0 auto 14px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  #manageRoot .toolbar-actions{display:flex;gap:8px;align-items:center;}
+  #manageRoot .search-wrap{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:0 15px;height:40px;max-width:320px;flex:1;}
+  #manageRoot .search-wrap input{border:none;background:none;outline:none;width:100%;font-size:.85rem;color:var(--ink);font-family:var(--font-body);}
+  #manageRoot .search-wrap input::placeholder{color:var(--ink-faint);}
+  #manageRoot .search-wrap svg{color:var(--ink-faint);flex:none;}
+
+  /* ---------- buttons ---------- */
+  #manageRoot .btn{
+    display:inline-flex;align-items:center;gap:7px;border-radius:999px;font-size:.82rem;font-weight:600;
+    padding:9px 16px;border:1px solid var(--line);background:var(--bg-alt);color:var(--ink-soft);cursor:pointer;
+    transition:.2s var(--ease);white-space:nowrap;
+  }
+  #manageRoot .btn:hover{border-color:var(--navy);color:var(--ink);}
+  #manageRoot .btn-primary{background:var(--amber);color:var(--navy-deep);border-color:transparent;}
+  #manageRoot .btn-primary:hover{background:var(--amber-deep);}
+  #manageRoot .btn-warn{background:rgba(226,166,59,.14);color:var(--amber);border-color:rgba(226,166,59,.3);}
+  #manageRoot .btn-danger{background:rgba(217,106,69,.12);color:var(--coral);border-color:rgba(217,106,69,.3);}
+  #manageRoot .btn-danger:hover{border-color:var(--coral);color:var(--coral);}
+  #manageRoot .btn-sm{padding:6px 12px;font-size:.74rem;}
+
+  #manageRoot .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;font-size:.68rem;font-weight:700;}
+  #manageRoot .badge-amber{background:rgba(226,166,59,.16);color:var(--amber);}
+  #manageRoot .badge-green{background:rgba(74,157,116,.16);color:var(--green);}
+
+  /* ---------- level groups + grid ---------- */
+  #manageRoot .level-group{max-width:1240px;margin:0 auto 12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden;}
+  #manageRoot .level-group summary{
+    list-style:none;cursor:pointer;padding:14px 18px;display:flex;align-items:center;gap:10px;
+    font-weight:600;font-size:.88rem;color:var(--heading);user-select:none;
+  }
+  #manageRoot .level-group summary::-webkit-details-marker{display:none;}
+  #manageRoot .level-group summary .chevron{transition:transform .2s var(--ease);color:var(--ink-faint);}
+  #manageRoot .level-group[open] summary .chevron{transform:rotate(90deg);}
+  #manageRoot .level-group summary .count-chip{background:var(--bg-alt);color:var(--ink-faint);font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px;}
+  #manageRoot .course-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 16px 16px;}
+  @media(max-width:860px){#manageRoot .course-grid{grid-template-columns:repeat(2,1fr);}}
+  @media(max-width:540px){#manageRoot .course-grid{grid-template-columns:1fr;}}
+  #manageRoot .course-card{
+    background:var(--bg-alt);border:1px solid var(--line-soft);border-radius:10px;padding:13px 14px;
+    display:flex;flex-direction:column;gap:9px;
+  }
+  #manageRoot .cc-top{display:flex;gap:9px;align-items:flex-start;}
+  #manageRoot .cc-top input[type=checkbox]{margin-top:3px;flex:none;}
+  #manageRoot .cc-name{font-size:.86rem;font-weight:600;color:var(--heading);display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+  #manageRoot .cc-meta{font-size:.74rem;color:var(--ink-faint);margin-top:2px;}
+  #manageRoot .cc-actions{display:flex;gap:6px;flex-wrap:wrap;}
+  #manageRoot .cc-actions .btn{padding:5px 10px;font-size:.7rem;}
+  #manageRoot .empty-note{max-width:1240px;margin:0 auto;color:var(--ink-faint);font-size:.85rem;padding:20px 0;}
+</style>
+
+<div class="page-container" id="manageRoot" data-theme="dark">
+
+  <a href="{% url 'staff_portal' %}" class="back-link">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    Back to portal
+  </a>
+
+  <div class="page-head">
+    <h2>
+      <svg class="ic" style="width:22px;height:22px;color:var(--amber);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15Z"/></svg>
+      Manage courses
+    </h2>
+    <p>Add, edit or remove course definitions.</p>
+  </div>
 
   {% if messages %}
-  {% for message in messages %}
-  <div class="message" style="margin-bottom:16px">{{ message }}</div>
-  {% endfor %}
+  <div class="messages">
+    {% for message in messages %}
+    <div class="message">{{ message }}</div>
+    {% endfor %}
+  </div>
   {% endif %}
 
   <!-- Add course form -->
-  <p class="section-label">Add New Course</p>
-  <form method="POST" style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; margin-bottom:32px">
+  <p class="section-label">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+    Add new course
+  </p>
+  <form method="POST" class="add-form">
     {% csrf_token %}
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+    <div class="field-grid">
       {% for field in form %}
-      <div style="{% if field.field.widget.input_type == 'checkbox' %}grid-column:1/-1{% endif %}">
-        <label style="display:block; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em">
-          {{ field.label }}
-        </label>
+      <div class="{% if field.field.widget.input_type == 'checkbox' %}field-full{% endif %}">
+        <label class="field-label">{{ field.label }}</label>
         {{ field }}
       </div>
       {% endfor %}
     </div>
-    <button type="submit" class="btn btn-primary" style="margin-top:16px">Add Course →</button>
+    <button type="submit" class="btn btn-primary" style="margin-top:16px;">Add course →</button>
   </form>
 
-  <!-- Bulk delete form wraps the entire course list -->
-  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px">
-    <p class="section-label" style="margin:0">All Courses ({{ courses.count }})</p>
-    <div style="display:flex; gap:8px; align-items:center;">
-      <button type="button" class="btn" style="font-size:12px; padding:6px 12px;" onclick="toggleSelectAll()">
-        Select All
-      </button>
-      <button type="button" class="btn" style="font-size:12px; padding:6px 12px; background:var(--red-glow); color:#F08080; border-color:var(--red-soft);"
-              onclick="submitBulkDelete()">
-        🗑️ Delete Selected
-      </button>
+  <!-- Toolbar: search + bulk actions -->
+  <div class="list-toolbar">
+    <div class="section-label" style="margin:0;">
+      All courses <span class="count-chip" style="background:var(--bg-alt);color:var(--ink-faint);font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px;">{{ courses.count }}</span>
+    </div>
+    <div class="toolbar-actions">
+      <div class="search-wrap">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="courseSearch" placeholder="Search by code or title…" autocomplete="off">
+      </div>
+      <button type="button" class="btn btn-sm" id="selectAllBtn" onclick="toggleSelectAll()">Select all</button>
+      <button type="button" class="btn btn-sm btn-danger" onclick="submitBulkDelete()">Delete selected</button>
     </div>
   </div>
 
   <form id="bulkDeleteForm" method="POST" action="{% url 'staff_bulk_delete_courses' %}">
     {% csrf_token %}
     <input type="hidden" name="scroll_position" id="scrollPositionInput" value="0">
-    <div class="course-list">
-      {% for course in courses %}
-      <div class="course-pill" style="cursor:default; display:flex; justify-content:space-between; align-items:center;" id="course-row-{{ course.id }}">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <input type="checkbox" name="course_ids" value="{{ course.id }}"
-                 style="width:16px; height:16px; accent-color:var(--amber); cursor:pointer; flex-shrink:0;">
-          <div>
-            <div class="course-name">
-              {{ course.course_code }} — {{ course.course_title }}
-              {% if course.is_elective %}
-              <span class="badge badge-amber" style="margin-left:8px">Elective</span>
-              {% else %}
-              <span class="badge badge-green" style="margin-left:8px">Compulsory</span>
-              {% endif %}
+
+    <div id="courseGroups">
+      {% regroup courses|dictsort:"level" by level as level_groups %}
+      {% for group in level_groups %}
+      <details class="level-group">
+        <summary>
+          <svg class="chevron ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 6 6 6-6 6"/></svg>
+          Level {{ group.grouper }}
+          <span class="count-chip">{{ group.list|length }}</span>
+        </summary>
+        <div class="course-grid">
+          {% for course in group.list %}
+          <div class="course-card" id="course-row-{{ course.id }}" data-search="{{ course.course_code|lower }} {{ course.course_title|lower }}">
+            <div class="cc-top">
+              <input type="checkbox" name="course_ids" value="{{ course.id }}">
+              <div>
+                <div class="cc-name">
+                  {{ course.course_code }} — {{ course.course_title }}
+                  {% if course.is_elective %}<span class="badge badge-amber">Elective</span>{% else %}<span class="badge badge-green">Compulsory</span>{% endif %}
+                </div>
+                <div class="cc-meta">Level {{ course.level }} · Semester {{ course.semester }} · {{ course.units }} units</div>
+              </div>
             </div>
-            <div class="course-code">Level {{ course.level }} · Semester {{ course.semester }} · {{ course.units }} units</div>
+            <div class="cc-actions">
+              <a href="{% url 'staff_edit_course' course.id %}" class="btn">Edit</a>
+              <button type="button" class="btn btn-warn" onclick="resetCourseProgress('{{ course.id }}', '{{ course.course_code }}')">↺ Reset progress</button>
+              <button type="button" class="btn btn-danger" onclick="deleteSingle('{{ course.id }}', '{{ course.course_code }}')">Delete</button>
+            </div>
           </div>
+          {% endfor %}
         </div>
-        <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
-  <a href="{% url 'staff_edit_course' course.id %}" class="btn" style="font-size:12px; padding:6px 12px;">
-    ✏️ Edit
-  </a>
-  <button type="button" class="btn"
-          style="font-size:12px; padding:6px 12px; background:var(--amber-glow); color:var(--amber); border-color:rgba(245,166,35,0.25);"
-          onclick="resetCourseProgress('{{ course.id }}', '{{ course.course_code }}')">
-    ↺ Reset Progress
-  </button>
-  <button type="button" class="btn"
-          style="font-size:12px; padding:6px 12px; background:var(--red-glow); color:#F08080; border-color:var(--red-soft);"
-          onclick="deleteSingle('{{ course.id }}', '{{ course.course_code }}')">
-    🗑️ Delete
-  </button>
-</div>
-      </div>
+      </details>
       {% empty %}
-      <p style="color:var(--text-muted); font-size:13px">No courses defined yet.</p>
+      <p class="empty-note">No courses defined yet.</p>
       {% endfor %}
     </div>
   </form>
   <form id="resetCourseForm" method="POST" action="">
-  {% csrf_token %}
-</form>
+    {% csrf_token %}
+  </form>
 
 </div>
 
@@ -112,18 +229,17 @@
   function deleteSingle(courseId, courseCode) {
     if (!confirm('Delete ' + courseCode + '?')) return;
     const form = document.getElementById('bulkDeleteForm');
-    // Uncheck all, then check just this one
     document.querySelectorAll('input[name="course_ids"]').forEach(cb => cb.checked = false);
     document.querySelector('input[name="course_ids"][value="' + courseId + '"]').checked = true;
     saveScrollAndSubmit(form);
   }
 
   function resetCourseProgress(courseId, courseCode) {
-  if (!confirm('This will delete all lessons and student progress for ' + courseCode + '. Are you sure?')) return;
-  const form = document.getElementById('resetCourseForm');
-  form.action = '/staff/course/' + courseId + '/reset/';  // matches your reset URL pattern
-  saveScrollAndSubmit(form);
-}
+    if (!confirm('This will delete all lessons and student progress for ' + courseCode + '. Are you sure?')) return;
+    const form = document.getElementById('resetCourseForm');
+    form.action = '/staff/course/' + courseId + '/reset/';
+    saveScrollAndSubmit(form);
+  }
 
   function submitBulkDelete() {
     const checked = document.querySelectorAll('input[name="course_ids"]:checked');
@@ -139,7 +255,51 @@
   function toggleSelectAll() {
     allSelected = !allSelected;
     document.querySelectorAll('input[name="course_ids"]').forEach(cb => cb.checked = allSelected);
-    event.target.textContent = allSelected ? 'Deselect All' : 'Select All';
+    document.getElementById('selectAllBtn').textContent = allSelected ? 'Deselect all' : 'Select all';
   }
+
+  // Course search: filters cards across all level groups, same pattern as the staff portal.
+  (function(){
+    const input = document.getElementById('courseSearch');
+    if (!input) return;
+    const groups = document.querySelectorAll('#courseGroups .level-group');
+
+    input.addEventListener('input', function(){
+      const q = input.value.trim().toLowerCase();
+      groups.forEach(group => {
+        const cards = group.querySelectorAll('.course-card');
+        let anyMatch = false;
+        cards.forEach(card => {
+          const match = !q || (card.dataset.search || '').indexOf(q) !== -1;
+          card.style.display = match ? '' : 'none';
+          if (match) anyMatch = true;
+        });
+        group.style.display = anyMatch ? '' : 'none';
+        if (q) group.open = true;
+      });
+    });
+  })();
+
+  // Follow whatever theme base.html's Appearance toggle sets on <html>/<body>.
+  (function(){
+    const root = document.getElementById('manageRoot');
+    if(!root) return;
+    function detectTheme(){
+      const html = document.documentElement, body = document.body;
+      const attr = html.getAttribute('data-theme') || (body && body.getAttribute('data-theme'));
+      if (attr) return attr;
+      if (html.classList.contains('dark') || (body && body.classList.contains('dark'))) return 'dark';
+      if (html.classList.contains('light') || (body && body.classList.contains('light'))) return 'light';
+      try{
+        const stored = localStorage.getItem('theme') || localStorage.getItem('appearance') || localStorage.getItem('rovea-theme');
+        if (stored) return stored;
+      }catch(e){}
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    function sync(){ root.setAttribute('data-theme', detectTheme()); }
+    sync();
+    new MutationObserver(sync).observe(document.documentElement, { attributes:true, attributeFilter:['class','data-theme'] });
+    if (document.body) new MutationObserver(sync).observe(document.body, { attributes:true, attributeFilter:['class','data-theme'] });
+  })();
 </script>
 {% endblock %}

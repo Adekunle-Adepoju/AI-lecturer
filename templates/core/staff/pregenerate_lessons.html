@@ -2,28 +2,129 @@
 {% block title %}Pre-Generate Lessons — Rovea{% endblock %}
 
 {% block content %}
-<div class="page-container">
+<style>
+  #pregenRoot{
+    --bg:#0F1D2B; --bg-alt:#16283A; --surface:#13212F; --surface-2:#1A2C3D;
+    --ink:#ECEFF3; --ink-soft:#B7C2CB; --ink-faint:#8A97A0;
+    --line:rgba(236,239,243,.14); --line-soft:rgba(236,239,243,.08);
+    --navy:#0F4677; --navy-deep:#0A2E4D; --heading:#E7EDF3;
+    --amber:#E2A63B; --amber-deep:#C98A22; --coral:#D96A45; --green:#4A9D74;
+    --font-display:'Newsreader',serif; --font-body:'Inter',sans-serif;
+    --ease:cubic-bezier(.22,.61,.36,1); --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
+    color-scheme:dark; background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    line-height:1.55; padding:clamp(36px,6vh,64px) clamp(14px,3vw,32px) 70px;
+    border-radius:0 0 var(--radius-lg) var(--radius-lg);
+    transition:background .35s var(--ease),color .35s var(--ease);
+  }
+  #pregenRoot[data-theme="light"]{
+    --bg:#F1EFE6; --bg-alt:#E7E2D3; --surface:#FBFAF4; --surface-2:#FFFFFF;
+    --ink:#17212B; --ink-soft:#54626D; --ink-faint:#818D94;
+    --line:rgba(23,33,43,.14); --line-soft:rgba(23,33,43,.07); --heading:#0A2E4D;
+    color-scheme:light;
+  }
+  #pregenRoot *{box-sizing:border-box;}
+  #pregenRoot a{color:inherit;text-decoration:none;}
+  #pregenRoot :focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:4px;}
+  #pregenRoot h1,#pregenRoot h2{font-family:var(--font-display);font-weight:500;color:var(--heading);letter-spacing:-.01em;margin:0;}
+  #pregenRoot .max{max-width:900px;margin-inline:auto;}
+  #pregenRoot .ic{width:15px;height:15px;flex:none;}
+  @keyframes gRise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  @media(prefers-reduced-motion:reduce){#pregenRoot *{animation-duration:.001ms!important;transition-duration:.001ms!important;}}
 
-  <a href="{% url 'staff_portal' %}" style="font-size:13px; color:var(--text-secondary)">← Back to portal</a>
+  #pregenRoot .back-link{max-width:900px;margin:0 auto 18px;display:inline-flex;align-items:center;gap:6px;font-size:.85rem;color:var(--ink-soft);}
+  #pregenRoot .back-link:hover{color:var(--amber);}
+  #pregenRoot .page-head{max-width:900px;margin:0 auto 24px;}
+  #pregenRoot .page-head h2{font-size:clamp(1.5rem,3vw,2rem);display:flex;align-items:center;gap:10px;}
+  #pregenRoot .page-head p{color:var(--ink-soft);font-size:.9rem;margin-top:6px;}
 
-  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">⚡ Pre-Generate Lessons</h2>
-  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
-    Generate lecture content ahead of time. Students read from the database instantly — no live API calls during sessions.
-  </p>
+  #pregenRoot .message{max-width:900px;margin:0 auto 12px;background:rgba(74,157,116,.12);border:1px solid rgba(74,157,116,.3);color:var(--green);padding:11px 15px;border-radius:var(--radius-sm);font-size:.85rem;}
+  #pregenRoot .message.error{background:rgba(217,106,69,.1);border-color:rgba(217,106,69,.3);color:var(--coral);}
+
+  #pregenRoot .section-label{display:flex;align-items:center;gap:8px;font-size:.82rem;font-weight:600;color:var(--ink-soft);margin:0 0 14px;max-width:900px;margin-inline:auto;}
+  #pregenRoot .section-label .count-chip{background:var(--bg-alt);color:var(--ink-faint);font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px;}
+
+  #pregenRoot .gen-form{
+    max-width:900px;margin:0 auto 34px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:22px;
+    opacity:0;transform:translateY(8px);animation:gRise .5s var(--ease) forwards;
+  }
+  #pregenRoot .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
+  #pregenRoot .field-label{display:block;font-size:.72rem;font-weight:700;color:var(--ink-faint);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;}
+  #pregenRoot .gen-form select{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-alt);color:var(--ink);
+    font-family:var(--font-body);font-size:.88rem;outline:none;transition:border-color .2s var(--ease);
+  }
+  #pregenRoot .gen-form select:focus{border-color:var(--navy);}
+  #pregenRoot .warn-box{
+    display:flex;gap:10px;background:rgba(226,166,59,.1);border:1px solid rgba(226,166,59,.3);border-radius:var(--radius-sm);
+    padding:12px 16px;margin-bottom:16px;font-size:.83rem;color:var(--amber);line-height:1.5;
+  }
+  #pregenRoot .warn-box svg{flex:none;margin-top:2px;}
+
+  #pregenRoot .btn{
+    display:inline-flex;align-items:center;gap:8px;border-radius:999px;font-weight:600;font-size:.85rem;
+    padding:11px 20px;border:1px solid var(--line);background:var(--bg-alt);color:var(--ink-soft);cursor:pointer;
+    transition:.2s var(--ease);white-space:nowrap;
+  }
+  #pregenRoot .btn:hover{border-color:var(--navy);color:var(--ink);}
+  #pregenRoot .btn-primary{background:var(--amber);color:var(--navy-deep);border-color:transparent;}
+  #pregenRoot .btn-primary:hover{background:var(--amber-deep);}
+  #pregenRoot .btn-danger{background:rgba(217,106,69,.12);color:var(--coral);border-color:rgba(217,106,69,.3);}
+  #pregenRoot .btn-danger:hover{border-color:var(--coral);color:var(--coral);}
+  #pregenRoot .btn-sm{padding:7px 13px;font-size:.76rem;}
+
+  #pregenRoot .badge{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:999px;font-size:.72rem;font-weight:700;flex:none;}
+  #pregenRoot .badge-green{background:rgba(74,157,116,.16);color:var(--green);}
+  #pregenRoot .badge-amber{background:rgba(226,166,59,.16);color:var(--amber);}
+
+  #pregenRoot .lesson-search{max-width:900px;margin:0 auto 16px;}
+  #pregenRoot .search-wrap{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:0 16px;height:42px;max-width:360px;}
+  #pregenRoot .search-wrap input{border:none;background:none;outline:none;width:100%;font-size:.85rem;color:var(--ink);font-family:var(--font-body);}
+  #pregenRoot .search-wrap input::placeholder{color:var(--ink-faint);}
+  #pregenRoot .search-wrap svg{color:var(--ink-faint);flex:none;}
+
+  #pregenRoot .lesson-list{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:10px;}
+  #pregenRoot .lesson-card{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);padding:16px 18px;
+    display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+    opacity:0;transform:translateY(8px);animation:gRise .45s var(--ease) forwards;
+  }
+  #pregenRoot .lesson-card.is-published{border-left:3px solid var(--green);}
+  #pregenRoot .lesson-card.is-draft{border-left:3px solid var(--amber);}
+  #pregenRoot .lesson-title{font-size:.92rem;font-weight:600;color:var(--heading);}
+  #pregenRoot .lesson-meta{font-size:.78rem;color:var(--ink-faint);margin-top:3px;}
+  #pregenRoot .lesson-actions{display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap;}
+  #pregenRoot .empty-note{max-width:900px;margin:0 auto;color:var(--ink-faint);font-size:.85rem;padding:8px 0;}
+  #pregenRoot .no-match-note{display:none;max-width:900px;margin:0 auto;color:var(--ink-faint);font-size:.85rem;padding:20px 0;text-align:center;}
+</style>
+
+<div class="page-container" id="pregenRoot" data-theme="dark">
+
+  <a href="{% url 'staff_portal' %}" class="back-link">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    Back to portal
+  </a>
+
+  <div class="page-head">
+    <h2>
+      <svg class="ic" style="width:22px;height:22px;color:var(--amber);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/></svg>
+      Pre-generate lessons
+    </h2>
+    <p>Generate lecture content ahead of time. Students read from the database instantly — no live API calls during sessions.</p>
+  </div>
 
   {% if messages %}
-  {% for message in messages %}
-  <div class="message {{ message.tags }}" style="margin-bottom:12px">{{ message }}</div>
-  {% endfor %}
+    {% for message in messages %}
+    <div class="message {{ message.tags }}">{{ message }}</div>
+    {% endfor %}
   {% endif %}
 
   <!-- Generation form -->
-  <p class="section-label">Generate New Lessons</p>
-  <form method="POST" style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; margin-bottom:32px">
+  <p class="section-label">Generate new lessons</p>
+  <form method="POST" class="gen-form">
     {% csrf_token %}
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px">
+    <div class="field-grid">
       <div>
-        <label style="display:block; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em">Course</label>
+        <label class="field-label">Course</label>
         <select name="course_id" required>
           <option value="">— Select a course —</option>
           {% for course in courses %}
@@ -32,7 +133,7 @@
         </select>
       </div>
       <div>
-        <label style="display:block; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em">Week Number</label>
+        <label class="field-label">Week number</label>
         <select name="week_number" required>
           {% for week in week_range %}
           <option value="{{ week }}">Week {{ week }}</option>
@@ -40,57 +141,101 @@
         </select>
       </div>
     </div>
-    <div style="background:var(--amber-glow); border:1px solid var(--border-accent); border-radius:var(--radius-md); padding:12px 16px; margin-bottom:16px; font-size:13px; color:var(--amber)">
-      ⚠️ This will call the Gemini API once per topic (usually 3 topics per week). Already-published lessons will be skipped. Review generated content before publishing.
+    <div class="warn-box">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+      <span>This will call the Gemini API once per topic (usually 3 topics per week). Already-published lessons will be skipped. Review generated content before publishing.</span>
     </div>
-    <button type="submit" class="btn btn-primary">⚡ Generate Lessons →</button>
+    <button type="submit" class="btn btn-primary">Generate lessons →</button>
   </form>
 
   <!-- Existing lessons -->
-  <p class="section-label">Generated Lessons ({{ lessons.count }})</p>
+  <p class="section-label">Generated lessons <span class="count-chip">{{ lessons.count }}</span></p>
 
   {% if lessons %}
-  <div style="display:flex; flex-direction:column; gap:8px;">
+  <div class="lesson-search">
+    <div class="search-wrap">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="lessonSearch" placeholder="Search by course or topic…" autocomplete="off">
+    </div>
+  </div>
+
+  <div class="lesson-list" id="lessonList">
     {% for lesson in lessons %}
-    <div style="background:var(--navy-card); border:1px solid {% if lesson.is_published %}rgba(26,158,122,0.3){% else %}var(--border){% endif %}; border-radius:var(--radius-lg); padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+    <div class="lesson-card {% if lesson.is_published %}is-published{% else %}is-draft{% endif %}"
+         data-search="{{ lesson.course.course_code|lower }} {{ lesson.topic_title|lower }}">
       <div>
-        <div style="font-size:14px; font-weight:600; color:var(--text)">
-          {{ lesson.course.course_code }} — Week {{ lesson.week_number }} — {{ lesson.topic_title }}
-        </div>
-        <div style="font-size:12px; color:var(--text-muted); margin-top:3px">
-          Generated {{ lesson.generated_at|date:"d M Y H:i" }} ·
-          {{ lesson.content_chunk|length }} characters
-        </div>
+        <div class="lesson-title">{{ lesson.course.course_code }} — Week {{ lesson.week_number }} — {{ lesson.topic_title }}</div>
+        <div class="lesson-meta">Generated {{ lesson.generated_at|date:"d M Y H:i" }} · {{ lesson.content_chunk|length }} characters</div>
       </div>
-      <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
-  {% if lesson.is_published %}
-  <span class="badge badge-green">✓ Published</span>
-  {% else %}
-  <span class="badge" style="background:var(--amber-glow); color:var(--amber); border:1px solid rgba(245,166,35,0.25);">Draft</span>
-  {% endif %}
-  <a href="{% url 'staff_preview_lesson' lesson.id %}" class="btn" style="font-size:12px; padding:6px 12px;">
-    👁️ Preview
-  </a>
-  <form method="POST" action="{% url 'staff_publish_lesson' lesson.id %}" style="margin:0">
+      <div class="lesson-actions">
+        {% if lesson.is_published %}
+          <span class="badge badge-green">✓ Published</span>
+        {% else %}
+          <span class="badge badge-amber">Draft</span>
+        {% endif %}
+        <a href="{% url 'staff_preview_lesson' lesson.id %}" class="btn btn-sm">Preview</a>
+        <form method="POST" action="{% url 'staff_publish_lesson' lesson.id %}" style="margin:0">
           {% csrf_token %}
-          <button type="submit" class="btn" style="font-size:12px; padding:6px 12px;">
-            {% if lesson.is_published %}Unpublish{% else %}Publish{% endif %}
-          </button>
+          <button type="submit" class="btn btn-sm">{% if lesson.is_published %}Unpublish{% else %}Publish{% endif %}</button>
         </form>
         <form method="POST" action="{% url 'staff_delete_lesson' lesson.id %}" style="margin:0">
           {% csrf_token %}
-          <button type="submit" class="btn" style="font-size:12px; padding:6px 12px; background:var(--red-glow); color:#F08080; border-color:var(--red-soft);"
-                  onclick="return confirm('Delete this lesson?')">
-            🗑️
+          <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this lesson?')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
           </button>
         </form>
       </div>
     </div>
     {% endfor %}
   </div>
+  <p class="no-match-note" id="lessonNoMatch">No lessons match that search.</p>
   {% else %}
-  <p style="color:var(--text-muted); font-size:13px">No lessons generated yet. Use the form above to generate your first batch.</p>
+  <p class="empty-note">No lessons generated yet. Use the form above to generate your first batch.</p>
   {% endif %}
 
 </div>
+
+<script>
+  // Client-side search over the already-rendered lesson cards.
+  (function(){
+    const input = document.getElementById('lessonSearch');
+    const list = document.getElementById('lessonList');
+    const noMatch = document.getElementById('lessonNoMatch');
+    if (!input || !list) return;
+    const cards = Array.from(list.querySelectorAll('.lesson-card'));
+
+    input.addEventListener('input', function(){
+      const q = input.value.trim().toLowerCase();
+      let visible = 0;
+      cards.forEach(card => {
+        const match = !q || (card.dataset.search || '').indexOf(q) !== -1;
+        card.style.display = match ? '' : 'none';
+        if (match) visible++;
+      });
+      if (noMatch) noMatch.style.display = (q && visible === 0) ? 'block' : 'none';
+    });
+  })();
+
+  // Follow whatever theme base.html's Appearance toggle sets on <html>/<body>.
+  (function(){
+    const root = document.getElementById('pregenRoot');
+    if(!root) return;
+    function detectTheme(){
+      const html = document.documentElement, body = document.body;
+      const attr = html.getAttribute('data-theme') || (body && body.getAttribute('data-theme'));
+      if (attr) return attr;
+      if (html.classList.contains('dark') || (body && body.classList.contains('dark'))) return 'dark';
+      if (html.classList.contains('light') || (body && body.classList.contains('light'))) return 'light';
+      try{
+        const stored = localStorage.getItem('theme') || localStorage.getItem('appearance') || localStorage.getItem('rovea-theme');
+        if (stored) return stored;
+      }catch(e){}
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    function sync(){ root.setAttribute('data-theme', detectTheme()); }
+    sync();
+    new MutationObserver(sync).observe(document.documentElement, { attributes:true, attributeFilter:['class','data-theme'] });
+    if (document.body) new MutationObserver(sync).observe(document.body, { attributes:true, attributeFilter:['class','data-theme'] });
+  })();
+</script>
 {% endblock %}

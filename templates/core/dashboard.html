@@ -444,7 +444,9 @@
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       Focus sprint
     </p>
-    <div class="side-widget-card focus-widget">
+    <div class="side-widget-card focus-widget" id="focusWidget"
+         data-course-url="{% if todays_courses %}{% url 'session' todays_courses.0.course_code %}{% endif %}"
+         data-course-title="{% if todays_courses %}{{ todays_courses.0.course_title|escapejs }}{% endif %}">
       <div class="focus-ring">
         <svg width="64" height="64" viewBox="0 0 64 64">
           <circle class="focus-ring-bg" cx="32" cy="32" r="28"/>
@@ -456,7 +458,7 @@
         <div class="focus-task" id="focusTask">
           {% if todays_courses %}Next up: {{ todays_courses.0.course_title }}{% else %}Pick a course and start a sprint{% endif %}
         </div>
-        <div class="focus-controls">
+        <div class="focus-controls" id="focusControls">
           <button type="button" class="btn btn-primary btn-xs" id="focusStartBtn">Start</button>
           <button type="button" class="btn btn-white-outline btn-xs" id="focusResetBtn">Reset</button>
         </div>
@@ -661,51 +663,107 @@
   });
 })();
 
-  // ---------- Focus sprint timer (client-only, 25/5 Pomodoro) ----------
+  // ---------- Focus sprint timer (25/5 Pomodoro, now tied to the real course) ----------
   (function(){
     const WORK = 25 * 60, BREAK = 5 * 60, CIRC = 175.9;
     let secondsLeft = WORK, total = WORK, onBreak = false, interval = null;
 
+    const widgetEl = document.getElementById('focusWidget');
     const timeEl = document.getElementById('focusTime');
     const ringEl = document.getElementById('focusRingFg');
     const taskEl = document.getElementById('focusTask');
-    const startBtn = document.getElementById('focusStartBtn');
-    const resetBtn = document.getElementById('focusResetBtn');
-    if (!timeEl || !ringEl || !startBtn) return;
+    const controlsEl = document.getElementById('focusControls');
+    if (!widgetEl || !timeEl || !ringEl || !taskEl || !controlsEl) return;
+
+    const courseUrl = widgetEl.dataset.courseUrl || '';
+    const courseTitle = widgetEl.dataset.courseTitle || 'your next course';
+    const defaultTask = taskEl.textContent.trim();
 
     function render(){
-      const m = String(Math.floor(secondsLeft/60)).padStart(2,'0');
-      const s = String(Math.floor(secondsLeft%60)).padStart(2,'0');
+      const clamped = Math.max(secondsLeft, 0);
+      const m = String(Math.floor(clamped/60)).padStart(2,'0');
+      const s = String(Math.floor(clamped%60)).padStart(2,'0');
       timeEl.textContent = m + ':' + s;
-      const progress = 1 - secondsLeft/total;
+      const progress = Math.max(0, Math.min(1, 1 - secondsLeft/total));
       ringEl.style.strokeDashoffset = String(CIRC * (1 - progress));
     }
-    render();
 
-    startBtn.addEventListener('click', function(){
-      if (interval){
-        clearInterval(interval); interval = null; startBtn.textContent = 'Resume';
+    // Normal Start/Pause + Reset controls — used any time the timer is
+    // actively counting down (either a work sprint or a break).
+    function renderActiveControls(){
+      const label = interval ? 'Pause' : (secondsLeft < total ? 'Resume' : 'Start');
+      controlsEl.innerHTML =
+        '<button type="button" class="btn btn-primary btn-xs" id="focusStartBtn">' + label + '</button>' +
+        '<button type="button" class="btn btn-white-outline btn-xs" id="focusResetBtn">Reset</button>';
+      document.getElementById('focusStartBtn').addEventListener('click', toggleTimer);
+      document.getElementById('focusResetBtn').addEventListener('click', resetTimer);
+    }
+
+    // Shown the moment a WORK sprint hits zero — the actual point of the
+    // feature: send them straight into the course they were sprinting for,
+    // instead of silently ticking over into a break they never asked for.
+    function renderSprintCompleteControls(){
+      if (courseUrl){
+        controlsEl.innerHTML =
+          '<a href="' + courseUrl + '" class="btn btn-primary btn-xs">Start studying →</a>' +
+          '<button type="button" class="btn btn-white-outline btn-xs" id="focusBreakBtn">Take a break</button>';
       } else {
-        interval = setInterval(function(){
-          secondsLeft--;
-          if (secondsLeft < 0){
-            onBreak = !onBreak;
-            total = onBreak ? BREAK : WORK;
-            secondsLeft = total;
-            taskEl.textContent = onBreak ? 'Break time — step away for a bit.' : 'Back to it — next sprint.';
-          }
-          render();
-        }, 1000);
-        startBtn.textContent = 'Pause';
+        controlsEl.innerHTML =
+          '<button type="button" class="btn btn-primary btn-xs" id="focusBreakBtn">Take a break</button>' +
+          '<button type="button" class="btn btn-white-outline btn-xs" id="focusResetBtn">Reset</button>';
+        document.getElementById('focusResetBtn').addEventListener('click', resetTimer);
       }
-    });
+      document.getElementById('focusBreakBtn').addEventListener('click', startBreak);
+    }
 
-    resetBtn.addEventListener('click', function(){
+    function tick(){
+      secondsLeft--;
+      if (secondsLeft < 0){
+        clearInterval(interval); interval = null;
+        if (onBreak){
+          // Break's over — reset to a fresh sprint, but let them start it
+          // on purpose rather than looping forever in the background.
+          onBreak = false; total = WORK; secondsLeft = WORK;
+          taskEl.textContent = defaultTask;
+          renderActiveControls();
+        } else {
+          secondsLeft = 0;
+          taskEl.textContent = courseUrl
+            ? 'Nice sprint! Ready to jump into ' + courseTitle + '?'
+            : 'Nice sprint! Take a 5-minute break.';
+          renderSprintCompleteControls();
+        }
+      }
+      render();
+    }
+
+    function toggleTimer(){
+      if (interval){
+        clearInterval(interval); interval = null;
+      } else {
+        interval = setInterval(tick, 1000);
+      }
+      renderActiveControls();
+    }
+
+    function startBreak(){
+      onBreak = true; total = BREAK; secondsLeft = BREAK;
+      taskEl.textContent = 'Break time — step away for a bit.';
+      interval = setInterval(tick, 1000);
+      renderActiveControls();
+      render();
+    }
+
+    function resetTimer(){
       clearInterval(interval); interval = null;
       onBreak = false; total = WORK; secondsLeft = WORK;
-      startBtn.textContent = 'Start';
+      taskEl.textContent = defaultTask;
+      renderActiveControls();
       render();
-    });
+    }
+
+    renderActiveControls();
+    render();
   })();
 </script>
 {% endblock %}

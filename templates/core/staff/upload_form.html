@@ -2,43 +2,139 @@
 {% block title %}{{ title }} — Rovea{% endblock %}
 
 {% block content %}
-<div class="page-container" style="max-width:500px; margin:40px auto">
+<style>
+  #uploadRoot{
+    --bg:#0F1D2B; --bg-alt:#16283A; --surface:#13212F; --surface-2:#1A2C3D;
+    --ink:#ECEFF3; --ink-soft:#B7C2CB; --ink-faint:#8A97A0;
+    --line:rgba(236,239,243,.14); --line-soft:rgba(236,239,243,.08);
+    --navy:#0F4677; --navy-deep:#0A2E4D; --heading:#E7EDF3;
+    --amber:#E2A63B; --amber-deep:#C98A22; --coral:#D96A45; --green:#4A9D74;
+    --font-display:'Newsreader',serif; --font-body:'Inter',sans-serif;
+    --ease:cubic-bezier(.22,.61,.36,1); --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
+    color-scheme:dark; background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    line-height:1.55; padding:clamp(36px,6vh,64px) clamp(14px,3vw,32px) 70px;
+    border-radius:0 0 var(--radius-lg) var(--radius-lg);
+    transition:background .35s var(--ease),color .35s var(--ease);
+  }
+  #uploadRoot[data-theme="light"]{
+    --bg:#F1EFE6; --bg-alt:#E7E2D3; --surface:#FBFAF4; --surface-2:#FFFFFF;
+    --ink:#17212B; --ink-soft:#54626D; --ink-faint:#818D94;
+    --line:rgba(23,33,43,.14); --line-soft:rgba(23,33,43,.07); --heading:#0A2E4D;
+    color-scheme:light;
+  }
+  #uploadRoot *{box-sizing:border-box;}
+  #uploadRoot a{color:inherit;text-decoration:none;}
+  #uploadRoot :focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:4px;}
+  #uploadRoot h1,#uploadRoot h2{font-family:var(--font-display);font-weight:500;color:var(--heading);letter-spacing:-.01em;margin:0;}
+  #uploadRoot .ic{width:15px;height:15px;flex:none;}
+  @keyframes uRise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  @media(prefers-reduced-motion:reduce){#uploadRoot *{animation-duration:.001ms!important;transition-duration:.001ms!important;}}
 
-  <a href="{% url 'staff_portal' %}" style="font-size:13px; color:var(--text-secondary)">← Back to portal</a>
+  #uploadRoot .upload-shell{max-width:520px;margin:0 auto;}
+  #uploadRoot .back-link{display:inline-flex;align-items:center;gap:6px;font-size:.85rem;color:var(--ink-soft);margin-bottom:22px;transition:color .2s var(--ease);}
+  #uploadRoot .back-link:hover{color:var(--amber);}
 
-  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">{{ title }}</h2>
-  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">{{ description }}</p>
+  #uploadRoot .upload-card{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:30px 28px;
+    opacity:0;transform:translateY(10px);animation:uRise .55s var(--ease) forwards;
+  }
+  #uploadRoot .upload-card h2{font-size:1.4rem;margin-bottom:8px;}
+  #uploadRoot .upload-card > p.desc{color:var(--ink-soft);font-size:.9rem;margin-bottom:22px;}
 
-  {% if messages %}
-  {% for message in messages %}
-  <div class="message" style="margin-bottom:16px">{{ message }}</div>
-  {% endfor %}
-  {% endif %}
+  #uploadRoot .message{background:rgba(74,157,116,.12);border:1px solid rgba(74,157,116,.3);color:var(--green);padding:11px 15px;border-radius:var(--radius-sm);font-size:.85rem;margin-bottom:12px;}
+  #uploadRoot .error-box{background:rgba(217,106,69,.1);border:1px solid rgba(217,106,69,.3);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:18px;}
+  #uploadRoot .error-box p{color:var(--coral);font-size:.85rem;margin:4px 0;}
 
-  {% if form.errors %}
-  <div style="color:var(--red-soft); margin-bottom:16px">
-    {% for field in form %}
-      {% for error in field.errors %}
-        <p>{{ field.label }}: {{ error }}</p>
-      {% endfor %}
-    {% endfor %}
-  </div>
-  {% endif %}
+  #uploadRoot .field-block{margin-bottom:16px;}
+  #uploadRoot .field-label{display:block;font-size:.72rem;font-weight:700;color:var(--ink-faint);margin-bottom:7px;text-transform:uppercase;letter-spacing:.06em;}
+  #uploadRoot .upload-card input[type=text],
+  #uploadRoot .upload-card input[type=number],
+  #uploadRoot .upload-card input[type=email],
+  #uploadRoot .upload-card input[type=file],
+  #uploadRoot .upload-card select,
+  #uploadRoot .upload-card textarea{
+    width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:9px;background:var(--bg-alt);color:var(--ink);
+    font-family:var(--font-body);font-size:.9rem;outline:none;transition:border-color .2s var(--ease);
+  }
+  #uploadRoot .upload-card input:focus,
+  #uploadRoot .upload-card select:focus,
+  #uploadRoot .upload-card textarea:focus{border-color:var(--navy);}
+  #uploadRoot .upload-card input[type=file]{padding:9px 13px;cursor:pointer;}
+  #uploadRoot .upload-card input[type=checkbox]{width:16px;height:16px;accent-color:var(--amber);}
 
-  <form method="POST" enctype="multipart/form-data">
-    {% csrf_token %}
-    {% for field in form %}
-    <div style="margin-bottom:16px">
-      <label style="display:block; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em">
-        {{ field.label }}
-      </label>
-      {{ field }}
+  #uploadRoot .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:999px;font-weight:600;font-size:.92rem;
+    padding:13px 22px;border:none;cursor:pointer;transition:transform .2s var(--ease),background .2s var(--ease);
+    font-family:var(--font-body);
+  }
+  #uploadRoot .btn-primary{background:var(--amber);color:var(--navy-deep);}
+  #uploadRoot .btn-primary:hover{background:var(--amber-deep);transform:translateY(-2px);}
+  #uploadRoot .btn-full{width:100%;margin-top:6px;}
+</style>
+
+<div class="page-container" id="uploadRoot" data-theme="dark">
+  <div class="upload-shell">
+
+    <a href="{% url 'staff_portal' %}" class="back-link">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to portal
+    </a>
+
+    <div class="upload-card">
+      <h2>{{ title }}</h2>
+      <p class="desc">{{ description }}</p>
+
+      {% if messages %}
+        {% for message in messages %}
+        <div class="message">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+
+      {% if form.errors %}
+      <div class="error-box">
+        {% for field in form %}
+          {% for error in field.errors %}
+            <p>{{ field.label }}: {{ error }}</p>
+          {% endfor %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        {% for field in form %}
+        <div class="field-block">
+          <label class="field-label">{{ field.label }}</label>
+          {{ field }}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary btn-full">Upload &amp; process →</button>
+      </form>
     </div>
-    {% endfor %}
-    <button type="submit" class="btn btn-primary btn-full" style="margin-top:8px">
-      Upload & Process →
-    </button>
-  </form>
 
+  </div>
 </div>
+
+<script>
+(function(){
+  const root = document.getElementById('uploadRoot');
+  if(!root) return;
+  function detectTheme(){
+    const html = document.documentElement, body = document.body;
+    const attr = html.getAttribute('data-theme') || (body && body.getAttribute('data-theme'));
+    if (attr) return attr;
+    if (html.classList.contains('dark') || (body && body.classList.contains('dark'))) return 'dark';
+    if (html.classList.contains('light') || (body && body.classList.contains('light'))) return 'light';
+    try{
+      const stored = localStorage.getItem('theme') || localStorage.getItem('appearance') || localStorage.getItem('rovea-theme');
+      if (stored) return stored;
+    }catch(e){}
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  function sync(){ root.setAttribute('data-theme', detectTheme()); }
+  sync();
+  new MutationObserver(sync).observe(document.documentElement, { attributes:true, attributeFilter:['class','data-theme'] });
+  if (document.body) new MutationObserver(sync).observe(document.body, { attributes:true, attributeFilter:['class','data-theme'] });
+})();
+</script>
 {% endblock %}

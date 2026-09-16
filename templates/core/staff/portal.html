@@ -3,185 +3,338 @@
 {% block title %}Staff Portal — Rovea{% endblock %}
 
 {% block content %}
-<div class="page-container">
+<style>
+  /* Rovea staff portal — scoped under #portalRoot, same tokens/theme-follow
+     pattern as the dashboard/timetable pages. Only presentation changes —
+     every url name, form action, context var and JS function below is
+     the same as the original template. */
+  #portalRoot{
+    --bg:#0F1D2B; --bg-alt:#16283A; --surface:#13212F; --surface-2:#1A2C3D;
+    --ink:#ECEFF3; --ink-soft:#B7C2CB; --ink-faint:#8A97A0;
+    --line:rgba(236,239,243,.14); --line-soft:rgba(236,239,243,.08);
+    --navy:#0F4677; --navy-deep:#0A2E4D; --heading:#E7EDF3;
+    --amber:#E2A63B; --amber-deep:#C98A22; --coral:#D96A45; --green:#4A9D74;
+    --font-display:'Newsreader',serif; --font-body:'Inter',sans-serif;
+    --ease:cubic-bezier(.22,.61,.36,1); --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
+    color-scheme:dark; background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    line-height:1.55; padding:clamp(36px,6vh,64px) clamp(14px,3vw,32px) 70px;
+    border-radius:0 0 var(--radius-lg) var(--radius-lg);
+    transition:background .35s var(--ease),color .35s var(--ease);
+  }
+  #portalRoot[data-theme="light"]{
+    --bg:#F1EFE6; --bg-alt:#E7E2D3; --surface:#FBFAF4; --surface-2:#FFFFFF;
+    --ink:#17212B; --ink-soft:#54626D; --ink-faint:#818D94;
+    --line:rgba(23,33,43,.14); --line-soft:rgba(23,33,43,.07); --heading:#0A2E4D;
+    color-scheme:light;
+  }
+  #portalRoot *{box-sizing:border-box;}
+  #portalRoot a{color:inherit;text-decoration:none;}
+  #portalRoot :focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:4px;}
+  #portalRoot h1,#portalRoot h2,#portalRoot h3{font-family:var(--font-display);font-weight:500;color:var(--heading);letter-spacing:-.01em;margin:0;}
+  #portalRoot .max{max-width:1240px;margin-inline:auto;}
+  #portalRoot .ic{width:15px;height:15px;flex:none;}
+  @keyframes pRise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+  @media(prefers-reduced-motion:reduce){#portalRoot *{animation-duration:.001ms!important;transition-duration:.001ms!important;}}
 
-  <h2 style="font-family:'Space Grotesk',sans-serif; margin-bottom:4px">🏫 Staff Portal</h2>
-  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
-    Manage course materials, slides, past questions and course definitions.
+  #portalRoot .portal-head{max-width:1240px;margin:0 auto 28px;}
+  #portalRoot .portal-head h2{font-size:clamp(1.5rem,3vw,2rem);display:flex;align-items:center;gap:10px;}
+  #portalRoot .portal-head p{color:var(--ink-soft);font-size:.9rem;margin-top:6px;}
+
+  #portalRoot .section-label{display:flex;align-items:center;gap:8px;font-size:.82rem;font-weight:600;color:var(--ink-soft);margin:26px 0 14px;max-width:1240px;margin-inline:auto;}
+  #portalRoot .section-label .ic{color:var(--amber);}
+  #portalRoot .section-label .count-chip{background:var(--bg-alt);color:var(--ink-faint);font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px;margin-left:auto;}
+
+  /* ---------- action tiles ---------- */
+  #portalRoot .action-grid{max-width:1240px;margin:0 auto 8px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  @media(max-width:860px){#portalRoot .action-grid{grid-template-columns:repeat(2,1fr);}}
+  @media(max-width:540px){#portalRoot .action-grid{grid-template-columns:1fr;}}
+  #portalRoot .action-tile{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);padding:18px;
+    display:flex;flex-direction:column;gap:6px;transition:transform .22s var(--ease),border-color .22s var(--ease);
+    opacity:0;transform:translateY(8px);animation:pRise .5s var(--ease) forwards;
+  }
+  #portalRoot .action-tile:hover{transform:translateY(-3px);border-color:var(--navy);}
+  #portalRoot .action-tile .tile-icon{width:34px;height:34px;border-radius:9px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:4px;}
+  #portalRoot .action-tile h3{font-family:var(--font-body);font-weight:600;font-size:.95rem;color:var(--heading);}
+  #portalRoot .action-tile p{font-size:.8rem;color:var(--ink-soft);}
+
+  #portalRoot .diag-link{
+    max-width:1240px;margin:14px auto 0;display:inline-flex;align-items:center;gap:7px;
+    font-size:.8rem;font-weight:600;color:var(--ink-soft);border:1px solid var(--line);border-radius:999px;padding:8px 15px;
+    transition:.2s var(--ease);
+  }
+  #portalRoot .diag-link:hover{border-color:var(--amber);color:var(--amber);}
+
+  /* ---------- generic card grid (slides/outlines/past questions) ---------- */
+  #portalRoot .item-grid{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  @media(max-width:860px){#portalRoot .item-grid{grid-template-columns:repeat(2,1fr);}}
+  @media(max-width:540px){#portalRoot .item-grid{grid-template-columns:1fr;}}
+  #portalRoot .item-card{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);padding:16px;
+    display:flex;flex-direction:column;gap:10px;opacity:0;transform:translateY(8px);animation:pRise .45s var(--ease) forwards;
+  }
+  #portalRoot .item-name{font-weight:600;font-size:.9rem;color:var(--heading);}
+  #portalRoot .item-meta{font-size:.78rem;color:var(--ink-faint);line-height:1.5;}
+  #portalRoot .item-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto;}
+  #portalRoot .empty-note{max-width:1240px;margin:0 auto;color:var(--ink-faint);font-size:.85rem;padding:20px 0;}
+
+  /* ---------- buttons + badges ---------- */
+  #portalRoot .btn{
+    display:inline-flex;align-items:center;gap:6px;border-radius:999px;font-size:.76rem;font-weight:600;
+    padding:7px 13px;border:1px solid var(--line);background:var(--bg-alt);color:var(--ink-soft);cursor:pointer;
+    transition:.2s var(--ease);white-space:nowrap;
+  }
+  #portalRoot .btn:hover{border-color:var(--navy);color:var(--ink);}
+  #portalRoot .btn-primary{background:var(--amber);color:var(--navy-deep);border-color:transparent;}
+  #portalRoot .btn-primary:hover{background:var(--amber-deep);color:var(--navy-deep);}
+  #portalRoot .btn-warn{background:rgba(226,166,59,.14);color:var(--amber);border-color:rgba(226,166,59,.3);}
+  #portalRoot .btn-danger{background:rgba(217,106,69,.12);color:var(--coral);border-color:rgba(217,106,69,.3);}
+  #portalRoot .btn-danger:hover{border-color:var(--coral);color:var(--coral);}
+
+  #portalRoot .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;font-size:.68rem;font-weight:700;}
+  #portalRoot .badge-amber{background:rgba(226,166,59,.16);color:var(--amber);}
+  #portalRoot .badge-green{background:rgba(74,157,116,.16);color:var(--green);}
+
+  /* ---------- course definitions: search + grouped grid ---------- */
+  #portalRoot .course-search-row{max-width:1240px;margin:0 auto 16px;}
+  #portalRoot .course-search-row .search-wrap{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:0 16px;height:42px;max-width:360px;}
+  #portalRoot .course-search-row input{border:none;background:none;outline:none;width:100%;font-size:.85rem;color:var(--ink);font-family:var(--font-body);}
+  #portalRoot .course-search-row input::placeholder{color:var(--ink-faint);}
+  #portalRoot .course-search-row svg{color:var(--ink-faint);flex:none;}
+
+  #portalRoot .level-group{max-width:1240px;margin:0 auto 12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden;}
+  #portalRoot .level-group summary{
+    list-style:none;cursor:pointer;padding:14px 18px;display:flex;align-items:center;gap:10px;
+    font-weight:600;font-size:.88rem;color:var(--heading);user-select:none;
+  }
+  #portalRoot .level-group summary::-webkit-details-marker{display:none;}
+  #portalRoot .level-group summary .chevron{transition:transform .2s var(--ease);color:var(--ink-faint);}
+  #portalRoot .level-group[open] summary .chevron{transform:rotate(90deg);}
+  #portalRoot .level-group summary .count-chip{background:var(--bg-alt);color:var(--ink-faint);font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px;}
+  #portalRoot .course-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 16px 16px;}
+  @media(max-width:860px){#portalRoot .course-grid{grid-template-columns:repeat(2,1fr);}}
+  @media(max-width:540px){#portalRoot .course-grid{grid-template-columns:1fr;}}
+  #portalRoot .course-card-def{
+    background:var(--bg-alt);border:1px solid var(--line-soft);border-radius:10px;padding:13px 14px;
+    display:flex;flex-direction:column;gap:8px;
+  }
+  #portalRoot .cdc-name{font-size:.86rem;font-weight:600;color:var(--heading);display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+  #portalRoot .cdc-meta{font-size:.74rem;color:var(--ink-faint);}
+  #portalRoot .cdc-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px;}
+  #portalRoot .cdc-actions .btn{padding:5px 10px;font-size:.7rem;}
+
+  /* ---------- delete modal ---------- */
+  #portalRoot .modal-overlay{position:fixed;inset:0;background:rgba(10,20,30,.6);display:none;align-items:center;justify-content:center;z-index:1000;}
+  #portalRoot .modal-overlay.is-open{display:flex;}
+  #portalRoot .modal-card{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-lg);padding:26px;max-width:400px;width:90%;text-align:center;box-shadow:0 20px 50px -20px rgba(0,0,0,.5);}
+  #portalRoot .modal-card h3{font-size:1.1rem;margin-bottom:10px;}
+  #portalRoot .modal-card p{font-size:.86rem;color:var(--ink-soft);margin-bottom:20px;}
+  #portalRoot .modal-actions{display:flex;gap:10px;justify-content:center;}
+  #portalRoot .btn-secondary{background:transparent;}
+</style>
+
+<div class="page-container" id="portalRoot" data-theme="dark">
+
+  <div class="portal-head">
+    <h2>
+      <svg class="ic" style="width:22px;height:22px;color:var(--amber);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21V8l8-5 8 5v13"/><path d="M9 21v-6h6v6"/></svg>
+      Staff portal
+    </h2>
+    <p>Manage course materials, slides, past questions and course definitions.</p>
+  </div>
+
+  <p class="section-label">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 20h16"/></svg>
+    Upload materials
   </p>
-
-  <p class="section-label">📤 Upload Materials</p>
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px">
-    <a href="{% url 'staff_upload_slide' %}" class="today-card" style="text-decoration:none; display:block">
-      <h3>📑 Course Slides</h3>
+  <div class="action-grid">
+    <a href="{% url 'staff_upload_slide' %}" class="action-tile">
+      <span class="tile-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 15l4-4 4 4 6-6 4 4"/></svg></span>
+      <h3>Course slides</h3>
       <p>Upload full course slide deck. Topics extracted automatically.</p>
     </a>
-    <a href="{% url 'staff_upload_outline' %}" class="today-card" style="text-decoration:none; display:block">
-      <h3>📋 Course Outline</h3>
+    <a href="{% url 'staff_upload_outline' %}" class="action-tile">
+      <span class="tile-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4h9v16H9zM9 9H4v11h5"/></svg></span>
+      <h3>Course outline</h3>
       <p>Upload course outline. Parsed into weekly topics automatically.</p>
     </a>
-    <a href="{% url 'staff_upload_past_questions' %}" class="today-card" style="text-decoration:none; display:block">
-      <h3>📝 Past Questions</h3>
+    <a href="{% url 'staff_upload_past_questions' %}" class="action-tile">
+      <span class="tile-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+      <h3>Past questions</h3>
       <p>Upload past exam papers. Questions extracted and structured.</p>
     </a>
-    <a href="{% url 'staff_manage_courses' %}" class="today-card" style="text-decoration:none; display:block">
-      <h3>📚 Manage Courses</h3>
+    <a href="{% url 'staff_manage_courses' %}" class="action-tile">
+      <span class="tile-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15Z"/></svg></span>
+      <h3>Manage courses</h3>
       <p>Add, edit or remove course definitions and electives.</p>
     </a>
-    <a href="{% url 'staff_pregenerate_lessons' %}" class="today-card" style="text-decoration:none; display:block">
-  <h3>⚡ Pre-Generate Lessons</h3>
-  <p>Generate lecture content ahead of time. Students read instantly from the database.</p>
-</a>
+    <a href="{% url 'staff_pregenerate_lessons' %}" class="action-tile">
+      <span class="tile-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/></svg></span>
+      <h3>Pre-generate lessons</h3>
+      <p>Generate lecture content ahead of time. Students read instantly from the database.</p>
+    </a>
   </div>
-<p class="section-label">📑 Recent Slides</p>
-  </div>
-<a href="{% url 'staff_course_code_check' %}" class="btn" style="font-size:12px; padding:6px 12px; margin-bottom:16px; display:inline-block;">
-  🧩 Check Course Code Consistency
-</a>
+
+  <a href="{% url 'staff_course_code_check' %}" class="diag-link">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12a3 3 0 1 1 6 0c0 2-3 2.5-3 4.5M12 20h.01"/><circle cx="12" cy="12" r="9"/></svg>
+    Check course code consistency
+  </a>
+
   <!-- ─── SLIDES ──────────────────────────────────────────────────────────── -->
-  <p class="section-label">📑 Recent Slides</p>
-  <div class="course-list" style="margin-bottom:24px">
+  <p class="section-label">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 15l4-4 4 4 6-6 4 4"/></svg>
+    Recent slides
+  </p>
+  <div class="item-grid">
     {% for slide in slides %}
-        <div class="course-pill" style="cursor:default; display:flex; justify-content:space-between; align-items:center;">
+    <div class="item-card">
       <div>
-        <div class="course-name">{{ slide.course_code }} — {{ slide.course_title }}</div>
-        <div class="course-code">
+        <div class="item-name">{{ slide.course_code }} — {{ slide.course_title }}</div>
+        <div class="item-meta">
           Level {{ slide.level }} ·
           {% if slide.parsed %}
-          {% if slide.topics_incomplete %}
-            {{ slide.extracted_topics|length }} topics extracted (⚠️ incomplete)
-          {% else %}
-            {{ slide.extracted_topics|length }} topics extracted ✓
-          {% endif %}
-        {% else %}Not yet parsed{% endif %}
+            {% if slide.topics_incomplete %}{{ slide.extracted_topics|length }} topics extracted (incomplete)
+            {% else %}{{ slide.extracted_topics|length }} topics extracted ✓{% endif %}
+          {% else %}Not yet parsed{% endif %}
           · {{ slide.uploaded_at|date:"d M Y" }}
         </div>
       </div>
-      <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
-  {% if slide.parsed and slide.topics_incomplete %}
-  <form method="post" action="{% url 'retry_slide_topics' slide.id %}" style="margin:0">
-    {% csrf_token %}
-    <button type="submit" class="btn" style="font-size:12px; padding:6px 12px; background:var(--amber-glow); color:var(--amber); border-color:rgba(245,166,35,0.25);">⚠️ Incomplete — Retry Topics</button>
-  </form>
-  {% elif slide.parsed and not slide.extracted_topics %}
-  <form method="post" action="{% url 'retry_slide_topics' slide.id %}" style="margin:0">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-primary" style="font-size:12px; padding:6px 12px;">🔄 Retry Topics</button>
-  </form>
-  {% endif %}
+      <div class="item-actions">
+        {% if slide.parsed and slide.topics_incomplete %}
+        <form method="post" action="{% url 'retry_slide_topics' slide.id %}" style="margin:0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-warn">⚠ Incomplete — retry topics</button>
+        </form>
+        {% elif slide.parsed and not slide.extracted_topics %}
+        <form method="post" action="{% url 'retry_slide_topics' slide.id %}" style="margin:0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary">Retry topics</button>
+        </form>
+        {% endif %}
 
-  {% with status=slide_split_status|get_item:slide.id %}
-    {% if status.total > 0 %}
-      <span class="badge {% if status.empty > 0 %}badge-amber{% else %}badge-green{% endif %}" style="font-size:11px;">
-        {{ status.total }} chunks ({{ status.empty }} empty)
-      </span>
-    {% endif %}
-    <a href="{% url 'staff_slide_diagnostics' slide.id %}" class="btn" style="font-size:12px; padding:6px 12px;">🔍 Diagnostics</a>
-    <form method="post" action="{% url 'run_topic_split' slide.id %}" style="margin:0">
-      {% csrf_token %}
-      <button type="submit" class="btn {% if status.empty > 0 %}btn-primary{% endif %}" style="font-size:12px; padding:6px 12px;">
-        {% if status.empty > 0 %}Backfill{% else %}Run Split{% endif %}
-      </button>
-    </form>
-  {% endwith %}
+        {% with status=slide_split_status|get_item:slide.id %}
+          {% if status.total > 0 %}
+            <span class="badge {% if status.empty > 0 %}badge-amber{% else %}badge-green{% endif %}">{{ status.total }} chunks ({{ status.empty }} empty)</span>
+          {% endif %}
+          <a href="{% url 'staff_slide_diagnostics' slide.id %}" class="btn">Diagnostics</a>
+          <form method="post" action="{% url 'run_topic_split' slide.id %}" style="margin:0">
+            {% csrf_token %}
+            <button type="submit" class="btn {% if status.empty > 0 %}btn-primary{% endif %}">{% if status.empty > 0 %}Backfill{% else %}Run split{% endif %}</button>
+          </form>
+        {% endwith %}
 
-  <button type="button" class="btn" style="font-size:12px; padding:6px 12px; background:var(--red-glow); color:#F08080; border-color:var(--red-soft);" onclick="openDeleteModal('slide', '{{ slide.id }}', '{{ slide.course_code }} slide deck')">
-    🗑️ Delete
-  </button>
-</div>
+        <button type="button" class="btn btn-danger" onclick="openDeleteModal('slide', '{{ slide.id }}', '{{ slide.course_code }} slide deck')">Delete</button>
+      </div>
     </div>
     {% empty %}
-    <p style="color:var(--text-muted); font-size:13px">No slides uploaded yet.</p>
+    <p class="empty-note">No slides uploaded yet.</p>
     {% endfor %}
   </div>
 
   <!-- ─── COURSE OUTLINES ────────────────────────────────────────────────── -->
-  <p class="section-label">📋 Recent Course Outlines</p>
-  <div class="course-list" style="margin-bottom:24px">
+  <p class="section-label">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4h9v16H9zM9 9H4v11h5"/></svg>
+    Recent course outlines
+  </p>
+  <div class="item-grid">
     {% for outline in outlines %}
-    <div class="course-pill" style="cursor:default; display:flex; justify-content:space-between; align-items:center;">
+    <div class="item-card">
       <div>
-        <div class="course-name">{{ outline.course_code }} — {{ outline.course_title }}</div>
-        <div class="course-code">
-          Level {{ outline.level }} ·
-          {% if outline.parsed %}Outline parsed ✓
-          {% else %}Not yet parsed{% endif %}
-          · {{ outline.uploaded_at|date:"d M Y" }}
+        <div class="item-name">{{ outline.course_code }} — {{ outline.course_title }}</div>
+        <div class="item-meta">
+          Level {{ outline.level }} · {% if outline.parsed %}Outline parsed ✓{% else %}Not yet parsed{% endif %} · {{ outline.uploaded_at|date:"d M Y" }}
         </div>
       </div>
-      <button type="button" class="btn btn-sm btn-outline-danger" onclick="openDeleteModal('outline', '{{ outline.id }}', '{{ outline.course_code }} outline')">
-        🗑️ Delete
-      </button>
+      <div class="item-actions">
+        <button type="button" class="btn btn-danger" onclick="openDeleteModal('outline', '{{ outline.id }}', '{{ outline.course_code }} outline')">Delete</button>
+      </div>
     </div>
     {% empty %}
-    <p style="color:var(--text-muted); font-size:13px">No course outlines uploaded yet.</p>
+    <p class="empty-note">No course outlines uploaded yet.</p>
     {% endfor %}
   </div>
 
   <!-- ─── PAST QUESTIONS ────────────────────────────────────────────────── -->
-  <p class="section-label">📝 Recent Past Questions</p>
-  <div class="course-list" style="margin-bottom:24px">
+  <p class="section-label">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+    Recent past questions
+  </p>
+  <div class="item-grid">
     {% for pq in past_questions %}
-    <div class="course-pill" style="cursor:default; display:flex; justify-content:space-between; align-items:center;">
+    <div class="item-card">
       <div>
-        <div class="course-name">{{ pq.course_code }} — {{ pq.course_title }}</div>
-        <div class="course-code">
-          Level {{ pq.level }} ·
-          {% if pq.parsed %}{{ pq.parsed_questions|length }} questions extracted ✓
-          {% else %}Not yet parsed{% endif %}
-          · {{ pq.uploaded_at|date:"d M Y" }}
+        <div class="item-name">{{ pq.course_code }} — {{ pq.course_title }}</div>
+        <div class="item-meta">
+          Level {{ pq.level }} · {% if pq.parsed %}{{ pq.parsed_questions|length }} questions extracted ✓{% else %}Not yet parsed{% endif %} · {{ pq.uploaded_at|date:"d M Y" }}
         </div>
       </div>
-      <button type="button" class="btn btn-sm btn-outline-danger" onclick="openDeleteModal('past_question', '{{ pq.id }}', '{{ pq.course_code }} past question')">
-        🗑️ Delete
-      </button>
+      <div class="item-actions">
+        <button type="button" class="btn btn-danger" onclick="openDeleteModal('past_question', '{{ pq.id }}', '{{ pq.course_code }} past question')">Delete</button>
+      </div>
     </div>
     {% empty %}
-    <p style="color:var(--text-muted); font-size:13px">No past questions uploaded yet.</p>
+    <p class="empty-note">No past questions uploaded yet.</p>
     {% endfor %}
   </div>
 
   <!-- ─── COURSE DEFINITIONS ────────────────────────────────────────────── -->
-  <p class="section-label">📚 Course Definitions ({{ courses.count }})</p>
-  <div class="course-list">
-    {% for course in courses %}
-    <div class="course-pill" style="cursor:default; display:flex; justify-content:space-between; align-items:center;">
-      <div>
-        <div class="course-name">{{ course.course_code }} — {{ course.course_title }}
-          {% if course.is_elective %}
-          <span class="badge badge-amber" style="margin-left:8px">Elective</span>
-          {% else %}
-          <span class="badge badge-green" style="margin-left:8px">Compulsory</span>
-          {% endif %}
-        </div>
-        <div class="course-code">Level {{ course.level }} · Semester {{ course.semester }} · {{ course.units }} units</div>
-      </div>
-      <button type="button" class="btn btn-sm btn-outline-danger" onclick="openDeleteModal('course_definition', '{{ course.id }}', '{{ course.course_code }} definition')">
-        🗑️ Delete
-      </button>
+  <p class="section-label">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15Z"/></svg>
+    Course definitions
+    <span class="count-chip">{{ courses.count }}</span>
+  </p>
+
+  <div class="course-search-row">
+    <div class="search-wrap">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="courseDefSearch" placeholder="Search by code or title…" autocomplete="off">
     </div>
+  </div>
+
+  <div id="courseDefGroups">
+    {% regroup courses|dictsort:"level" by level as level_groups %}
+    {% for group in level_groups %}
+    <details class="level-group">
+      <summary>
+        <svg class="chevron ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 6 6 6-6 6"/></svg>
+        Level {{ group.grouper }}
+        <span class="count-chip">{{ group.list|length }}</span>
+      </summary>
+      <div class="course-grid">
+        {% for course in group.list %}
+        <div class="course-card-def" data-search="{{ course.course_code|lower }} {{ course.course_title|lower }}">
+          <div class="cdc-name">
+            {{ course.course_code }} — {{ course.course_title }}
+            {% if course.is_elective %}<span class="badge badge-amber">Elective</span>{% else %}<span class="badge badge-green">Compulsory</span>{% endif %}
+          </div>
+          <div class="cdc-meta">Level {{ course.level }} · Semester {{ course.semester }} · {{ course.units }} units</div>
+          <div class="cdc-actions">
+            <button type="button" class="btn btn-danger" onclick="openDeleteModal('course_definition', '{{ course.id }}', '{{ course.course_code }} definition')">Delete</button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </details>
     {% empty %}
-    <p style="color:var(--text-muted); font-size:13px">No courses defined yet.</p>
+    <p class="empty-note">No courses defined yet.</p>
     {% endfor %}
   </div>
 
-</div>
-
-<!-- ─── DELETE CONFIRMATION MODAL ────────────────────────────────────────── -->
-<div id="deleteModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); align-items:center; justify-content:center; z-index:1000;">
-  <div style="background:var(--bg-card, #fff); padding:24px; border-radius:12px; max-width:400px; width:90%; text-align:center; box-shadow:0 4px 20px rgba(0,0,0,0.2);">
-    <h3 style="margin-top:0; font-family:'Space Grotesk',sans-serif">Confirm Deletion</h3>
-    <p id="deleteModalMessage" style="font-size:14px; color:var(--text-secondary); margin-bottom:20px">
-      Are you sure you want to delete this item?
-    </p>
-    <form id="deleteForm" method="POST" action="">
-      {% csrf_token %}
-      <div style="display:flex; gap:12px; justify-content:center">
-        <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
-        <button type="submit" class="btn btn-danger">Yes, Delete</button>
-      </div>
+  <!-- ─── DELETE CONFIRMATION MODAL ────────────────────────────────────────── -->
+  <div id="deleteModal" class="modal-overlay">
+    <div class="modal-card">
+      <h3>Confirm deletion</h3>
+      <p id="deleteModalMessage">Are you sure you want to delete this item?</p>
+      <form id="deleteForm" method="POST" action="">
+        {% csrf_token %}
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+          <button type="submit" class="btn btn-danger">Yes, delete</button>
+        </div>
     </form>
+    </div>
   </div>
+
 </div>
 
 <script>
@@ -192,7 +345,6 @@
 
     message.textContent = `Are you sure you want to delete "${itemName}"? This action cannot be undone.`;
 
-    // Map types to corresponding Django URL endpoints
     let actionUrl = '';
     if (type === 'slide') {
       actionUrl = `/staff/slides/delete/${id}/`;
@@ -205,11 +357,56 @@
     }
 
     form.action = actionUrl;
-    modal.style.display = 'flex';
+    modal.classList.add('is-open');
   }
 
   function closeDeleteModal() {
-    document.getElementById('deleteModal').style.display = 'none';
+    document.getElementById('deleteModal').classList.remove('is-open');
   }
+
+  // Course-definition search: filters cards across all level groups,
+  // opening groups that contain a match and hiding groups that don't.
+  (function(){
+    const input = document.getElementById('courseDefSearch');
+    if (!input) return;
+    const groups = document.querySelectorAll('#courseDefGroups .level-group');
+
+    input.addEventListener('input', function(){
+      const q = input.value.trim().toLowerCase();
+      groups.forEach(group => {
+        const cards = group.querySelectorAll('.course-card-def');
+        let anyMatch = false;
+        cards.forEach(card => {
+          const match = !q || (card.dataset.search || '').indexOf(q) !== -1;
+          card.style.display = match ? '' : 'none';
+          if (match) anyMatch = true;
+        });
+        group.style.display = anyMatch ? '' : 'none';
+        if (q) group.open = true;
+      });
+    });
+  })();
+
+  // Follow whatever theme base.html's Appearance toggle sets on <html>/<body>.
+  (function(){
+    const root = document.getElementById('portalRoot');
+    if(!root) return;
+    function detectTheme(){
+      const html = document.documentElement, body = document.body;
+      const attr = html.getAttribute('data-theme') || (body && body.getAttribute('data-theme'));
+      if (attr) return attr;
+      if (html.classList.contains('dark') || (body && body.classList.contains('dark'))) return 'dark';
+      if (html.classList.contains('light') || (body && body.classList.contains('light'))) return 'light';
+      try{
+        const stored = localStorage.getItem('theme') || localStorage.getItem('appearance') || localStorage.getItem('rovea-theme');
+        if (stored) return stored;
+      }catch(e){}
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    function sync(){ root.setAttribute('data-theme', detectTheme()); }
+    sync();
+    new MutationObserver(sync).observe(document.documentElement, { attributes:true, attributeFilter:['class','data-theme'] });
+    if (document.body) new MutationObserver(sync).observe(document.body, { attributes:true, attributeFilter:['class','data-theme'] });
+  })();
 </script>
 {% endblock %}

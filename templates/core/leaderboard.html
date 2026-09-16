@@ -2,133 +2,279 @@
 {% block title %}Leaderboard — Rovea{% endblock %}
 
 {% block content %}
-<div class="page-container" style="max-width: 1400px; margin: 0 auto;">
-  
-  <!-- Header Banner Section -->
-  <div class="greeting-section" style="margin-bottom: 2rem; animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;">
-    <h2 style="margin-bottom:4px; font-family: 'Space Grotesk', sans-serif; font-weight: 700; letter-spacing: -0.02em;">Leaderboard 🏆</h2>
-    <p class="greeting-sub">Petroleum & Gas Engineering · Unilag</p>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  /* =========================================================
+     Rovea leaderboard — scoped under #leaderboardRoot, using the
+     exact same tokens/fonts/components as the dashboard so it
+     reads as the same app instead of a different one bolted on.
+     Backend contract (context vars, urls) is untouched — only
+     presentation changed.
+     ========================================================= */
+  #leaderboardRoot{
+    --bg:#0F1D2B; --bg-alt:#16283A; --surface:#13212F; --surface-2:#1A2C3D;
+    --ink:#ECEFF3; --ink-soft:#B7C2CB; --ink-faint:#8A97A0;
+    --line:rgba(236,239,243,.14); --line-soft:rgba(236,239,243,.08);
+    --navy:#0F4677; --navy-deep:#0A2E4D; --heading:#E7EDF3;
+    --amber:#E2A63B; --amber-deep:#C98A22;
+    --coral:#D96A45; --green:#4A9D74;
+    --gold:#FFD700; --silver:#C0C0C0; --bronze:#CD7F32;
+    --font-display:'Newsreader',serif; --font-body:'Inter',sans-serif;
+    --ease:cubic-bezier(.22,.61,.36,1);
+    --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
+    color-scheme: dark;
+    background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    line-height:1.55; padding:32px clamp(16px,3vw,32px) 80px;
+    max-width:1400px; margin-inline:auto;
+    border-radius:0 0 var(--radius-lg) var(--radius-lg);
+    transition:background .35s var(--ease),color .35s var(--ease);
+  }
+  #leaderboardRoot[data-theme="light"]{
+    --bg:#F4F7FA; --bg-alt:#E4EBF2; --surface:#FFFFFF; --surface-2:#FFFFFF;
+    --ink:#17212B; --ink-soft:#54626D; --ink-faint:#818D94;
+    --line:rgba(23,33,43,.14); --line-soft:rgba(23,33,43,.07);
+    --heading:#0A2E4D;
+    color-scheme: light;
+  }
+  #leaderboardRoot *{box-sizing:border-box;}
+  #leaderboardRoot a{color:inherit;text-decoration:none;}
+  #leaderboardRoot :focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:4px;}
+  #leaderboardRoot h1,#leaderboardRoot h2,#leaderboardRoot h3{
+    font-family:var(--font-display);font-weight:500;color:var(--heading);letter-spacing:-.01em;margin:0;
+  }
+
+  /* ---------- header ---------- */
+  #leaderboardRoot .lb-header{
+    padding-top:6px;margin-bottom:26px;
+    opacity:0;transform:translateY(10px);animation:lRise .6s var(--ease) forwards;
+  }
+  #leaderboardRoot .lb-title{font-size:clamp(1.6rem,3vw,2.1rem);display:flex;align-items:center;gap:10px;}
+  #leaderboardRoot .lb-sub{margin-top:8px;color:var(--ink-soft);font-size:.95rem;}
+
+  /* ---------- layout ---------- */
+  #leaderboardRoot .lb-grid{display:grid;grid-template-columns:280px 1fr 300px;gap:22px;align-items:start;}
+  @media(max-width:1100px){
+    #leaderboardRoot .lb-grid{grid-template-columns:1fr;}
+    #leaderboardRoot .lb-side-col{order:2;}
+    #leaderboardRoot .lb-main-col{order:1;}
+  }
+  #leaderboardRoot .lb-side-col{
+    display:flex;flex-direction:column;gap:16px;
+    opacity:0;transform:translateY(10px);animation:lRise .6s var(--ease) forwards;animation-delay:.06s;
+  }
+  #leaderboardRoot .lb-main-col{
+    opacity:0;transform:translateY(10px);animation:lRise .6s var(--ease) forwards;animation-delay:.1s;
+  }
+
+  #leaderboardRoot .section-label{
+    display:flex;align-items:center;gap:8px;font-size:.82rem;font-weight:600;
+    color:var(--ink-soft);letter-spacing:.02em;margin:0 0 12px;
+  }
+
+  /* ---------- generic card ---------- */
+  #leaderboardRoot .side-widget-card{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);
+    padding:16px 18px;
+  }
+
+  /* ---------- top performer cards ---------- */
+  #leaderboardRoot .lb-top-card{
+    display:flex;align-items:center;gap:12px;padding:14px 16px;
+    transition:transform .22s var(--ease);
+  }
+  #leaderboardRoot .lb-top-card:hover{transform:translateY(-2px);}
+  #leaderboardRoot .lb-top-card.rank-1{border-left:3px solid var(--gold);}
+  #leaderboardRoot .lb-top-card.rank-2{border-left:3px solid var(--silver);}
+  #leaderboardRoot .lb-top-card.rank-3{border-left:3px solid var(--bronze);}
+  #leaderboardRoot .lb-top-medal{font-size:24px;line-height:1;flex:none;}
+  #leaderboardRoot .lb-top-info{flex:1;min-width:0;}
+  #leaderboardRoot .lb-top-name{
+    font-weight:600;font-size:.9rem;color:var(--heading);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  #leaderboardRoot .lb-top-streak{font-size:.75rem;color:var(--ink-soft);margin-top:2px;}
+
+  /* ---------- badges ---------- */
+  #leaderboardRoot .xp-badge{
+    display:inline-flex;align-items:center;background:var(--bg-alt);border:1px solid var(--line);
+    font-size:.75rem;font-weight:700;color:var(--amber);padding:5px 10px;border-radius:999px;flex:none;
+  }
+
+  /* ---------- main rankings list ---------- */
+  #leaderboardRoot .lb-list{display:flex;flex-direction:column;gap:10px;}
+  #leaderboardRoot .lb-row{
+    display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--radius-md);padding:14px 18px;
+    transition:transform .2s var(--ease),border-color .2s var(--ease);
+  }
+  #leaderboardRoot .lb-row:hover{transform:translateY(-2px);border-color:var(--navy);}
+  #leaderboardRoot .lb-row.lb-me{border-color:var(--amber);background:rgba(226,166,59,.08);}
+  #leaderboardRoot .lb-rank{
+    font-family:var(--font-display);font-weight:600;font-size:1.05rem;color:var(--heading);
+    width:38px;flex:none;text-align:center;
+  }
+  #leaderboardRoot .lb-avatar{
+    width:40px;height:40px;border-radius:50%;flex:none;background:var(--navy);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-family:var(--font-body);font-weight:600;font-size:.85rem;
+  }
+  #leaderboardRoot .lb-name{
+    flex:1;min-width:0;font-weight:500;font-size:.92rem;color:var(--heading);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  #leaderboardRoot .you-tag{color:var(--amber);font-weight:600;font-size:.8rem;margin-left:6px;}
+  #leaderboardRoot .lb-meta{text-align:right;flex:none;}
+  #leaderboardRoot .lb-streak{font-size:.72rem;color:var(--ink-faint);margin-top:4px;}
+  #leaderboardRoot .lb-empty{text-align:center;padding:48px 20px;color:var(--ink-soft);}
+
+  /* ---------- your standing ---------- */
+  #leaderboardRoot .lb-rank-hero{
+    text-align:center;padding:8px 0 16px;border-bottom:1px solid var(--line);margin-bottom:14px;
+  }
+  #leaderboardRoot .lb-rank-hero-label{
+    font-size:.75rem;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;
+  }
+  #leaderboardRoot .lb-rank-hero-num{
+    font-family:var(--font-display);font-size:2.2rem;font-weight:600;color:var(--amber);margin:4px 0;
+  }
+  #leaderboardRoot .lb-rank-hero-xp{font-size:.85rem;color:var(--heading);}
+  #leaderboardRoot .lb-stat-row{display:flex;justify-content:space-between;font-size:.85rem;color:var(--ink-soft);}
+  #leaderboardRoot .lb-stat-row + .lb-stat-row{margin-top:10px;}
+  #leaderboardRoot .lb-stat-row strong{color:var(--heading);font-weight:600;}
+
+  #leaderboardRoot .lb-nav-card{display:flex;flex-direction:column;gap:8px;}
+
+  /* ---------- buttons ---------- */
+  #leaderboardRoot .btn{
+    display:inline-flex;align-items:center;gap:7px;border-radius:999px;border:1px solid transparent;
+    font-weight:600;font-size:.85rem;cursor:pointer;padding:0 16px;height:40px;white-space:nowrap;
+    font-family:var(--font-body);transition:transform .2s var(--ease),border-color .2s var(--ease),background .2s var(--ease);
+  }
+  #leaderboardRoot .btn-white-outline{background:transparent;color:var(--ink);border-color:var(--line);}
+  #leaderboardRoot .btn-white-outline:hover{border-color:var(--navy);background:var(--bg-alt);}
+  #leaderboardRoot .btn-full{width:100%;justify-content:flex-start;}
+
+  @keyframes lRise{to{opacity:1;transform:translateY(0);}}
+  @media(prefers-reduced-motion:reduce){
+    #leaderboardRoot *{animation-duration:.001ms!important;transition-duration:.001ms!important;}
+  }
+</style>
+
+<div class="page-container" id="leaderboardRoot" data-theme="dark">
+
+  <div class="lb-header">
+    <h2 class="lb-title">Leaderboard 🏆</h2>
+    <p class="lb-sub">Petroleum &amp; Gas Engineering · Unilag</p>
   </div>
 
-  <!-- Responsive Three-Column Grid Layout -->
-  <div style="display: grid; grid-template-columns: 300px 1fr 320px; gap: 24px; align-items: start;" class="leaderboard-grid">
-    
+  <div class="lb-grid">
+
     <!-- 1. LEFT SIDEBAR: Elite Podium Highlights -->
-    <div class="lb-side-col" style="display: flex; flex-direction: column; gap: 16px; animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.05s;">
-      <p class="section-label" style="margin-bottom: 0;">Top Performers ✨</p>
-      
+    <div class="lb-side-col">
+      <p class="section-label">Top Performers ✨</p>
+
       {% for student in top_students|slice:":3" %}
-        <div class="side-widget-card" style="display: flex; align-items: center; gap: 12px; padding: 1rem; position: relative; overflow: hidden; border-left: 3px solid {% if forloop.counter == 1 %}#ffd700{% elif forloop.counter == 2 %}#c0c0c0{% else %}#cd7f32{% endif %};">
-          <div style="font-size: 24px; line-height: 1;">
+        <div class="side-widget-card lb-top-card rank-{{ forloop.counter }}">
+          <div class="lb-top-medal">
             {% if forloop.counter == 1 %}🥇{% elif forloop.counter == 2 %}🥈{% else %}🥉{% endif %}
           </div>
-          <div style="flex: 1; min-width: 0;">
-            <div style="font-weight: 600; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-              {{ student.user.get_full_name }}
-            </div>
-            <div style="font-size: 11px; color: var(--text-secondary);">🔥 {{ student.streak }} Day Streak</div>
+          <div class="lb-top-info">
+            <div class="lb-top-name">{{ student.user.get_full_name }}</div>
+            <div class="lb-top-streak">🔥 {{ student.streak }} Day Streak</div>
           </div>
-          <span class="xp-badge" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); font-size: 11px; padding: 4px 8px;">{{ student.xp }} XP</span>
+          <span class="xp-badge">{{ student.xp }} XP</span>
         </div>
       {% endfor %}
     </div>
 
     <!-- 2. CENTRAL COLUMN: Main Rankings List -->
-    <div class="lb-main-col" style="animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.1s;">
+    <div class="lb-main-col">
       <p class="section-label">Current Standings</p>
-      <div class="lb-list" style="display: flex; flex-direction: column; gap: 10px;">
+      <div class="lb-list">
         {% for student in top_students %}
-        <div class="lb-row {% if student.user == user %}lb-me{% endif %}" 
-             style="transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s, box-shadow 0.2s; margin-bottom: 0;"
-             onmouseenter="this.style.transform='translateY(-2px)'; this.style.borderColor='var(--border-accent)';"
-             onmouseleave="this.style.transform='translateY(0)'; this.style.borderColor='var(--border)';">
-          
-          <div class="lb-rank" style="font-weight: 600; width: 40px;">
+        <div class="lb-row {% if student.user == user %}lb-me{% endif %}">
+
+          <div class="lb-rank">
             {% if forloop.counter == 1 %}🥇
             {% elif forloop.counter == 2 %}🥈
             {% elif forloop.counter == 3 %}🥉
             {% else %}#{{ forloop.counter }}
             {% endif %}
           </div>
-          
-          <div class="lb-avatar" style="font-family: 'Space Grotesk', sans-serif; font-weight: 600;">
-            {{ student.user.first_name.0 }}{{ student.user.last_name.0 }}
+
+          <div class="lb-avatar">{{ student.user.first_name.0 }}{{ student.user.last_name.0 }}</div>
+
+          <div class="lb-name">
+            {% if student.user.get_full_name %}
+              {{ student.user.get_full_name }}
+            {% else %}
+              Anonymous Academic
+            {% endif %}
+            {% if student.user == user %}<span class="you-tag">(you)</span>{% endif %}
           </div>
-          
-          <div class="lb-name" style="font-weight: 500;">
-  {% if student.user.get_full_name %}
-    {{ student.user.get_full_name }}
-  {% else %}
-    Anonymous Academic
-  {% endif %}
-  {% if student.user == user %}<span class="you-tag" style="margin-left: 6px;">(you)</span>{% endif %}
-</div>
-          
-          <div style="text-align:right">
+
+          <div class="lb-meta">
             <span class="xp-badge">{{ student.xp }} XP</span>
-            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">🔥 {{ student.streak }} streak</div>
+            <div class="lb-streak">🔥 {{ student.streak }} streak</div>
           </div>
         </div>
         {% empty %}
-        <div class="side-widget-card" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
-          <p style="margin-bottom: 0;">No students active this semester yet. Complete a learning track session to claim the top spot! 🚀</p>
+        <div class="side-widget-card lb-empty">
+          <p style="margin:0;">No students active this semester yet. Complete a learning track session to claim the top spot! 🚀</p>
         </div>
         {% endfor %}
       </div>
     </div>
 
     <!-- 3. RIGHT SIDEBAR: Your Dynamic Profile Performance -->
-    <div class="lb-side-col" style="display: flex; flex-direction: column; gap: 16px; animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.15s;">
-      <p class="section-label" style="margin-bottom: 0;">Your Standing 📊</p>
-      <div class="side-widget-card" style="padding: 1.25rem;">
-        
+    <div class="lb-side-col">
+      <p class="section-label">Your Standing 📊</p>
+      <div class="side-widget-card">
+
         <!-- Loop parameters to find logged-in user context metrics -->
         {% for student in top_students %}
           {% if student.user == user %}
-            <div style="text-align: center; padding: 0.5rem 0 1rem 0; border-bottom: 1px solid var(--border); margin-bottom: 1rem;">
-              <div style="font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Current Rank</div>
-              <div style="font-family: 'Space Grotesk', sans-serif; font-size: 36px; font-weight: 700; color: var(--amber); margin: 4px 0;">
-                #{{ forloop.counter }}
-              </div>
-              <div style="font-size: 13px; color: var(--text);">{{ student.xp }} Accumulated XP</div>
+            <div class="lb-rank-hero">
+              <div class="lb-rank-hero-label">Current Rank</div>
+              <div class="lb-rank-hero-num">#{{ forloop.counter }}</div>
+              <div class="lb-rank-hero-xp">{{ student.xp }} Accumulated XP</div>
             </div>
           {% endif %}
         {% endfor %}
 
-        <div style="font-size: 13px; display: flex; flex-direction: column; gap: 10px;">
-          <div style="display: flex; justify-content: space-between; color: var(--text-secondary);">
-            <span>Department:</span>
-            <strong style="color: var(--text);">Petroleum & Gas</strong>
-          </div>
-          <div style="display: flex; justify-content: space-between; color: var(--text-secondary);">
-            <span>Active Pool:</span>
-            <strong style="color: var(--text);">Unilag Chapter</strong>
-          </div>
+        <div class="lb-stat-row">
+          <span>Department:</span>
+          <strong>Petroleum &amp; Gas</strong>
+        </div>
+        <div class="lb-stat-row">
+          <span>Active Pool:</span>
+          <strong>Unilag Chapter</strong>
         </div>
       </div>
 
-      <p class="section-label" style="margin-bottom: 0;">Navigation ⚡</p>
-      <div class="side-widget-card" style="display: flex; flex-direction: column; gap: 8px; padding: 12px;">
-        <a href="{% url 'dashboard' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px; padding: 10px 14px;">🏠 Core Dashboard</a>
-        <a href="{% url 'timetable' %}" class="btn btn-white-outline btn-full" style="justify-content: flex-start; font-size: 13px; padding: 10px 14px;">📅 Session Timetable</a>
+      <p class="section-label">Navigation ⚡</p>
+      <div class="side-widget-card lb-nav-card">
+        <a href="{% url 'dashboard' %}" class="btn btn-white-outline btn-full">🏠 Core Dashboard</a>
+        <a href="{% url 'timetable' %}" class="btn btn-white-outline btn-full">📅 Session Timetable</a>
       </div>
     </div>
 
   </div>
 </div>
 
-<!-- Mobile layout fallback support styles directly inside block -->
-<style>
-  @media (max-width: 1100px) {
-    .leaderboard-grid {
-      grid-template-columns: 1fr !important;
+<script>
+  // Theme mirrors the site-wide toggle in the hamburger drawer (base.html) —
+  // same pattern as dashboard.html/session.html, no second toggle/localStorage key.
+  (function(){
+    const root = document.getElementById('leaderboardRoot');
+    if (!root) return;
+    function syncTheme(){
+      root.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') || 'dark');
     }
-    .lb-side-col {
-      order: 2;
-    }
-    .lb-main-col {
-      order: 1;
-    }
-  }
-</style>
+    syncTheme();
+    new MutationObserver(syncTheme).observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] });
+  })();
+</script>
 {% endblock %}
