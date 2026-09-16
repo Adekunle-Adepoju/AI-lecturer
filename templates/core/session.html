@@ -226,6 +226,20 @@
     #sessionRoot .btn-send{ width:42px; height:42px; }
     #sessionRoot .btn-send svg{ width:18px; height:18px; }
   }
+    #sessionRoot .tts-btn{
+    background:none;border:1px solid var(--line);border-radius:50%;
+    width:30px;height:30px;cursor:pointer;font-size:13px;color:var(--ink-soft);
+    display:inline-flex;align-items:center;justify-content:center;
+    transition:background-color .2s ease,border-color .2s ease;
+    flex:none;
+  }
+  #sessionRoot .tts-btn:hover{background:var(--bg-alt);border-color:var(--amber);color:var(--amber);}
+  #sessionRoot .tts-wrap{margin-top:8px;text-align:right;}
+  #sessionRoot .tts-active-word{
+    background:var(--amber);color:var(--navy-deep);
+    padding:2px 5px;border-radius:5px;font-weight:700;
+    box-shadow:0 0 0 2px var(--amber);
+  }
 </style>
 
 <div class="page-container" id="sessionRoot" data-theme="dark">
@@ -335,6 +349,8 @@
 
 {% if chat_mode %}
 <script>
+  speechSynthesis.getVoices();
+  speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
 (function(){
   "use strict";
   const root = document.getElementById("sessionRoot");
@@ -358,6 +374,105 @@
   const inputRow = document.getElementById("input-row");
   const chatInput = document.getElementById("chat-input");
   const sendBtn = document.getElementById("sendBtn");
+
+    // ── Text-to-Speech ──────────────────────────────────────────────────────
+  let currentSpeakingBtn = null;
+
+    function latexToSpeech(eq) {
+    let s = eq;
+    s = s.replace(/\\quad/g, ' , ');
+    s = s.replace(/\\times/g, ' times ');
+    s = s.replace(/\\cdot/g, ' times ');
+    s = s.replace(/\\frac\{(.*?)\}\{(.*?)\}/g, '$1 over $2');
+    s = s.replace(/\\text\{(.*?)\}/g, '$1');
+    s = s.replace(/_\{(.*?)\}/g, ' sub $1');
+    s = s.replace(/\^\{(.*?)\}/g, ' to the power of $1');
+    s = s.replace(/\^\*/g, ' star ');
+    s = s.replace(/_([A-Za-z0-9])/g, ' sub $1');
+    s = s.replace(/\^([A-Za-z0-9])/g, ' to the power of $1');
+    s = s.replace(/\^(\S)/g, ' to the power of $1'); // catch-all leftover carets
+    s = s.replace(/\\gamma/g, 'gamma');
+    s = s.replace(/\\rho/g, 'rho');
+    s = s.replace(/\\mu/g, 'mu');
+    s = s.replace(/[{}]/g, '');
+    return ' ' + s + ' ';
+  }
+
+  function cleanTextForSpeech(rawText) {
+    let text = rawText;
+    text = text.replace(/\[IMAGE:.*?\]/gi, '');
+    text = text.replace(/\$\$(.*?)\$\$/gs, (_, eq) => latexToSpeech(eq));
+    text = text.replace(/\$(.*?)\$/g, (_, eq) => latexToSpeech(eq));
+    text = text.replace(/\*\*(.*?)\*\*/g, '$1');
+    text = text.replace(/\*(.*?)\*/g, '$1');
+    text = text.replace(/^#+\s*/gm, '');
+    text = text.replace(/`([^`]*)`/g, '$1');
+    text = text.replace(/\|.*\|/g, '');
+    // Strip markdown section dividers like "---" on their own line
+    text = text.replace(/^\s*-{3,}\s*$/gm, '');
+    text = text.replace(/\n{2,}/g, '. ').replace(/\n/g, ' ').trim();
+    // Clean up stray punctuation/whitespace left behind by the strip above
+    text = text.replace(/^[\s.]+/, '');
+    text = text.replace(/\.\s*\.\s*/g, '. ');
+    text = text.replace(/\s{2,}/g, ' ');
+    return text;
+  }
+
+
+      function attachSpeakButton(bubbleEl, rawText) {
+    const wrap = document.createElement("div");
+    wrap.className = "tts-wrap";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tts-btn";
+    btn.setAttribute("aria-label", "Read this aloud");
+    btn.textContent = "🔊";
+    btn.addEventListener("click", () => speakText(rawText, btn));
+    wrap.appendChild(btn);
+    bubbleEl.appendChild(wrap);
+  }
+
+  function speakText(rawText, btnElement) {
+    if (speechSynthesis.speaking) {
+      const wasThisButton = currentSpeakingBtn === btnElement;
+      speechSynthesis.cancel();
+      if (currentSpeakingBtn) currentSpeakingBtn.textContent = '🔊';
+      currentSpeakingBtn = null;
+      if (wasThisButton) return;
+    }
+
+    const cleaned = cleanTextForSpeech(rawText);
+    if (!cleaned) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleaned);
+    utterance.rate = 0.92;
+    utterance.pitch = 1;
+    const voice = getBestVoice();
+    if (voice) utterance.voice = voice;
+
+    utterance.onstart = () => { btnElement.textContent = '⏸️'; currentSpeakingBtn = btnElement; };
+    utterance.onend = () => { btnElement.textContent = '🔊'; currentSpeakingBtn = null; };
+    utterance.onerror = () => { btnElement.textContent = '🔊'; currentSpeakingBtn = null; };
+
+    speechSynthesis.speak(utterance);
+  }
+
+
+    function getBestVoice() {
+    const voices = speechSynthesis.getVoices();
+    // Prefer higher-quality voices when available (varies by OS/browser)
+    const preferred = [
+      "Google UK English Female", "Google US English",
+      "Microsoft Aria Online (Natural)", "Microsoft Libby Online (Natural)",
+      "Samantha", "Daniel"
+    ];
+    for (const name of preferred) {
+      const match = voices.find(v => v.name === name);
+      if (match) return match;
+    }
+    // Fallback: any English voice
+    return voices.find(v => v.lang.startsWith("en")) || voices[0];
+  }
 
   function scrollChatToBottom() {
     chatWindow.scrollTop = chatWindow.scrollHeight;
@@ -654,6 +769,7 @@
         if (payload.done) {
           aiBubble.innerHTML = renderMarkdown(rawText);
           renderMathIn(aiBubble);
+                    attachSpeakButton(aiBubble, rawText);
           // Show understanding buttons again after Gemini replies
           understandingControls.style.display = "flex";
         }
@@ -666,6 +782,7 @@
     const bubble = createAiBubble();
     bubble.innerHTML = renderMarkdown(stripImageMarker(chunkText));
     renderMathIn(bubble);
+    attachSpeakButton(bubble, stripImageMarker(chunkText));
 
     if (imageUrl) {
       const img = document.createElement("img");
@@ -796,6 +913,7 @@
         if (payload.done) {
           aiBubble.innerHTML = renderMarkdown(stripImageMarker(rawText.replace("TOPIC_COMPLETE", "")));
           renderMathIn(aiBubble);
+                    attachSpeakButton(aiBubble, stripImageMarker(rawText.replace("TOPIC_COMPLETE", "")));
           if (payload.image_url) {
             const img = document.createElement("img");
             img.src = payload.image_url;
@@ -876,6 +994,7 @@
             const bubble = createAiBubble();
             bubble.innerHTML = renderMarkdown(stripImageMarker(msg.content));
             renderMathIn(bubble);
+            attachSpeakButton(bubble, stripImageMarker(msg.content));
             if (msg.image_url) {
               const img = document.createElement("img");
               img.src = msg.image_url;
@@ -906,6 +1025,7 @@
           const bubble = createAiBubble();
           bubble.innerHTML = renderMarkdown(stripImageMarker(msg.content.replace("TOPIC_COMPLETE", "")));
           renderMathIn(bubble);
+          attachSpeakButton(bubble, stripImageMarker(msg.content.replace("TOPIC_COMPLETE", "")));
           if (msg.image_url) {
             const img = document.createElement("img");
             img.src = msg.image_url;
