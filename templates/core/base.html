@@ -268,7 +268,10 @@
 <a href="{% url 'simulator_home' %}" class="nav-drawer-link">
   <span class="nav-drawer-icon">🧪</span> Simulator
 </a>
-    <a href="{% url 'profile_edit' %}" class="nav-drawer-link">
+<a href="{% url 'battle_create_room' %}" class="nav-drawer-link">
+  <span class="nav-drawer-icon">⚔️</span> Battle
+</a>
+<a href="{% url 'profile_edit' %}" class="nav-drawer-link">
       <span class="nav-drawer-icon">⚙️</span> Edit Profile
     </a>
     {% if user.is_authenticated and user.profile.is_staff_member %}

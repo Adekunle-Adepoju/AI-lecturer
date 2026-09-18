@@ -557,8 +557,42 @@ Question format: {question_format}
 Weeks covered: 1 to {weeks_covered}
 Number of questions: {num_questions}
 
-Past question style reference (match this difficulty and style exactly):
+## FIDELITY HARD LIMIT — READ THIS FIRST
+Every question, option, and model answer must be answerable using ONLY the LECTURER SLIDES
+content below. You may not introduce a technical term, sub-technique, named method, formula,
+classification (e.g. a named variant of equipment or process not mentioned in the slides),
+real-world case, or fact that is not present in the slide excerpt for this topic — even if it
+is accurate, standard, commonly taught industry knowledge, and even if a past question you were
+given as a style reference happens to ask about it. If the slide content for this topic is thin
+or only covers part of what this subject usually includes elsewhere, generate questions ONLY on
+what the slide actually contains. A thin but fully faithful set of questions is correct; a
+richer-seeming question built from outside knowledge is a failure, always.
+
+BARE LISTS ARE THE HIGHEST-RISK CASE FOR THIS RULE. If the slide only names a term or lists items
+without elaboration, you may test whether the student understands what the term means and why it
+matters — but do not test a specific number, named sub-type, or detail the slide never gave.
+
+## COVERAGE MANIFEST FOR THIS TOPIC
+This is every named term, definition, or sub-heading actually taught for this topic. Do not test
+anything outside this list, and do not assume related concepts under the same general subject
+were also covered just because they commonly are elsewhere.
+
+{coverage_manifest}
+
+## LECTURER SLIDES
+This is the only source of truth for subject matter. Treat it as the absolute law on anything
+technical.
+
+{slide_context}
+
+## PAST QUESTION STYLE REFERENCE — FORMAT AND DIFFICULTY ONLY
 {past_q_reference}
+
+Use the reference above ONLY to match phrasing style, question format/structure, and difficulty
+level. NEVER use it as a source of subject matter — if a past question tests a concept, sub-type,
+or term that is not present in the LECTURER SLIDES / COVERAGE MANIFEST above, do not reproduce
+that concept in your own question, even in a reworded form. Style and content are separate: copy
+the former, never the latter.
 
 RULES:
 - Match the difficulty and style of the past questions provided. Do not make questions easier or harder.
@@ -599,15 +633,157 @@ For theory/calculation/mixed format:
 ]
 """
 
+SIMULATOR_QUESTION_PROMPT_MULTI_TOPIC = """
+You are Rovea, generating a mixed-topic test for a Petroleum and Gas Engineering student at the
+University of Lagos.
+
+This test covers {num_topics} topics, selected by the student, possibly across different courses.
+Maximum 4 topics allowed for this format.
+
+{topic_blocks}
+
+Question format: {question_format}
+Total numbered questions to generate: {num_questions} (2-3)
+
+## HOW TO MIX TOPICS
+Each numbered question (1, 2, 3...) may be split into lettered parts (a, b, c, d...). Distribute
+the {num_topics} selected topics across the parts of the numbered questions so that, across the
+ENTIRE test, every selected topic is covered by at least one part. You decide how to split them —
+for example, question 1 parts (a)(b) on Topic 1 and parts (c)(d) on Topic 2, with question 2
+mixing differently — as long as every topic gets fair coverage across the whole test.
+
+## THE ONE RULE THAT CANNOT BREAK
+A single lettered part must draw from EXACTLY ONE topic's slide content. Never blend two topics'
+subject matter inside the same part, even if they seem related. If a part is about Topic 1, every
+fact, term, and figure in that part's question and model_answer must come only from Topic 1's
+LECTURER SLIDES below — never from Topic 2's, 3's, or 4's slides, and never from outside knowledge.
+
+## FIDELITY HARD LIMIT — applies per topic, per part
+For each part, you may not introduce a technical term, sub-technique, named method, formula,
+classification, real-world case, or fact that is not present in that part's assigned topic's
+slide excerpt — even if accurate and commonly taught elsewhere, and even if a past question
+reference happens to ask about it. If a topic's slide content is thin, the part(s) built on it
+should be correspondingly modest in scope — never padded with outside knowledge to seem fuller.
+
+BARE LISTS ARE THE HIGHEST-RISK CASE. If a topic's slide only names or lists items without
+elaboration, you may test conceptual understanding of the term — never a specific number, named
+sub-type, or detail the slide never gave.
+
+## PAST QUESTION STYLE REFERENCE — FORMAT AND DIFFICULTY ONLY, PER TOPIC
+Each topic block below includes its own past question reference. Use it ONLY to match phrasing
+style, structure, and difficulty for parts built on that topic. Never pull subject matter from a
+past question reference that isn't in that topic's own slide content — copy the style, never the
+content.
+
+RULES:
+- Generate exactly {num_questions} numbered questions total (2-3), each split into lettered parts.
+- Every part must be tagged with which topic it belongs to (see JSON format below).
+- For calculation parts, the model_answer must follow this exact structure:
+  (1) state the governing equation with symbols defined and units given,
+  (2) list all known parameters with their units,
+  (3) show the substitution and arithmetic across multiple separate lines — never a single
+  compressed line — including any unit conversions as their own explicit step,
+  (4) state the final numerical result with its correct unit.
+  A model_answer that jumps straight from the question to a final number is not acceptable.
+- For theory parts, provide a detailed model answer covering all key points from that part's topic only.
+- Assign marks per part: 10-20 marks depending on difficulty and depth required.
+
+Return ONLY a JSON array. No explanation, no markdown, no preamble. Each element is one lettered
+part, in this exact format:
+
+[
+  {{
+    "question_number": 1,
+    "part_label": "a",
+    "topic": "Topic name exactly as given in the topic block below",
+    "course_code": "Course code exactly as given in the topic block below",
+    "question": "Question text for this part only",
+    "marks": 15,
+    "model_answer": "Full detailed answer with all steps shown, using only this part's topic content."
+  }}
+]
+"""
+
+SIMULATOR_QUESTION_PROMPT_MULTI_TOPIC_MCQ = """
+You are Rovea, generating a mixed-topic multiple-choice test for a Petroleum and Gas Engineering
+student at the University of Lagos.
+
+This test covers {num_topics} topics, selected by the student, possibly across different courses.
+Maximum 4 topics allowed for this format.
+
+{topic_blocks}
+
+Total multiple-choice questions to generate: {num_questions}
+
+## HOW TO DISTRIBUTE TOPICS
+Spread the {num_questions} questions across the {num_topics} topics as evenly as possible —
+roughly {per_topic} questions per topic. Every selected topic must get at least one question.
+Adjust a topic's share down (never up with invented content) if its slide content is too thin
+to support its full share — per the fidelity rule below. Unlike a lettered-part exam question,
+each MCQ question here stands completely alone — never blend two topics' subject matter into
+a single question.
+
+## FIDELITY HARD LIMIT — applies per topic, per question
+Every question, its options, and its explanation must be answerable using ONLY that question's
+assigned topic's LECTURER SLIDES content above. You may not introduce a technical term,
+sub-technique, named method, formula, classification, real-world case, or fact not present in
+that topic's slide excerpt — even if accurate and commonly taught elsewhere, and even if a past
+question reference happens to ask about it.
+
+BARE LISTS ARE THE HIGHEST-RISK CASE. If a topic's slide only names or lists items without
+elaboration, you may test conceptual understanding of the term — never a specific number, named
+sub-type, or detail the slide never gave.
+
+## PAST QUESTION STYLE REFERENCE — FORMAT AND DIFFICULTY ONLY, PER TOPIC
+Each topic block above includes its own past question reference. Use it ONLY to match phrasing
+style and difficulty for questions built on that topic. Never pull subject matter from a past
+question reference that isn't in that topic's own slide content — copy the style, never the
+content.
+
+RULES:
+- Generate exactly {num_questions} multiple choice questions total.
+- Every question must be tagged with which topic and course it belongs to.
+- Exactly 4 options per question, only one correct.
+- Assign 2 marks to each question.
+
+Return ONLY a JSON array. No explanation, no markdown, no preamble. Each element in this exact
+format:
+
+[
+  {{
+    "topic": "Topic name exactly as given in its topic block above",
+    "course_code": "Course code exactly as given in its topic block above",
+    "question": "Question text",
+    "options": ["A. Option", "B. Option", "C. Option", "D. Option"],
+    "correct_index": 0,
+    "explanation": "Why this is correct.",
+    "marks": 2
+  }}
+]
+"""
+
+TOPIC_BLOCK_TEMPLATE = """
+--- TOPIC {index}: {topic} ({course_code} — {course_title}) ---
+COVERAGE MANIFEST FOR THIS TOPIC:
+{coverage_manifest}
+
+LECTURER SLIDES FOR THIS TOPIC:
+{slide_context}
+
+PAST QUESTION STYLE REFERENCE FOR THIS TOPIC:
+{past_q_reference}
+"""
+
 
 SIMULATOR_GRADING_PROMPT = """
-You are Rovea, grading a student's test answers for a Petroleum and Gas Engineering course at Unilag.
+You are Rovea, grading a student's test answers for a Petroleum and Gas Engineering student at Unilag.
 
-Course: {course_code} — {course_title}
-Topic: {topic}
+This test may cover multiple courses and topics — grade each question strictly against its OWN
+topic's model answer, never against another question's subject matter, even within the same test.
 
-You will be given a list of questions with their model answers and the student's typed responses.
-Grade each answer fairly and academically — like a university lecturer would.
+You will be given a list of questions, each tagged with its course and topic, with model answers
+and the student's typed responses. Grade each answer fairly and academically — like a university
+lecturer would.
 
 For each question, return:
 - score: marks awarded (number, not more than the question's total marks)

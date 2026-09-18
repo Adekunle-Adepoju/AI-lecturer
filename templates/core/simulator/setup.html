@@ -24,7 +24,9 @@
 
   {% else %}
   <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">📝 Practice Test Setup</h2>
-  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">Pick a course and a specific topic to be tested on.</p>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
+    Pick a course, then choose up to {{ max_topics|default:4 }} topics from it. You'll be tested on all of them mixed together.
+  </p>
 
   {% if messages %}
   {% for message in messages %}
@@ -32,10 +34,11 @@
   {% endfor %}
   {% endif %}
 
-  <form method="GET" action="" style="margin-bottom:20px">
-    <div class="form-group">
-      <label>Select Course</label>
-      <select name="course_code" onchange="this.form.submit()">
+  <form method="POST" id="multiTopicForm">
+    {% csrf_token %}
+
+    <div class="form-group" style="margin-bottom:16px">
+      <select name="course_code" id="courseSelect" style="width:100%" required>
         <option value="">— Pick a course —</option>
         {% for entry in timetable %}
         <option value="{{ entry.course_code }}" {% if entry.course_code == selected_code %}selected{% endif %}>
@@ -44,27 +47,120 @@
         {% endfor %}
       </select>
     </div>
+
+    <div id="topicRows">
+      <div class="topic-row" style="display:flex; gap:8px; margin-bottom:10px">
+        <select name="topics" class="row-topic form-group" style="flex:1" required disabled>
+          <option value="">— Pick a course first —</option>
+        </select>
+      </div>
+    </div>
+
+    <button type="button" id="addRowBtn" class="btn btn-white-outline" style="margin-bottom:16px" disabled>
+      + Add another topic
+    </button>
+
+    <button type="submit" class="btn btn-primary btn-full">Generate Test →</button>
   </form>
 
-  {% if selected_code and available_topics %}
-  <form method="POST">
-    {% csrf_token %}
-    <input type="hidden" name="course_code" value="{{ selected_code }}">
-    <div class="form-group">
-      <label>Select Topic</label>
-      <select name="topic" required>
-        <option value="">— Pick a topic —</option>
-        {% for topic in available_topics %}
-        <option value="{{ topic }}">{{ topic }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <button type="submit" class="btn btn-primary btn-full" style="margin-top:8px">Generate Test →</button>
-  </form>
-  {% elif selected_code %}
-  <p style="color:var(--text-muted); font-size:13px">No topics found for this course yet — complete at least one lecture session first.</p>
-  {% endif %}
-  {% endif %}
+  <script>
+    const MAX_TOPICS = {{ max_topics|default:4 }};
+    const TOPICS_URL = "{% url 'topics_for_course' %}";
+
+    const courseSelect = document.getElementById('courseSelect');
+    const topicRows = document.getElementById('topicRows');
+    const addRowBtn = document.getElementById('addRowBtn');
+
+    let currentTopics = [];
+
+    function buildTopicOptions(select, keepValue) {
+      if (currentTopics.length === 0) {
+        select.innerHTML = '<option value="">No topics found — complete a lecture session first</option>';
+        select.disabled = true;
+        return;
+      }
+      select.innerHTML = '<option value="">— Pick a topic —</option>' +
+        currentTopics.map(t => `<option value="${t}"${t === keepValue ? ' selected' : ''}>${t}</option>`).join('');
+      select.disabled = false;
+    }
+
+    function resetToSingleRow() {
+      topicRows.innerHTML = `
+        <div class="topic-row" style="display:flex; gap:8px; margin-bottom:10px">
+          <select name="topics" class="row-topic form-group" style="flex:1" required disabled>
+            <option value="">— Pick a course first —</option>
+          </select>
+        </div>`;
+    }
+
+    function loadTopicsForCourse(courseCode) {
+      if (!courseCode) {
+        currentTopics = [];
+        resetToSingleRow();
+        addRowBtn.disabled = true;
+        addRowBtn.style.display = '';
+        return;
+      }
+
+      document.querySelectorAll('.row-topic').forEach(sel => {
+        sel.disabled = true;
+        sel.innerHTML = '<option value="">Loading…</option>';
+      });
+
+      fetch(`${TOPICS_URL}?course_code=${encodeURIComponent(courseCode)}`)
+        .then(r => r.json())
+        .then(data => {
+          currentTopics = data.topics || [];
+          document.querySelectorAll('.row-topic').forEach(sel => buildTopicOptions(sel, ""));
+          addRowBtn.disabled = currentTopics.length === 0;
+          addRowBtn.style.display = '';
+        })
+        .catch(() => {
+          currentTopics = [];
+          document.querySelectorAll('.row-topic').forEach(sel => {
+            sel.innerHTML = '<option value="">Failed to load topics</option>';
+            sel.disabled = true;
+          });
+          addRowBtn.disabled = true;
+        });
+    }
+
+    courseSelect.addEventListener('change', () => {
+      resetToSingleRow();
+      loadTopicsForCourse(courseSelect.value);
+    });
+
+    addRowBtn.addEventListener('click', () => {
+      const rows = document.querySelectorAll('.topic-row');
+      if (rows.length >= MAX_TOPICS) {
+        alert(`You can select up to ${MAX_TOPICS} topics per test.`);
+        return;
+      }
+      const container = document.getElementById('topicRows');
+      const newRow = document.createElement('div');
+      newRow.className = 'topic-row';
+      newRow.style = 'display:flex; gap:8px; margin-bottom:10px';
+      const newSelect = document.createElement('select');
+      newSelect.name = 'topics';
+      newSelect.className = 'row-topic form-group';
+      newSelect.style.flex = '1';
+      newSelect.required = true;
+      newRow.appendChild(newSelect);
+      container.appendChild(newRow);
+      buildTopicOptions(newSelect, "");
+
+      if (document.querySelectorAll('.topic-row').length >= MAX_TOPICS) {
+        addRowBtn.style.display = 'none';
+      }
+    });
+
+    // If a course was already selected server-side (e.g. after a
+    // validation error redirect), load its topics on page load.
+    if (courseSelect.value) {
+      loadTopicsForCourse(courseSelect.value);
+    }
+  </script>
+{% endif %}
 
 </div>
 {% endblock %}

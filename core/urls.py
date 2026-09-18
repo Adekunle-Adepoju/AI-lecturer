@@ -58,4 +58,5 @@ urlpatterns = [
     path("accounts/", include("allauth.urls")),
     path("lecture/<int:topic_session_id>/", views.topic_lecture_view, name="topic_lecture"),
     path("result/<int:topic_session_id>/", views.quiz_result_view, name="quiz_result"),
+    path("simulator/topics-for-course/", views.topics_for_course_view, name="topics_for_course"),
 ]

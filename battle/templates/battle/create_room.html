@@ -1,0 +1,23 @@
+{% extends "core/base.html" %}
+{% block title %}Create Battle Room — Rovea{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <a href="{% url 'simulator_home' %}" style="font-size:13px; color:var(--text-secondary)">← Back</a>
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">⚔️ Start a Battle</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
+    Create a room and share the code with whoever you're battling. You'll land in the lobby
+    once the room is created, where you can set the mode and wait for others to join.
+  </p>
+
+  <form method="POST">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary btn-full">Create Room →</button>
+  </form>
+
+  <p style="margin-top:20px; font-size:13px; color:var(--text-secondary)">
+    Have a code already? <a href="{% url 'battle_join_room' %}" style="color:var(--amber)">Join a room instead →</a>
+  </p>
+</div>
+{% endblock %}

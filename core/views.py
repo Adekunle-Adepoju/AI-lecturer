@@ -1,5 +1,6 @@
 import os
 import json
+import profile
 from urllib import request
 import markdown
 import random
@@ -32,7 +33,11 @@ from .models import (
 from .prompt import SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, QUIZ_GENERATION_PROMPT
 from functools import wraps
 from .staff_forms import SlideUploadForm, CourseOutlineUploadForm, PastQuestionUploadForm, CourseDefinitionForm
-from .prompt import SIMULATOR_QUESTION_PROMPT, SIMULATOR_GRADING_PROMPT, SIMULATOR_OVERALL_FEEDBACK_PROMPT
+from .prompt import (
+    SIMULATOR_QUESTION_PROMPT, SIMULATOR_GRADING_PROMPT, SIMULATOR_OVERALL_FEEDBACK_PROMPT,
+    SIMULATOR_QUESTION_PROMPT_MULTI_TOPIC, SIMULATOR_QUESTION_PROMPT_MULTI_TOPIC_MCQ,
+    TOPIC_BLOCK_TEMPLATE,
+)
 from .slide_topic_extractor import safe_extract_topics_from_slide
 from .lecture_completeness import detect_likely_duplicate_reteach, is_lecture_truncated, find_safe_cutoff, continue_truncated_lecture, MAX_CONTINUATION_ATTEMPTS
 
@@ -2189,6 +2194,7 @@ def _get_past_q_reference(course_code, level, topic, limit=3):
 def _generate_test_questions(course_code, course_title, topic, level, weeks_covered, question_format):
     num_questions = random.randint(15, 20) if question_format == "mcq" else random.randint(2, 3)
     past_ref = _get_past_q_reference(course_code, level, topic)
+    slide_context = _find_slide_content_for_topic(course_code, level, topic)  # ← was missing
 
     prompt = SIMULATOR_QUESTION_PROMPT.format(
         course_code=course_code,
@@ -2198,13 +2204,66 @@ def _generate_test_questions(course_code, course_title, topic, level, weeks_cove
         weeks_covered=weeks_covered,
         num_questions=num_questions,
         past_q_reference=past_ref,
+        coverage_manifest="(none extracted — rely on slide content below)",
+        slide_context=slide_context or "(no slide content found for this topic)",
     )
 
-    response = simulator_client.models.generate_content(
-        model="gemini-3.7-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(max_output_tokens=4000),
-    )
+    response = _call_simulator_model(prompt, max_output_tokens=4000)
+
+    clean = response.text.replace("```json", "").replace("```", "").strip()
+    start = clean.find("[")
+    end = clean.rfind("]")
+    if start != -1 and end != -1:
+        clean = clean[start:end + 1]
+    return json.loads(clean)
+
+def _generate_multi_topic_test_questions(selections, level, question_format):
+    """
+    selections: list of dicts, each {course_code, course_title, topic, weeks_covered}
+    Max 4 for question_format in ("theory", "mixed"); MCQ can take more since
+    there's no lettered-part mixing to manage.
+    """
+    if question_format == "mcq":
+        num_questions = random.randint(15, 20)
+        per_topic = max(1, num_questions // len(selections))
+    else:
+        num_questions = random.randint(2, 3)
+        per_topic = None  # mixing happens inside the prompt, not by pre-splitting
+
+    topic_blocks = []
+    for i, sel in enumerate(selections, start=1):
+        slide_context = _find_slide_content_for_topic(
+            sel["course_code"], level, sel["topic"]
+        )
+        past_ref = _get_past_q_reference(sel["course_code"], level, sel["topic"])
+        topic_blocks.append(
+            TOPIC_BLOCK_TEMPLATE.format(
+                index=i,
+                topic=sel["topic"],
+                course_code=sel["course_code"],
+                course_title=sel["course_title"],
+                coverage_manifest="(none extracted — rely on slide content below)",
+                slide_context=slide_context or "(no slide content found for this topic)",
+                past_q_reference=past_ref,
+            )
+        )
+
+    if question_format == "mcq":
+        prompt = SIMULATOR_QUESTION_PROMPT_MULTI_TOPIC_MCQ.format(
+            num_topics=len(selections),
+            topic_blocks="\n".join(topic_blocks),
+            num_questions=num_questions,
+            per_topic=per_topic,
+        )
+    else:
+        prompt = SIMULATOR_QUESTION_PROMPT_MULTI_TOPIC.format(
+            num_topics=len(selections),
+            topic_blocks="\n".join(topic_blocks),
+            question_format=question_format,
+            num_questions=num_questions,
+        )
+
+    response = _call_simulator_model(prompt, max_output_tokens=4000)
 
     clean = response.text.replace("```json", "").replace("```", "").strip()
     start = clean.find("[")
@@ -2251,13 +2310,12 @@ def simulator_setup_view(request, mode):
         return redirect("onboarding")
 
     profile = request.user.profile
+    MAX_TOPICS_FOR_TEST = 4          
 
     if mode == "auto":
-        # For auto mode, course is determined by which courses are at week 7
         course_code = request.GET.get("course_code") or request.POST.get("course_code")
         entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
 
-        # Check not already completed
         already_done = SimulatorTest.objects.filter(
             student=profile,
             course_code=course_code,
@@ -2270,25 +2328,58 @@ def simulator_setup_view(request, mode):
             return redirect("simulator_home")
 
         if request.method == "POST":
-            return _start_simulator_test(request, profile, entry, mode="auto", topic="Weeks 1-6 Review")
+            selections = [{
+                "course_code": entry.course_code,
+                "course_title": entry.course_title,
+                "topic": "Weeks 1-6 Review",
+                "weeks_covered": min(entry.week_number - 1, 6),
+            }]
+            return _start_simulator_test(request, profile, selections, mode="auto")
 
         return render(request, "core/simulator/setup.html", {
-            "mode": "auto",
-            "entry": entry,
-            "topic": "All topics from Weeks 1 to 6",
+            "mode": "voluntary",
+            "timetable": timetable,
+            "max_topics": MAX_TOPICS_FOR_TEST,
         })
 
     else:
         timetable = profile.timetable.all()
 
         if request.method == "POST":
-            course_code = request.POST.get("course_code")
-            topic = request.POST.get("topic", "").strip()
-            if not course_code or not topic:
-                messages.error(request, "Please select a course and enter a topic.")
+            course_code = request.POST.get("course_code", "").strip()
+            topics = [t.strip() for t in request.POST.getlist("topics") if t.strip()]
+
+            if not course_code or not topics:
+                messages.error(request, "Please select a course and at least one topic.")
                 return redirect("simulator_setup", mode="voluntary")
+
+            if len(topics) > MAX_TOPICS_FOR_TEST:
+                messages.error(request, f"You can select up to {MAX_TOPICS_FOR_TEST} topics for a test.")
+                return redirect("simulator_setup", mode="voluntary")
+
             entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
-            return _start_simulator_test(request, profile, entry, mode="voluntary", topic=topic)
+
+            selections = [
+                {
+                    "course_code": entry.course_code,
+                    "course_title": entry.course_title,
+                    "topic": topic,
+                    "weeks_covered": entry.week_number - 1,
+                }
+                for topic in topics
+            ]
+
+            try:
+                return _start_simulator_test(request, profile, selections, mode="voluntary")
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                messages.error(
+                    request,
+                    "The test generator is under heavy load right now — please try again in a minute or two."
+                )
+                return redirect("simulator_setup", mode="voluntary")
+
 
         selected_code = request.GET.get("course_code", "")
         available_topics = []
@@ -2339,39 +2430,129 @@ def simulator_setup_view(request, mode):
             "available_topics": available_topics,
         })
 
+def _call_simulator_model(prompt, max_output_tokens=4000, max_retries=3):
+    """Call the simulator Gemini client with retry/backoff for transient
+    errors (429 rate limit, 503 overloaded) — mirrors _generate_topic_lecture's
+    retry behavior, which the simulator path was missing entirely."""
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return simulator_client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(max_output_tokens=max_output_tokens),
+            )
+        except Exception as e:
+            last_error = e
+            error_str = str(e)
+            is_rate_limit = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
+            is_overloaded = "503" in error_str or "UNAVAILABLE" in error_str
 
-def _start_simulator_test(request, profile, entry, mode, topic):
-    question_format = _detect_question_format(entry.course_code, profile.level)
-    weeks_covered = min(entry.week_number - 1, 6) if mode == "auto" else entry.week_number - 1
+            if is_rate_limit:
+                print(f"Simulator gen: 429 hit (attempt {attempt + 1}/{max_retries}) — sleeping 20s...")
+                time.sleep(20)
+                continue
+            if is_overloaded and attempt < max_retries - 1:
+                print(f"Simulator gen: 503 overloaded (attempt {attempt + 1}/{max_retries}) — sleeping 10s...")
+                time.sleep(10)
+                continue
+            # Non-transient error, or transient but out of retries — stop.
+            break
 
-    try:
+    raise RuntimeError(f"Simulator question generation failed after {max_retries} attempts: {last_error}")
+
+def _start_simulator_test(request, profile, selections, mode, auto_entry=None):
+    if mode == "auto":
+        entry = auto_entry
+        question_format = _detect_question_format(entry.course_code, profile.level)
+        weeks_covered = min(entry.week_number - 1, 6)
         questions = _generate_test_questions(
-            entry.course_code, entry.course_title,
-            topic, profile.level,
-            weeks_covered, question_format,
+            entry.course_code, entry.course_title, "Weeks 1-6 Review",
+            profile.level, weeks_covered, question_format,
         )
-    except Exception as e:
-        error_str = str(e)
-        if "503" in error_str or "UNAVAILABLE" in error_str:
-            messages.error(request, "The AI is currently busy — this is temporary. Please wait a moment and try again.")
-        elif "429" in error_str or "quota" in error_str.lower():
-            messages.error(request, "Daily AI limit reached. Please try again later.")
+        test_kwargs = dict(
+            course_code=entry.course_code, course_title=entry.course_title,
+            topic="Weeks 1-6 Review",
+        )
+    else:
+        # Detect format per selected course; if they disagree, fall back to "mixed"
+        # rather than silently picking one course's format for all of them.
+        formats = {_detect_question_format(s["course_code"], profile.level) for s in selections}
+        question_format = formats.pop() if len(formats) == 1 else "mixed"
+
+        if len(selections) == 1:
+            questions = _generate_test_questions(
+                selections[0]["course_code"], selections[0]["course_title"],
+                selections[0]["topic"], profile.level,
+                selections[0]["weeks_covered"], question_format,
+            )
         else:
-            messages.error(request, f"Could not generate test questions: {error_str}")
-        return redirect("simulator_home")
+            questions = _generate_multi_topic_test_questions(
+                selections, profile.level, question_format,
+            )
+
+        test_kwargs = dict(
+            course_code=selections[0]["course_code"] if len(selections) == 1 else "MIXED",
+            course_title=selections[0]["course_title"] if len(selections) == 1 else ", ".join(s["course_code"] for s in selections),
+            topic=selections[0]["topic"] if len(selections) == 1 else ", ".join(s["topic"] for s in selections),
+        )
 
     test = SimulatorTest.objects.create(
         student=profile,
-        course_code=entry.course_code,
-        course_title=entry.course_title,
-        topic=topic,
         mode=mode,
         question_format=question_format,
-        week_number=entry.week_number,
+        week_number=selections[0].get("weeks_covered", 0) + 1 if selections else auto_entry.week_number,
         questions=questions,
+        **test_kwargs,
     )
-
     return redirect("simulator_test", test_id=test.id)
+
+@login_required
+def topics_for_course_view(request):
+    """Returns available topics for a course, as JSON — used by the
+    voluntary setup page's per-row topic dropdowns."""
+    if not hasattr(request.user, "profile"):
+        return JsonResponse({"topics": []})
+
+    profile = request.user.profile
+    course_code = request.GET.get("course_code", "")
+    available_topics = []
+
+    if course_code:
+        try:
+            outline = CourseOutline.objects.get(
+                course_code=course_code, level=profile.level, parsed=True
+            )
+            if outline.topics_json:
+                for week_topics in outline.topics_json.values():
+                    if isinstance(week_topics, list):
+                        available_topics.extend(week_topics)
+        except CourseOutline.DoesNotExist:
+            pass
+
+        if not available_topics:
+            try:
+                slide = SlideDocument.objects.get(
+                    course_code=course_code, level=profile.level, parsed=True
+                )
+                if slide.extracted_topics:
+                    available_topics.extend(slide.extracted_topics)
+            except SlideDocument.DoesNotExist:
+                pass
+
+        if not available_topics:
+            for week_topics in COURSE_OUTLINES.get(course_code, {}).values():
+                available_topics.extend(week_topics)
+
+        seen = set()
+        unique_topics = []
+        for t in available_topics:
+            if t not in seen:
+                seen.add(t)
+                unique_topics.append(t)
+        available_topics = unique_topics
+
+    return JsonResponse({"topics": available_topics})
 
 
 @login_required
@@ -2405,6 +2586,51 @@ def simulator_test_view(request, test_id):
         "enumerate": enumerate,
     })
 
+def _repair_and_parse_json_array(text):
+    """Parse a JSON array from model output, tolerating the model's
+    tendency to emit literal newlines/unescaped control chars inside
+    string values (which json.loads rejects as 'Unterminated string')."""
+    clean = text.replace("```json", "").replace("```", "").strip()
+    start = clean.find("[")
+    end = clean.rfind("]")
+    if start != -1 and end != -1:
+        clean = clean[start:end + 1]
+
+    try:
+        return json.loads(clean)
+    except json.JSONDecodeError:
+        pass
+
+    # Repair pass: walk the string and escape raw control characters
+    # (newline, tab, CR) that appear INSIDE a string literal, leaving
+    # structural whitespace (outside quotes) untouched.
+    repaired = []
+    in_string = False
+    escape_next = False
+    for ch in clean:
+        if escape_next:
+            repaired.append(ch)
+            escape_next = False
+            continue
+        if ch == "\\":
+            repaired.append(ch)
+            escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            repaired.append(ch)
+            continue
+        if in_string and ch == "\n":
+            repaired.append("\\n")
+            continue
+        if in_string and ch == "\t":
+            repaired.append("\\t")
+            continue
+        if in_string and ch == "\r":
+            continue  # drop bare CR
+        repaired.append(ch)
+
+    return json.loads("".join(repaired))
 
 @login_required
 def simulator_grade_view(request, test_id):
@@ -2434,10 +2660,11 @@ def simulator_grade_view(request, test_id):
             earned_marks += score
             chosen_text = q["options"][student_answer] if 0 <= student_answer < len(q["options"]) else "No answer"
             correct_text = q["options"][q.get("correct_index", 0)]
+            topic_tag = f"[{q.get('topic')}] " if q.get("topic") else ""
             feedback_list.append({
                 "score": score,
                 "total_marks": q_marks,
-                "feedback": f"You chose: {chosen_text}. Correct answer: {correct_text}. {q.get('explanation', '')}",
+                "feedback": f"{topic_tag}You chose: {chosen_text}. Correct answer: {correct_text}. {q.get('explanation', '')}",
                 "correct": correct,
             })
     else:
@@ -2445,33 +2672,28 @@ def simulator_grade_view(request, test_id):
         qa_text = ""
         for i, q in enumerate(test.questions):
             student_ans = test.answers[i] if i < len(test.answers) else "No answer provided"
-            qa_text += f"\nQuestion {i+1} ({q.get('marks', 10)} marks):\n{q['question']}\n"
+            qa_text += f"\nQuestion {i+1} ({q.get('marks', 10)} marks) — {q.get('course_code', test.course_code)} / {q.get('topic', test.topic)}:\n{q['question']}\n"
             qa_text += f"Model Answer:\n{q.get('model_answer', '')}\n"
             qa_text += f"Student Answer:\n{student_ans}\n"
             qa_text += "---\n"
 
-        grading_prompt = SIMULATOR_GRADING_PROMPT.format(
+        grading_prompt = SIMULATOR_GRADING_PROMPT.format(questions_and_answers=qa_text,
             course_code=test.course_code,
             course_title=test.course_title,
             topic=test.topic,
-            questions_and_answers=qa_text,
         )
 
         try:
-            grade_response = simulator_client.models.generate_content(
-                model="gemini-3.7-flash",
-                contents=grading_prompt,
-                config=types.GenerateContentConfig(max_output_tokens=2000),
-            )
-            clean = grade_response.text.replace("```json", "").replace("```", "").strip()
-            start = clean.find("[")
-            end = clean.rfind("]")
-            if start != -1 and end != -1:
-                clean = clean[start:end + 1]
-            feedback_list = json.loads(clean)
+            grade_response = _call_simulator_model(grading_prompt, max_output_tokens=2000)
+            feedback_list = _repair_and_parse_json_array(grade_response.text)
         except Exception as e:
-            messages.error(request, f"Grading failed: {str(e)}")
-            return redirect("simulator_test", test_id=test.id)
+            import traceback
+            traceback.print_exc()
+            messages.error(
+                request,
+                "Grading is taking longer than expected due to high AI demand — your answers are saved. Click below to retry."
+            )
+            return redirect("simulator_grade", test_id=test.id)
 
         total_marks = sum(q.get("marks", 10) for q in test.questions)
         earned_marks = sum(f.get("score", 0) for f in feedback_list)
@@ -2483,9 +2705,8 @@ def simulator_grade_view(request, test_id):
     # Get overall feedback from AI
     student_name = profile.user.first_name or profile.user.username
     try:
-        overall_response = simulator_client.models.generate_content(
-            model="gemini-3.7-flash",
-            contents=SIMULATOR_OVERALL_FEEDBACK_PROMPT.format(
+        overall_response = _call_simulator_model(
+            SIMULATOR_OVERALL_FEEDBACK_PROMPT.format(
                 student_name=student_name,
                 course_code=test.course_code,
                 course_title=test.course_title,
@@ -2493,7 +2714,7 @@ def simulator_grade_view(request, test_id):
                 percentage=percentage,
                 grade=grade,
             ),
-            config=types.GenerateContentConfig(max_output_tokens=300),
+            max_output_tokens=300,
         )
         overall_feedback = overall_response.text.strip()
     except Exception:

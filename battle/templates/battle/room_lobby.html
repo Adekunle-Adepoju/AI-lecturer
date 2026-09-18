@@ -1,0 +1,347 @@
+{% extends "core/base.html" %}
+{% block title %}Battle Room {{ room_code }} — Rovea{% endblock %}
+
+{% block content %}
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+
+<style>
+  .battle-wrap {
+    --team-a: #00c2ff;
+    --team-b: #ff3b30;
+    font-family: 'Rajdhani', sans-serif;
+    background: #0a0a0c;
+    background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 6px);
+    border-radius: var(--radius-xl);
+    padding: 20px;
+    color: #e8e8ea;
+  }
+
+  .hud-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 2px solid rgba(255,255,255,0.1);
+    padding-bottom: 10px; margin-bottom: 18px;
+  }
+  .hud-header .room-label { font-size: 12px; letter-spacing: 0.2em; color: #888; text-transform: uppercase; }
+  .hud-header .room-code { font-size: 26px; font-weight: 700; letter-spacing: 0.08em; }
+  #status { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #4ade80; }
+  #status.disconnected { color: #ff3b30; }
+
+  /* ── Scoreboard: angled team panels with VS divider ── */
+  .vs-scoreboard {
+    position: relative; display: flex; margin-bottom: 20px; height: 90px;
+  }
+  .vs-panel {
+    flex: 1; display: flex; flex-direction: column; justify-content: center;
+    padding: 0 28px; background: linear-gradient(135deg, #151519, #0d0d10);
+    border-top: 3px solid transparent; transition: border-color 0.2s, background 0.2s;
+  }
+  .vs-panel.team-a { clip-path: polygon(0 0, 100% 0, 92% 100%, 0 100%); border-top-color: var(--team-a); }
+  .vs-panel.team-b { clip-path: polygon(8% 0, 100% 0, 100% 100%, 0 100%); border-top-color: var(--team-b); text-align: right; margin-left: -40px; padding-left: 60px; }
+  .vs-panel.active-turn { background: linear-gradient(135deg, #1c1c22, #131316); }
+  .vs-callsign { font-size: 12px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; opacity: 0.75; }
+  .vs-panel.team-a .vs-callsign { color: var(--team-a); }
+  .vs-panel.team-b .vs-callsign { color: var(--team-b); }
+  .vs-score { font-size: 42px; font-weight: 700; line-height: 1; transition: transform 0.15s ease; }
+  .vs-score.score-bump { animation: score-pop 0.35s ease; }
+  @keyframes score-pop { 0% { transform: scale(1); } 40% { transform: scale(1.3); } 100% { transform: scale(1); } }
+  .vs-divider {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(45deg);
+    width: 34px; height: 34px; background: #0a0a0c; border: 2px solid #333;
+    display: flex; align-items: center; justify-content: center; z-index: 2;
+  }
+  .vs-divider span { transform: rotate(-45deg); font-size: 11px; font-weight: 700; color: #888; }
+
+  /* ── HUD timer: tick-marked track, transform-based fill (cheap) ── */
+  .hud-timer { position: relative; height: 8px; background: #1a1a1e; margin-bottom: 18px;
+    background-image: repeating-linear-gradient(90deg, transparent, transparent 18px, rgba(255,255,255,0.06) 18px, rgba(255,255,255,0.06) 20px); }
+  .hud-timer-fill {
+    position: absolute; inset: 0; background: #ffb300; transform-origin: left center;
+    transform: scaleX(1);
+  }
+  .hud-timer-fill.urgent { background: #ff3b30; }
+
+  /* ── Mission briefing panel ── */
+  .briefing-panel {
+    position: relative; background: #131316; border: 1px solid rgba(255,255,255,0.08);
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%);
+    padding: 20px 24px; margin-bottom: 16px;
+  }
+  .briefing-label { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: #666; margin-bottom: 8px; }
+  #question-stem { font-size: 17px; font-weight: 700; color: #f2f2f2; margin-bottom: 16px; }
+
+  .loadout-option {
+    display: flex; align-items: center; width: 100%; text-align: left;
+    background: #1a1a1e; border: 1px solid rgba(255,255,255,0.1); color: #d8d8da;
+    padding: 12px 16px; margin-bottom: 8px; cursor: pointer;
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+    transition: transform 0.08s ease, border-color 0.15s ease, background 0.15s ease;
+    font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 500;
+  }
+  .loadout-option:active { transform: scale(0.98); }
+  .loadout-option .slot-num { font-weight: 700; color: #666; margin-right: 12px; font-size: 12px; }
+  .loadout-option.locked { pointer-events: none; opacity: 0.4; }
+  .loadout-option.correct-answer { border-color: #4ade80; background: rgba(74,222,128,0.1); }
+  .loadout-option.wrong-answer { border-color: #ff3b30; background: rgba(255,59,48,0.1); }
+
+  /* ── Engage (buzz) trigger ── */
+  #buzz-btn {
+    display: block; width: 100%; padding: 22px; border: none; cursor: pointer;
+    background: linear-gradient(135deg, #ff3b30, #c41e14);
+    clip-path: polygon(4% 0, 96% 0, 100% 50%, 96% 100%, 4% 100%, 0 50%);
+    color: white; font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  #buzz-btn.pulse { animation: engage-pulse 1s ease-in-out infinite; }
+  @keyframes engage-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.75; } }
+  #buzz-btn.locked { opacity: 0.3; pointer-events: none; animation: none; }
+  #buzz-btn:active { transform: scale(0.97); }
+
+  /* ── Event ticker (kill-feed style) ── */
+  #event-ticker { margin-top: 14px; font-size: 12px; color: #999; min-height: 60px; }
+  #event-ticker .ticker-line { padding: 3px 0; border-left: 2px solid #333; padding-left: 8px; margin-bottom: 4px; animation: ticker-in 0.2s ease; }
+  @keyframes ticker-in { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: translateX(0); } }
+
+  #flash-overlay { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 999; }
+  #flash-overlay.flash-correct { background: #4ade80; animation: flash-fade 0.35s ease; }
+  #flash-overlay.flash-wrong { background: #ff3b30; animation: flash-fade 0.35s ease; }
+  @keyframes flash-fade { 0% { opacity: 0.3; } 100% { opacity: 0; } }
+</style>
+
+<div class="page-container">
+  <div id="flash-overlay"></div>
+  <div class="battle-wrap">
+
+    <div class="hud-header">
+      <div>
+        <div class="room-label">Private Match</div>
+        <div class="room-code">{{ room_code }}</div>
+      </div>
+      <div id="status">Connecting...</div>
+    </div>
+
+    <div id="lobby-panel" style="display:none">
+      <p class="section-label">Squads</p>
+      <div id="team-list" style="margin-bottom:16px"></div>
+      <div style="display:flex; gap:8px; margin-bottom:16px">
+        <button class="btn btn-white-outline" onclick="assignTeam('A')">Join Alpha</button>
+        <button class="btn btn-white-outline" onclick="assignTeam('B')">Join Bravo</button>
+        <button class="btn btn-white-outline" onclick="assignTeam(null)">Spectate</button>
+      </div>
+        <div id="leader-controls" style="display:none">
+        <p class="section-label">Game Mode (host only)</p>
+        <select id="mode-select" onchange="onModeChange()">
+          <option value="">— Select Mode —</option>
+          <option value="alternating">Alternating</option>
+          <option value="buzzer">Buzzer</option>
+        </select>
+        <button class="btn btn-primary" id="start-btn" onclick="startMatch()" disabled style="margin-top:8px">Deploy →</button>
+      </div>
+    </div>
+
+    <div id="match-panel" style="display:none">
+      <div class="vs-scoreboard">
+        <div class="vs-panel team-a" id="panel-a">
+          <div class="vs-callsign">Alpha</div>
+          <div class="vs-score" id="score-a">0</div>
+        </div>
+        <div class="vs-divider"><span>VS</span></div>
+        <div class="vs-panel team-b" id="panel-b">
+          <div class="vs-callsign">Bravo</div>
+          <div class="vs-score" id="score-b">0</div>
+        </div>
+      </div>
+
+      <div class="hud-timer"><div class="hud-timer-fill" id="timer-fill"></div></div>
+
+      <div class="briefing-panel" id="question-box">
+        <div class="briefing-label">Question</div>
+        <p id="question-stem"></p>
+        <div id="options-list"></div>
+      </div>
+
+      <button id="buzz-btn" style="display:none" onclick="buzz()">⚡ Engage</button>
+      <div id="event-ticker"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const roomCode = "{{ room_code }}";
+const studentId = {{ student_id }};
+const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+const ws = new WebSocket(`${wsScheme}://${window.location.host}/ws/battle/${roomCode}/`);
+
+let teamAScore = 0, teamBScore = 0;
+let currentCorrectIndex = null;
+let answerLocked = false;
+
+ws.onopen = () => { const s = document.getElementById("status"); s.textContent = "Live"; s.classList.remove("disconnected"); };
+ws.onclose = () => { const s = document.getElementById("status"); s.textContent = "Disconnected"; s.classList.add("disconnected"); };
+ws.onerror = () => { const s = document.getElementById("status"); s.textContent = "Connection error"; s.classList.add("disconnected"); };
+ws.onmessage = (e) => handleEvent(JSON.parse(e.data));
+
+function send(payload) { ws.send(JSON.stringify(payload)); }
+function assignTeam(team) { send({type: "assign_team", team: team}); }
+function onModeChange() {
+  const val = document.getElementById("mode-select").value;
+  if (val) {
+    send({type: "set_mode", mode: val});
+  }
+}
+function startMatch() { send({type: "start_match"}); }
+function buzz() {
+  document.getElementById("buzz-btn").classList.add("locked");
+  send({type: "buzz"});
+}
+function submitAnswer(index) {
+  if (answerLocked) return;
+  answerLocked = true;
+  document.querySelectorAll(".loadout-option").forEach(b => b.classList.add("locked"));
+  send({type: "submit_answer", option_index: index});
+}
+
+function flash(kind) {
+  const el = document.getElementById("flash-overlay");
+  el.classList.remove("flash-correct", "flash-wrong");
+  void el.offsetWidth;
+  el.classList.add(kind === "correct" ? "flash-correct" : "flash-wrong");
+}
+
+function bumpScore(el) {
+  el.classList.remove("score-bump");
+  void el.offsetWidth;
+  el.classList.add("score-bump");
+}
+
+function updateScoreboard(a, b) {
+  const elA = document.getElementById("score-a");
+  const elB = document.getElementById("score-b");
+  if (a !== undefined && a !== teamAScore) { teamAScore = a; elA.textContent = a; bumpScore(elA); }
+  if (b !== undefined && b !== teamBScore) { teamBScore = b; elB.textContent = b; bumpScore(elB); }
+}
+
+function logEvent(text) {
+  const ticker = document.getElementById("event-ticker");
+  const line = document.createElement("div");
+  line.className = "ticker-line";
+  line.textContent = text;
+  ticker.prepend(line);
+  while (ticker.children.length > 5) ticker.removeChild(ticker.lastChild);
+}
+
+function startTimer(seconds) {
+  const fill = document.getElementById("timer-fill");
+  fill.classList.remove("urgent");
+  fill.style.transition = "none";
+  fill.style.transform = "scaleX(1)";
+  void fill.offsetWidth;
+  fill.style.transition = `transform ${seconds}s linear`;
+  fill.style.transform = "scaleX(0)";
+  clearTimeout(window._timerUrgentFlag);
+  window._timerUrgentFlag = setTimeout(() => fill.classList.add("urgent"), Math.max(0, (seconds - 5) * 1000));
+}
+
+function handleEvent(data) {
+  console.log("EVENT:", data);
+
+  if (data.type === "room_state") {
+    renderLobby(data);
+  } else if (data.type === "question_served") {
+    renderQuestion(data);
+  } else if (data.type === "buzzed") {
+    logEvent(`Team ${data.team === "A" ? "Alpha" : "Bravo"} engaged first`);
+    document.getElementById("buzz-btn").classList.add("locked", "pulse" in [] ? "" : "");
+    document.getElementById("buzz-btn").classList.remove("pulse");
+  } else if (data.type === "question_resolved" || data.type === "bonus_resolved") {
+    showAnswerReveal();
+    flash(data.correct ? "correct" : "wrong");
+    const base = data.team === "A" ? teamAScore : teamBScore;
+    const newScore = base + data.points;
+    if (data.team === "A") updateScoreboard(newScore, undefined); else updateScoreboard(undefined, newScore);
+    const teamName = data.team === "A" ? "Alpha" : "Bravo";
+    logEvent(`${teamName} ${data.correct ? "hit" : "missed"} — ${data.points >= 0 ? "+" : ""}${data.points}`);
+  } else if (data.type === "bonus_open") {
+    document.querySelectorAll(".loadout-option").forEach(b => b.classList.remove("locked"));
+    answerLocked = false;
+    logEvent(`Bonus chance — Team ${data.team === "A" ? "Alpha" : "Bravo"}`);
+    startTimer(data.timer_seconds);
+  } else if (data.type === "no_buzz_penalty") {
+    flash("wrong");
+    updateScoreboard(data.team_a_score, data.team_b_score);
+    logEvent("No engage — both squads -5");
+  } else if (data.type === "sudden_death") {
+    logEvent("SUDDEN DEATH");
+  } else if (data.type === "match_finished") {
+    updateScoreboard(data.team_a_score, data.team_b_score);
+    logEvent(`MATCH OVER — Winner: ${data.winner ? (data.winner === "A" ? "Alpha" : "Bravo") : "Tie"}`);
+    document.getElementById("buzz-btn").style.display = "none";
+    document.getElementById("options-list").innerHTML = "";
+    document.getElementById("question-stem").textContent = "";
+    document.getElementById("timer-fill").style.transform = "scaleX(0)";
+  } else if (data.type === "error") {
+    alert(data.message);
+  } else if (data.type === "match_warning" || data.type === "match_aborted") {
+    logEvent(data.message || data.reason);
+  }
+}
+
+function showAnswerReveal() {
+  document.querySelectorAll(".loadout-option").forEach((btn, i) => {
+    if (i === currentCorrectIndex) btn.classList.add("correct-answer");
+  });
+}
+
+function renderLobby(data) {
+  document.getElementById("lobby-panel").style.display = data.status === "waiting" ? "block" : "none";
+  document.getElementById("leader-controls").style.display = data.leader_id === studentId ? "block" : "none";
+
+  const list = document.getElementById("team-list");
+  list.innerHTML = "";
+  [["A", "Alpha", "#00c2ff"], ["B", "Bravo", "#ff3b30"], [null, "Spectators", null]].forEach(([team, label, color]) => {
+    const members = data.participants.filter(p => p.team === team || (team === null && p.role === "spectator"));
+    const div = document.createElement("div");
+    div.style.marginBottom = "4px";
+    div.innerHTML = `<strong style="${color ? `color:${color}` : ''}">${label}:</strong> ${members.map(m => `${m.username}${m.connection_status !== "connected" ? " (disconnected)" : ""}`).join(", ") || "—"}`;
+    list.appendChild(div);
+  });
+
+  const modeSelect = document.getElementById("mode-select");
+  const startBtn = document.getElementById("start-btn");
+  if (data.mode) {
+    modeSelect.value = data.mode;
+    startBtn.disabled = false;
+  } else {
+    modeSelect.value = "";
+    startBtn.disabled = true;
+  }
+}
+
+function renderQuestion(data) {
+  document.getElementById("lobby-panel").style.display = "none";
+  document.getElementById("match-panel").style.display = "block";
+  document.getElementById("question-stem").textContent = data.stem;
+  answerLocked = false;
+
+  document.getElementById("panel-a").classList.toggle("active-turn", data.team_on_turn === "A");
+  document.getElementById("panel-b").classList.toggle("active-turn", data.team_on_turn === "B");
+
+  const optionsList = document.getElementById("options-list");
+  optionsList.innerHTML = "";
+  data.options.forEach((opt, i) => {
+    const btn = document.createElement("button");
+    btn.className = "loadout-option";
+    btn.innerHTML = `<span class="slot-num">0${i + 1}</span>${opt}`;
+    btn.onclick = () => submitAnswer(i);
+    optionsList.appendChild(btn);
+  });
+
+  const buzzBtn = document.getElementById("buzz-btn");
+  const isBuzzer = data.mode === "buzzer";
+  buzzBtn.style.display = isBuzzer ? "block" : "none";
+  buzzBtn.classList.remove("locked");
+  buzzBtn.classList.toggle("pulse", isBuzzer);
+
+  startTimer(data.timer_seconds);
+}
+</script>
+{% endblock %}

@@ -25,13 +25,16 @@ ALLOWED_HOSTS = ["10.192.1.165", "localhost", "127.0.0.1"]
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'channels',
     'core',
+    'battle',
     'django_cleanup.apps.CleanupConfig',
     "django.contrib.sites",
     "allauth",
@@ -85,6 +88,17 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'petrolearn.wsgi.application'
+
+ASGI_APPLICATION = 'petrolearn.asgi.application'
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")],
+        },
+    },
+}
 
 
 # Database
@@ -145,6 +159,7 @@ GEMINI_API_KEY_EXTRACTION = os.environ.get("GEMINI_API_KEY_EXTRACTION")
 GEMINI_API_KEY_IMAGES = os.environ.get("GEMINI_API_KEY_IMAGES")
 GEMINI_API_KEY_SIMULATOR = os.environ.get('GEMINI_API_KEY_SIMULATOR')
 GEMINI_API_KEY_GENERATION = os.environ.get('GEMINI_API_KEY_GENERATION')
+GEMINI_API_KEY_BATTLE = os.environ.get('GEMINI_API_KEY_BATTLE')
 
 LOGIN_URL = '/'
 
