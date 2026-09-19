@@ -2,105 +2,224 @@
 {% block title %}Result — Rovea{% endblock %}
 
 {% block content %}
-<div class="page-container">
+<style>
+  #resultRoot{
+    --bg:#0F1D2B; --bg-alt:#16283A; --surface:#13212F; --surface-2:#1A2C3D;
+    --ink:#ECEFF3; --ink-soft:#B7C2CB; --ink-faint:#8A97A0;
+    --line:rgba(236,239,243,.14); --line-soft:rgba(236,239,243,.08);
+    --navy:#0F4677; --navy-deep:#0A2E4D; --heading:#E7EDF3;
+    --amber:#E2A63B; --amber-deep:#C98A22; --coral:#D96A45; --green:#4A9D74;
+    --font-display:'Newsreader',serif; --font-body:'Inter',sans-serif;
+    --ease:cubic-bezier(.22,.61,.36,1); --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
+    color-scheme:dark; background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    line-height:1.55; padding:clamp(36px,6vh,64px) clamp(14px,3vw,32px) 90px;
+    border-radius:0 0 var(--radius-lg) var(--radius-lg);
+    transition:background .35s var(--ease),color .35s var(--ease);
+  }
+  #resultRoot[data-theme="light"]{
+    --bg:#F1EFE6; --bg-alt:#E7E2D3; --surface:#FBFAF4; --surface-2:#FFFFFF;
+    --ink:#17212B; --ink-soft:#54626D; --ink-faint:#818D94;
+    --line:rgba(23,33,43,.14); --line-soft:rgba(23,33,43,.07); --heading:#0A2E4D;
+    color-scheme:light;
+  }
+  #resultRoot *{box-sizing:border-box;}
+  #resultRoot a{color:inherit;text-decoration:none;}
+  #resultRoot :focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:4px;}
+  #resultRoot h1,#resultRoot h2,#resultRoot h3{font-family:var(--font-display);font-weight:500;color:var(--heading);letter-spacing:-.01em;margin:0;}
+  #resultRoot .max{max-width:680px;margin-inline:auto;}
+  @keyframes rFade{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  @media(prefers-reduced-motion:reduce){#resultRoot *{animation-duration:.001ms!important;transition-duration:.001ms!important;}}
 
-  <div class="done-card">
-    {% if correct %}
-    <div class="done-emoji">🔥</div>
-    <div class="done-title">Correct!</div>
-    {% else %}
-    <div class="done-emoji">💪</div>
-    <div class="done-title">Not quite!</div>
-    {% endif %}
+  /* ---------- result banner ---------- */
+  #resultRoot .done-card{
+    max-width:680px;margin:0 auto 18px;border-radius:var(--radius-lg);padding:40px 28px;text-align:center;
+    border:1px solid var(--line);animation:rFade .55s var(--ease);
+  }
+  #resultRoot .done-card.is-correct{background:rgba(74,157,116,.1);border-color:rgba(74,157,116,.35);}
+  #resultRoot .done-card.is-incorrect{background:rgba(217,106,69,.1);border-color:rgba(217,106,69,.35);}
+  #resultRoot .done-card.is-celebration{background:linear-gradient(135deg,var(--navy),var(--navy-deep));border-color:rgba(226,166,59,.35);color:#fff;}
+
+  #resultRoot .done-icon{width:52px;height:52px;margin:0 auto 14px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+  #resultRoot .done-card.is-correct .done-icon{background:rgba(74,157,116,.18);color:var(--green);}
+  #resultRoot .done-card.is-incorrect .done-icon{background:rgba(217,106,69,.18);color:var(--coral);}
+  #resultRoot .done-card.is-celebration .done-icon{background:rgba(226,166,59,.2);color:var(--amber);}
+
+  #resultRoot .done-title{font-family:var(--font-display);font-size:1.6rem;margin-bottom:12px;}
+  #resultRoot .done-card.is-correct .done-title{color:var(--green);}
+  #resultRoot .done-card.is-incorrect .done-title{color:var(--coral);}
+  #resultRoot .done-card.is-celebration .done-title{color:var(--amber);}
+  #resultRoot .done-sub{font-size:.92rem;color:var(--ink-soft);margin-bottom:6px;}
+  #resultRoot .done-card.is-celebration .done-sub{color:rgba(255,255,255,.78);}
+  #resultRoot .done-sub strong{color:var(--heading);font-weight:700;}
+  #resultRoot .done-card.is-celebration .done-sub strong{color:var(--amber);}
+  #resultRoot .xp-pill{
+    display:inline-flex;align-items:center;gap:6px;background:rgba(226,166,59,.15);color:var(--amber);
+    font-weight:700;font-size:.85rem;padding:5px 13px;border-radius:999px;margin:2px 0;
+  }
+
+  /* ---------- quiz review ---------- */
+  #resultRoot .quiz-card{
+    max-width:680px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);
+    padding:28px;opacity:0;transform:translateY(8px);animation:rFade .5s var(--ease) .1s forwards;
+  }
+  #resultRoot .quiz-header{display:flex;align-items:center;gap:9px;margin-bottom:16px;}
+  #resultRoot .quiz-icon{width:30px;height:30px;border-radius:8px;background:rgba(226,166,59,.15);color:var(--amber);display:flex;align-items:center;justify-content:center;flex:none;}
+  #resultRoot .quiz-label{font-size:.78rem;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em;}
+  #resultRoot .quiz-q{font-size:1.15rem;font-family:var(--font-display);color:var(--heading);line-height:1.4;margin-bottom:20px;}
+
+  #resultRoot .qopt{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:14px 16px;margin-bottom:9px;
+    border:1px solid var(--line);border-radius:12px;background:var(--bg-alt);color:var(--ink-soft);font-size:.92rem;
+  }
+  #resultRoot .qopt:last-child{margin-bottom:0;}
+  #resultRoot .qopt.correct{border-color:var(--green);background:rgba(74,157,116,.1);color:var(--green);font-weight:600;}
+  #resultRoot .qopt.wrong{border-color:var(--coral);background:rgba(217,106,69,.1);color:var(--coral);font-weight:600;}
+  #resultRoot .qopt-tag{font-size:.72rem;font-weight:700;flex:none;display:flex;align-items:center;gap:4px;}
+
+  #resultRoot .explanation-box{
+    margin-top:16px;padding:14px 17px;background:var(--bg-alt);border-radius:var(--radius-md);border-left:3px solid var(--amber);
+  }
+  #resultRoot .explanation-box p{font-size:.86rem;color:var(--ink-soft);margin:0;line-height:1.65;}
+  #resultRoot .explanation-box strong{color:var(--amber);}
+
+  /* ---------- next step ---------- */
+  #resultRoot .next-block{max-width:680px;margin:18px auto 0;}
+  #resultRoot .next-label{font-size:.9rem;color:var(--ink-soft);margin-bottom:10px;}
+  #resultRoot .next-label strong{color:var(--heading);}
+
+  #resultRoot .btn{
+    display:flex;align-items:center;justify-content:center;gap:8px;border-radius:999px;font-weight:600;font-size:.95rem;
+    padding:14px 22px;border:none;cursor:pointer;transition:transform .2s var(--ease),background .2s var(--ease);
+    width:100%;font-family:var(--font-body);
+  }
+  #resultRoot .btn-primary{background:var(--amber);color:var(--navy-deep);}
+  #resultRoot .btn-primary:hover{background:var(--amber-deep);transform:translateY(-2px);}
+  #resultRoot .btn-white-outline{background:transparent;color:var(--ink);border:1px solid var(--line);}
+
+  #resultRoot #backToTopBtn{
+    display:none;position:fixed;bottom:24px;right:24px;z-index:99;width:44px;height:44px;padding:0;
+    border-radius:50%;background:var(--navy);color:#fff;border:none;box-shadow:0 10px 26px -12px rgba(0,0,0,.5);
+    cursor:pointer;transition:transform .25s var(--ease),background .2s var(--ease);align-items:center;justify-content:center;
+  }
+  #resultRoot #backToTopBtn:hover{transform:translateY(-3px);background:var(--navy-deep);}
+</style>
+
+<div class="page-container" id="resultRoot" data-theme="dark">
+
+  <div class="done-card {% if correct %}is-correct{% else %}is-incorrect{% endif %}">
+    <div class="done-icon">
+      {% if correct %}
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>
+      {% else %}
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      {% endif %}
+    </div>
+    <div class="done-title">{% if correct %}Correct!{% else %}Not quite!{% endif %}</div>
     <div class="done-sub">{{ feedback }}</div>
-    <div class="done-sub">You earned <strong>+{{ xp_earned }} XP</strong></div>
+    <div class="done-sub"><span class="xp-pill">+{{ xp_earned }} XP</span></div>
     <div class="done-sub">Topic {{ topic_number }} of {{ total_topics }} complete</div>
   </div>
 
-  <div class="quiz-card" style="margin-top: 16px;">
+  <div class="quiz-card">
     <div class="quiz-header">
-      <span class="quiz-icon">📋</span>
-      <span class="quiz-label">Quiz Review</span>
+      <span class="quiz-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4h9v16H9zM9 9H4v11h5"/></svg>
+      </span>
+      <span class="quiz-label">Quiz review</span>
     </div>
     <p class="quiz-q">{{ topic_session.quiz_question }}</p>
-    
+
     {% for option in topic_session.quiz_options %}
-    <div class="qopt {% if forloop.counter0 == topic_session.correct_answer_index %}correct{% elif forloop.counter0 == topic_session.student_answer_index and not correct %}wrong{% endif %}"
-         style="cursor: default; pointer-events: none; margin-bottom: 8px;">
-      {{ option }}
+    <div class="qopt {% if forloop.counter0 == topic_session.correct_answer_index %}correct{% elif forloop.counter0 == topic_session.student_answer_index and not correct %}wrong{% endif %}">
+      <span>{{ option }}</span>
       {% if forloop.counter0 == topic_session.correct_answer_index %}
-      <span style="float: right; font-size: 12px;">✓ Correct</span>
+      <span class="qopt-tag">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
+        Correct
+      </span>
       {% elif forloop.counter0 == topic_session.student_answer_index and not correct %}
-      <span style="float: right; font-size: 12px;">✗ Your answer</span>
+      <span class="qopt-tag">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        Your answer
+      </span>
       {% endif %}
     </div>
     {% endfor %}
-    
+
     {% if explanation %}
-    <div style="margin-top: 12px; padding: 12px 16px; background: var(--navy); border-radius: var(--radius-md); border-left: 3px solid var(--amber);">
-      <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.7;">
-        <strong style="color: var(--amber);">Explanation:</strong> {{ explanation }}
-      </p>
+    <div class="explanation-box">
+      <p><strong>Explanation:</strong> {{ explanation }}</p>
     </div>
     {% endif %}
   </div>
 
-      {% if is_last_topic %}
-  <div class="done-card" style="margin-top: 16px;">
-    <div class="done-emoji">🎉</div>
-    <div class="done-title">Session Complete!</div>
+  {% if is_last_topic %}
+  <div class="done-card is-celebration" style="margin-top:16px;">
+    <div class="done-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 14.7 8.6 22 9.3l-5.5 4.8L18.2 21 12 17.3 5.8 21l1.7-6.9L2 9.3l7.3-.7L12 2Z"/></svg>
+    </div>
+    <div class="done-title">Session complete!</div>
     <div class="done-sub">You completed all {{ total_topics }} topics for this week. See you next week!</div>
   </div>
-  <a href="{% url 'dashboard' %}" class="btn btn-primary btn-full" style="margin-top: 14px;">Back to Dashboard →</a>
+  <div class="next-block">
+    <a href="{% url 'dashboard' %}" class="btn btn-primary">Back to dashboard →</a>
+  </div>
 
   {% else %}
-  <div style="margin-top: 16px;">
-    <p style="margin-bottom: 8px;">Up next: <strong>{{ next_topic_name }}</strong></p>
+  <div class="next-block">
+    <p class="next-label">Up next: <strong>{{ next_topic_name }}</strong></p>
     <form method="POST" action="{% url 'next_topic' %}">
       {% csrf_token %}
       <input type="hidden" name="topic_session_id" value="{{ topic_session.id }}">
       <input type="hidden" name="next_topic_index" value="{{ next_topic_index }}">
-      <button type="submit" class="btn btn-primary btn-full">Start Next Topic →</button>
+      <button type="submit" class="btn btn-primary">Start next topic →</button>
     </form>
   </div>
   {% endif %}
 
-  <button id="backToTopBtn" class="btn btn-white-outline" title="Go to top" style="
-  display: none; 
-  position: fixed; 
-  bottom: 24px; 
-  right: 24px; 
-  z-index: 99; 
-  min-width: auto; 
-  padding: 10px 14px; 
-  border-radius: 50%; 
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
-  cursor: pointer;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-">
-  ↑
-</button>
+  <button id="backToTopBtn" title="Go to top" aria-label="Back to top">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+  </button>
 
 </div>
 
 <script>
   const topBtn = document.getElementById("backToTopBtn");
 
-  // Show the button when the user scrolls down 300px from the top
   window.onscroll = function() {
     if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
-      topBtn.style.display = "block";
+      topBtn.style.display = "flex";
     } else {
       topBtn.style.display = "none";
     }
   };
 
-  // Smooth scroll back to the top when clicked
   topBtn.addEventListener("click", function() {
     window.scrollTo({
       top: 0,
       behavior: "smooth"
     });
   });
+
+  (function(){
+    const root = document.getElementById('resultRoot');
+    if(!root) return;
+    function detectTheme(){
+      const html = document.documentElement, body = document.body;
+      const attr = html.getAttribute('data-theme') || (body && body.getAttribute('data-theme'));
+      if (attr) return attr;
+      if (html.classList.contains('dark') || (body && body.classList.contains('dark'))) return 'dark';
+      if (html.classList.contains('light') || (body && body.classList.contains('light'))) return 'light';
+      try{
+        const stored = localStorage.getItem('theme') || localStorage.getItem('appearance') || localStorage.getItem('rovea-theme');
+        if (stored) return stored;
+      }catch(e){}
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    function sync(){ root.setAttribute('data-theme', detectTheme()); }
+    sync();
+    new MutationObserver(sync).observe(document.documentElement, { attributes:true, attributeFilter:['class','data-theme'] });
+    if (document.body) new MutationObserver(sync).observe(document.body, { attributes:true, attributeFilter:['class','data-theme'] });
+  })();
 </script>
 {% endblock %}

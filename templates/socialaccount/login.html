@@ -1,23 +1,245 @@
 {% extends "core/base.html" %}
-{% load i18n %}
-{% block title %}Continue with Google — Rovea{% endblock %}
+{% block title %}Log In — Rovea{% endblock %}
 
 {% block content %}
-<div style="max-width: 480px; margin: 100px auto; text-align: center; font-family: system-ui, sans-serif;">
-  <h2 style="font-size: 24px; font-weight: 700; color: #0f172a; margin-bottom: 12px;">
-    Continue with Google
-  </h2>
-  <p style="color: #64748b; margin-bottom: 32px;">
-    You're about to sign in to Rovea using your Google account.
-  </p>
+<style>
+  /* Hide the base global footer on this page, same as before */
+  footer, .Rovea-footer { display: none !important; }
 
-  <form method="post">
-    {% csrf_token %}
-    <button type="submit" 
-      style="background-color: #e58a00; color: #ffffff; border: none; padding: 14px 32px; 
-             font-size: 15px; font-weight: 600; border-radius: 50px; cursor: pointer;">
-      Continue →
+  #loginRoot{
+    --bg:#0F1D2B; --bg-alt:#16283A; --surface:#13212F; --surface-2:#1A2C3D;
+    --ink:#ECEFF3; --ink-soft:#B7C2CB; --ink-faint:#8A97A0;
+    --line:rgba(236,239,243,.14); --line-soft:rgba(236,239,243,.08);
+    --navy:#0F4677; --navy-deep:#0A2E4D; --heading:#E7EDF3;
+    --amber:#E2A63B; --amber-deep:#C98A22; --coral:#D96A45; --green:#4A9D74;
+    --font-display:'Newsreader',serif; --font-body:'Inter',sans-serif;
+    --ease:cubic-bezier(.22,.61,.36,1); --radius-sm:8px; --radius-md:14px; --radius-lg:22px;
+    color-scheme:dark; background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    line-height:1.55; min-height:100vh; display:flex; align-items:stretch;
+    transition:background .35s var(--ease),color .35s var(--ease);
+  }
+  #loginRoot[data-theme="light"]{
+    --bg:#F1EFE6; --bg-alt:#E7E2D3; --surface:#FBFAF4; --surface-2:#FFFFFF;
+    --ink:#17212B; --ink-soft:#54626D; --ink-faint:#818D94;
+    --line:rgba(23,33,43,.14); --line-soft:rgba(23,33,43,.07); --heading:#0A2E4D;
+    color-scheme:light;
+  }
+  #loginRoot *{box-sizing:border-box;}
+  #loginRoot a{color:inherit;text-decoration:none;}
+  #loginRoot :focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:4px;}
+  #loginRoot h1,#loginRoot h2{font-family:var(--font-display);font-weight:500;color:var(--heading);letter-spacing:-.01em;margin:0;}
+  @keyframes lRise{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes lDraw{to{stroke-dashoffset:0;}}
+  @media(prefers-reduced-motion:reduce){#loginRoot *{animation-duration:.001ms!important;transition-duration:.001ms!important;}}
+
+  .login-grid{display:grid;grid-template-columns:1.05fr 1fr;width:100%;min-height:100vh;}
+  @media(max-width:920px){.login-grid{grid-template-columns:1fr;}}
+
+  /* ---------- left brand panel ---------- */
+  .login-brand{
+    background:linear-gradient(160deg,var(--navy) 0%,var(--navy-deep) 100%);
+    color:#fff;padding:clamp(32px,5vw,64px);display:flex;flex-direction:column;justify-content:space-between;
+    position:relative;overflow:hidden;
+  }
+  @media(max-width:920px){.login-brand{min-height:280px;}}
+  .login-brand .contours{position:absolute;inset:0;opacity:.15;pointer-events:none;}
+  .brand-top{display:flex;align-items:center;gap:10px;position:relative;z-index:2;animation:lRise .6s var(--ease);}
+  .brand-top img{width:30px;height:30px;object-fit:contain;}
+  .brand-top-text span{display:block;font-weight:600;font-size:1.15rem;}
+  .brand-top-text small{display:block;font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-top:2px;}
+
+  .brand-mid{position:relative;z-index:2;max-width:420px;}
+  .brand-mid h1{color:#fff;font-size:clamp(1.7rem,3vw,2.3rem);line-height:1.2;opacity:0;transform:translateY(12px);animation:lRise .7s var(--ease) .15s forwards;}
+  .brand-mid p{margin-top:14px;color:rgba(255,255,255,.72);font-size:.95rem;line-height:1.6;opacity:0;transform:translateY(12px);animation:lRise .7s var(--ease) .28s forwards;}
+
+  .route-svg{margin-top:28px;opacity:0;animation:lRise .7s var(--ease) .4s forwards;}
+  .route-path{stroke:var(--amber);stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:600;stroke-dashoffset:600;animation:lDraw 1.6s var(--ease) .7s forwards;}
+  .route-node circle{fill:var(--navy);stroke:var(--amber);stroke-width:2.5;}
+  .route-node.is-first circle{fill:var(--amber);}
+
+  .brand-bottom{position:relative;z-index:2;font-size:.8rem;color:rgba(255,255,255,.55);opacity:0;animation:lRise .6s var(--ease) .5s forwards;}
+
+  /* ---------- right form panel ---------- */
+  .login-form-side{display:flex;align-items:center;justify-content:center;padding:clamp(28px,5vw,64px);position:relative;background:var(--bg);}
+  .theme-toggle-btn{
+    position:absolute;top:24px;right:24px;width:38px;height:38px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:var(--surface);cursor:pointer;
+    transition:border-color .2s var(--ease);
+  }
+  .theme-toggle-btn:hover{border-color:var(--amber);}
+  .theme-toggle-btn svg{width:16px;height:16px;position:absolute;color:var(--ink-soft);transition:opacity .25s var(--ease),transform .35s var(--ease);}
+  .theme-toggle-btn .ic-moon{opacity:0;transform:rotate(-40deg) scale(.5);}
+  #loginRoot[data-theme="light"] .theme-toggle-btn .ic-sun{opacity:0;transform:rotate(40deg) scale(.5);}
+  #loginRoot[data-theme="light"] .theme-toggle-btn .ic-moon{opacity:1;transform:rotate(0) scale(1);}
+
+  .login-card{width:100%;max-width:380px;opacity:0;transform:translateY(12px);animation:lRise .6s var(--ease) .1s forwards;}
+  .login-card h3{font-size:1.6rem;margin-bottom:8px;font-family:var(--font-display);font-weight:500;color:var(--heading);}
+  .login-card .sub{color:var(--ink-soft);font-size:.9rem;margin-bottom:24px;}
+
+  .btn-google{
+    width:100%;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--surface);
+    color:var(--ink);border:1px solid var(--line);padding:12px;font-size:.88rem;font-weight:600;border-radius:999px;
+    cursor:pointer;transition:border-color .2s var(--ease),background .2s var(--ease);margin-bottom:22px;
+  }
+  .btn-google:hover{border-color:var(--navy);background:var(--bg-alt);}
+  .btn-google img{width:18px;height:18px;}
+
+  .auth-divider{display:flex;align-items:center;text-align:center;color:var(--ink-faint);font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:22px;}
+  .auth-divider::before,.auth-divider::after{content:"";flex:1;border-bottom:1px solid var(--line);}
+  .auth-divider:not(:empty)::before{margin-right:12px;}
+  .auth-divider:not(:empty)::after{margin-left:12px;}
+
+  .form-group{margin-bottom:16px;}
+  .form-group label{display:block;font-size:.76rem;font-weight:600;color:var(--ink-soft);margin-bottom:7px;}
+  .form-group input{
+    width:100%;padding:13px 15px;border:1px solid var(--line);border-radius:10px;background:var(--bg-alt);color:var(--ink);
+    font-family:var(--font-body);font-size:.92rem;outline:none;transition:border-color .2s var(--ease);
+  }
+  .form-group input:focus{border-color:var(--navy);}
+
+  .password-wrapper{position:relative;}
+  .password-wrapper input{padding-right:44px;}
+  .toggle-password-btn{
+    position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;
+    color:var(--ink-faint);display:flex;padding:4px;transition:color .2s var(--ease);
+  }
+  .toggle-password-btn:hover{color:var(--ink);}
+  .toggle-password-btn svg{width:17px;height:17px;position:absolute;transition:opacity .15s var(--ease);}
+  .toggle-password-btn .icon-hide{opacity:0;}
+  .toggle-password-btn.is-visible .icon-show{opacity:0;}
+  .toggle-password-btn.is-visible .icon-hide{opacity:1;}
+
+  .form-error{
+    background:rgba(217,106,69,.1);border:1px solid rgba(217,106,69,.3);color:var(--coral);
+    padding:10px 14px;border-radius:var(--radius-sm);font-size:.83rem;margin:-4px 0 16px;
+  }
+
+  .btn-submit-pill{
+    width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--amber);color:var(--navy-deep);
+    border:none;border-radius:999px;font-weight:600;font-size:.95rem;padding:14px;cursor:pointer;margin-top:6px;
+    transition:transform .2s var(--ease),background .2s var(--ease);
+  }
+  .btn-submit-pill:hover{background:var(--amber-deep);transform:translateY(-2px);}
+  .btn-submit-pill:active{transform:scale(.99);}
+
+  .auth-switch{text-align:center;margin-top:24px;font-size:.86rem;color:var(--ink-soft);}
+  .auth-switch a{color:var(--amber);font-weight:600;}
+  .auth-switch a:hover{text-decoration:underline;}
+</style>
+
+<div class="login-grid" id="loginRoot" data-theme="dark">
+
+  <div class="login-brand">
+    <svg class="contours" viewBox="0 0 500 700" preserveAspectRatio="none">
+      <path d="M0,60 C160,20 380,110 500,50" stroke="#fff" stroke-width="1" fill="none"/>
+      <path d="M0,220 C180,160 340,260 500,190" stroke="#fff" stroke-width="1" fill="none"/>
+      <path d="M0,420 C160,480 360,340 500,410" stroke="#fff" stroke-width="1" fill="none"/>
+      <path d="M0,600 C200,540 320,650 500,580" stroke="#fff" stroke-width="1" fill="none"/>
+    </svg>
+
+    <div class="brand-top">
+      <img src="data:image/png;base64,__CREAM_B64__" alt="">
+      <div class="brand-top-text">
+        <span>Rovea</span>
+        <small>University of Lagos</small>
+      </div>
+    </div>
+
+    <div class="brand-mid">
+      <h1>Resume your academic streak.</h1>
+      <p>Sign back in to pick up exactly where you left off — your timetable, your streak, and your next topic are all waiting.</p>
+
+      <svg class="route-svg" width="240" height="200" viewBox="0 0 240 200">
+        <path class="route-path" d="M20,175 C65,175 55,130 95,120 C140,110 65,75 105,60 C130,50 165,62 185,30"/>
+        <g class="route-node is-first"><circle cx="20" cy="175" r="6"/></g>
+        <g class="route-node"><circle cx="95" cy="120" r="6"/></g>
+        <g class="route-node"><circle cx="105" cy="60" r="6"/></g>
+        <g class="route-node"><circle cx="185" cy="30" r="6"/></g>
+      </svg>
+    </div>
+
+    <div class="brand-bottom">© 2026 Rovea</div>
+  </div>
+
+  <div class="login-form-side">
+    <button type="button" class="theme-toggle-btn" id="themeToggleBtn" aria-label="Switch to light mode">
+      <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>
     </button>
-  </form>
+
+    <div class="login-card">
+      <h3>Welcome back</h3>
+      <p class="sub">Log in to continue your learning streak.</p>
+
+      <a href="{% url 'google_login' %}" class="btn-google">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+        Continue with Google
+      </a>
+
+      <div class="auth-divider">or log in with email</div>
+
+      <form method="post">
+        {% csrf_token %}
+
+        <div class="form-group">
+          <label for="id_username">Username</label>
+          {{ form.username }}
+        </div>
+
+        <div class="form-group">
+          <label for="id_password">Password</label>
+          <div class="password-wrapper">
+            {{ form.password }}
+            <button type="button" class="toggle-password-btn" id="togglePassword" aria-label="Show password">
+              <svg class="icon-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="icon-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.9 17.9A10.4 10.4 0 0 1 12 19c-7 0-11-7-11-7a18.6 18.6 0 0 1 4.2-5.1M9.9 4.2A10.7 10.7 0 0 1 12 4c7 0 11 7 11 7a18.6 18.6 0 0 1-2.2 3.1M14.1 14.1a3 3 0 1 1-4.2-4.2M1 1l22 22"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {% if form.errors %}
+        <p class="form-error">Incorrect username or password. Try again.</p>
+        {% endif %}
+
+        <button type="submit" class="btn-submit-pill">Log in →</button>
+      </form>
+
+      <p class="auth-switch">No account yet? <a href="{% url 'signup' %}">Sign up free</a></p>
+    </div>
+  </div>
+
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const root = document.getElementById('loginRoot');
+  const toggleBtn = document.getElementById('themeToggleBtn');
+  if (root && toggleBtn){
+    function applyTheme(mode){
+      root.setAttribute('data-theme', mode);
+      toggleBtn.setAttribute('aria-label', mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode');
+      try{ localStorage.setItem('rovea-theme', mode); }catch(e){}
+    }
+    let initial = null;
+    try{ initial = localStorage.getItem('rovea-theme'); }catch(e){}
+    if(!initial){
+      const htmlTheme = document.documentElement.getAttribute('data-theme');
+      initial = htmlTheme || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    }
+    applyTheme(initial);
+    toggleBtn.addEventListener('click', () => applyTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+  }
+
+  const togglePwBtn = document.getElementById('togglePassword');
+  const passwordField = document.getElementById('id_password');
+  if (togglePwBtn && passwordField) {
+    togglePwBtn.addEventListener('click', function () {
+      const isHidden = passwordField.getAttribute('type') === 'password';
+      passwordField.setAttribute('type', isHidden ? 'text' : 'password');
+      togglePwBtn.classList.toggle('is-visible', isHidden);
+      togglePwBtn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+    });
+  }
+});
+</script>
 {% endblock %}
