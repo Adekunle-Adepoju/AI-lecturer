@@ -150,7 +150,42 @@
 
   <!-- Existing lessons -->
   <p class="section-label">Generated lessons <span class="count-chip">{{ lessons.count }}</span></p>
+    <div class="lesson-search" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+    <form method="GET" id="courseFilterForm" style="margin:0">
+      <select name="filter_course" onchange="document.getElementById('courseFilterForm').submit()"
+              style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-alt);color:var(--ink);font-family:var(--font-body);font-size:.85rem;">
+        <option value="">— Filter by course —</option>
+        {% for course in courses %}
+        <option value="{{ course.id }}" {% if filter_course_id == course.id|stringformat:"s" %}selected{% endif %}>
+          {{ course.course_code }} — {{ course.course_title }}
+        </option>
+        {% endfor %}
+      </select>
+    </form>
 
+    {% if filter_course_id %}
+    <form method="POST" action="{% url 'staff_bulk_publish_lessons' %}" style="margin:0"
+          onsubmit="return confirm('Publish ALL lessons for this course?')">
+      {% csrf_token %}
+      <input type="hidden" name="course_id" value="{{ filter_course_id }}">
+      <button type="submit" class="btn btn-sm">Publish all</button>
+    </form>
+    <form method="POST" action="{% url 'staff_bulk_unpublish_lessons' %}" style="margin:0"
+          onsubmit="return confirm('Unpublish ALL lessons for this course?')">
+      {% csrf_token %}
+      <input type="hidden" name="course_id" value="{{ filter_course_id }}">
+      <button type="submit" class="btn btn-sm">Unpublish all</button>
+    </form>
+    <form method="POST" action="{% url 'staff_bulk_delete_lessons' %}" style="margin:0"
+          onsubmit="return confirm('Delete ALL lessons for this course? This cannot be undone.')">
+      {% csrf_token %}
+      <input type="hidden" name="course_id" value="{{ filter_course_id }}">
+      <button type="submit" class="btn btn-sm btn-danger">Delete all</button>
+    </form>
+    {% endif %}
+  </div>
+
+  
   {% if lessons %}
   <div class="lesson-search">
     <div class="search-wrap">

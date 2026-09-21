@@ -61,4 +61,7 @@ urlpatterns = [
     path("simulator/topics-for-course/", views.topics_for_course_view, name="topics_for_course"),
     path("staff/battle-questions/generate/", views.staff_generate_battle_questions_view, name="staff_generate_battle_questions"),
     path("staff/battle-questions/review/", views.staff_review_battle_questions_view, name="staff_review_battle_questions"),
+    path("staff/lessons/bulk-delete/", views.staff_bulk_delete_lessons_view, name="staff_bulk_delete_lessons"),
+    path("staff/lessons/bulk-publish/", views.staff_bulk_publish_lessons_view, name="staff_bulk_publish_lessons"),
+    path("staff/lessons/bulk-unpublish/", views.staff_bulk_unpublish_lessons_view, name="staff_bulk_unpublish_lessons"),
 ]

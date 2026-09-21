@@ -43,6 +43,7 @@ from .lecture_completeness import detect_likely_duplicate_reteach, is_lecture_tr
 from .staff_forms import BattleQuestionGenerationForm
 from battle.generation import run_battle_question_generation
 from battle.models import BattleQuestionGenerationChunk, BattleQuestion
+from django.urls import reverse
 
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY_CHAT)
@@ -276,7 +277,7 @@ def signup_view(request):
                     level=form.cleaned_data["level"],
                     semester=form.cleaned_data["semester"],
                 )
-                login(request, user)
+                login(request, user, backend="django.contrib.auth.backends.ModelBackend")
                 return redirect("elective_selection")
             except Exception as e:
                 form.add_error(None, f"Error creating account: {str(e)}")
@@ -340,7 +341,7 @@ def login_view(request):
         form = AuthenticationForm(data=request.POST)
         if form.is_valid():
             user = form.get_user()
-            login(request, user)
+            login(request, user, backend="django.contrib.auth.backends.ModelBackend")
             return redirect("dashboard")
     else:
         form = AuthenticationForm()
@@ -701,7 +702,7 @@ def _generate_topic_lecture(course_code, course_title, topic_name, week, level, 
         f"Course: {course_code} — {course_title}\n"
         f"Topic to teach: {topic_name}\n"
         f"Topic number: {topic_index + 1} of {total_topics_in_round} in this session\n"
-        f"Week: {week} of 10\n"
+        f"Week: {week} of {TOTAL_TEACHING_WEEKS}\n"
         f"STRICT INSTRUCTION: Teach ONLY '{topic_name}'. Do not teach any other topic. "
         f"Follow the course outline strictly. This is the exact topic scheduled for this session."
         f"{slide_text}"
@@ -2169,15 +2170,19 @@ def staff_pregeneerate_lessons_view(request):
 
         return redirect("staff_pregenerate_lessons")
 
-    # GET — show existing pre-generated lessons
+        # GET — show existing pre-generated lessons
+    filter_course_id = request.GET.get("filter_course", "")
     lessons = PreGeneratedLesson.objects.select_related("course").order_by(
         "course__level", "course__course_code", "week_number", "topic_title"
     )
+    if filter_course_id:
+        lessons = lessons.filter(course_id=filter_course_id)
 
     return render(request, "core/staff/pregenerate_lessons.html", {
         "courses": courses,
         "lessons": lessons,
         "week_range": range(1, TOTAL_TEACHING_WEEKS + 1),
+        "filter_course_id": filter_course_id,
     })
 
 
@@ -2202,6 +2207,35 @@ def staff_delete_lesson_view(request, lesson_id):
     lesson.delete()
     messages.success(request, f"'{topic}' deleted.")
     return redirect("staff_pregenerate_lessons")
+
+@staff_required
+@require_POST
+def staff_bulk_delete_lessons_view(request):
+    course_id = request.POST.get("course_id")
+    course = get_object_or_404(CourseDefinition, id=course_id)
+    deleted_count, _ = PreGeneratedLesson.objects.filter(course=course).delete()
+    messages.success(request, f"Deleted {deleted_count} lesson(s) for {course.course_code}.")
+    return redirect(f"{reverse('staff_pregenerate_lessons')}?filter_course={course_id}")
+
+
+@staff_required
+@require_POST
+def staff_bulk_publish_lessons_view(request):
+    course_id = request.POST.get("course_id")
+    course = get_object_or_404(CourseDefinition, id=course_id)
+    updated = PreGeneratedLesson.objects.filter(course=course, is_published=False).update(is_published=True)
+    messages.success(request, f"Published {updated} lesson(s) for {course.course_code}.")
+    return redirect(f"{reverse('staff_pregenerate_lessons')}?filter_course={course_id}")
+
+
+@staff_required
+@require_POST
+def staff_bulk_unpublish_lessons_view(request):
+    course_id = request.POST.get("course_id")
+    course = get_object_or_404(CourseDefinition, id=course_id)
+    updated = PreGeneratedLesson.objects.filter(course=course, is_published=True).update(is_published=False)
+    messages.success(request, f"Unpublished {updated} lesson(s) for {course.course_code}.")
+    return redirect(f"{reverse('staff_pregenerate_lessons')}?filter_course={course_id}")
 
 # ─── Simulator ─────────────────────────────────────────────────────────────────
 
