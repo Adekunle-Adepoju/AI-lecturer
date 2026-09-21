@@ -27,12 +27,34 @@
     --ease:cubic-bezier(.22,.61,.36,1);
     --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
     --content-max:1320px;
+    --route-gradient:linear-gradient(90deg,var(--green),var(--amber) 55%,var(--coral));
     color-scheme: dark;
-    max-width:none; margin:0;
+    max-width:none; margin:0; position:relative; isolation:isolate; overflow-x:clip;
     background:var(--bg); color:var(--ink); font-family:var(--font-body);
     line-height:1.55; padding:32px clamp(18px,4vw,48px) 70px;
     border-radius:0 0 var(--radius-lg) var(--radius-lg);
     transition:background .35s var(--ease),color .35s var(--ease);
+  }
+  /* Faint topographic contour lines + a soft dual glow, echoing the login
+     page's brand panel — depth without competing with the chat content. */
+  #sessionRoot::before{
+    content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+    background-image:
+      radial-gradient(ellipse 70% 45% at 12% 0%, rgba(15,70,119,.35), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 100% 20%, rgba(226,166,59,.10), transparent 60%);
+  }
+  #sessionRoot::after{
+    content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;opacity:.5;
+    background-image:
+      linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+    background-size:34px 34px;
+    mask-image:linear-gradient(180deg,#000 0%,#000 30%,transparent 85%);
+  }
+  #sessionRoot[data-theme="light"]::after{
+    background-image:
+      linear-gradient(rgba(10,46,77,.035) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(10,46,77,.035) 1px,transparent 1px);
   }
   #sessionRoot[data-theme="light"]{
     --bg:#F1EFE6; --bg-alt:#E7E2D3; --surface:#FBFAF4; --surface-2:#FFFFFF;
@@ -58,13 +80,25 @@
   #sessionRoot .session-header{
     max-width:var(--content-max);margin:0 auto 24px;background:var(--surface);border:1px solid var(--line);
     border-radius:var(--radius-lg);padding:22px 28px;display:flex;align-items:center;gap:16px;
-    animation:sRise .5s var(--ease);
+    animation:sRise .5s var(--ease); position:relative;overflow:hidden;
+    box-shadow:0 18px 40px -28px rgba(0,0,0,.5);
+  }
+  /* The signature route stripe — same idea shows up on every card below,
+     tying the whole page together as one visual language. */
+  #sessionRoot .session-header::before,
+  #sessionRoot .brief-card::before,
+  #sessionRoot .chat-box::before{
+    content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--route-gradient);
   }
   #sessionRoot .ai-avatar{
     width:46px;height:46px;border-radius:50%;flex:none;background:var(--navy);
-    display:flex;align-items:center;justify-content:center;padding:9px;
+    display:flex;align-items:center;justify-content:center;padding:9px;position:relative;
   }
-  #sessionRoot .ai-avatar img{width:100%;height:100%;object-fit:contain;}
+  #sessionRoot .ai-avatar::after{
+    content:"";position:absolute;inset:-5px;border-radius:50%;border:1.5px solid var(--amber);
+    opacity:.55;animation:avatarPulse 2.6s ease-in-out infinite;
+  }
+  #sessionRoot .ai-avatar img{width:100%;height:100%;object-fit:contain;position:relative;z-index:1;}
   #sessionRoot .ai-avatar img.logo-dark{display:none;}
   #sessionRoot[data-theme="light"] .ai-avatar img.logo-light{display:none;}
   #sessionRoot[data-theme="light"] .ai-avatar img.logo-dark{display:block;}
@@ -74,8 +108,15 @@
 
   #sessionRoot .badge{display:inline-flex;align-items:center;gap:6px;padding:7px 15px;border-radius:999px;font-size:.78rem;font-weight:700;letter-spacing:.02em;flex:none;}
   #sessionRoot .badge-green{background:rgba(74,157,116,.16);color:var(--green);}
-  #sessionRoot .live-badge .live-dot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pulse 1.6s ease-in-out infinite;}
+  #sessionRoot .live-badge{position:relative;}
+  #sessionRoot .live-badge .live-dot{width:7px;height:7px;border-radius:50%;background:currentColor;position:relative;}
+  #sessionRoot .live-badge .live-dot::before{
+    content:"";position:absolute;inset:-5px;border-radius:50%;border:1.5px solid currentColor;
+    animation:radarPing 1.8s ease-out infinite;
+  }
   #sessionRoot .badge-amber{background:rgba(226,166,59,.16);color:var(--amber);}
+  @keyframes avatarPulse{0%,100%{transform:scale(1);opacity:.55;}50%{transform:scale(1.12);opacity:0;}}
+  @keyframes radarPing{0%{transform:scale(.6);opacity:.9;}100%{transform:scale(2.1);opacity:0;}}
 
   /* ---------- error ---------- */
   #sessionRoot .error-banner{
@@ -87,6 +128,7 @@
   #sessionRoot .brief-card{
     max-width:var(--content-max);margin:0 auto 26px;background:var(--surface);border:1px solid var(--line);
     border-radius:var(--radius-lg);padding:34px 36px;animation:sRise .55s var(--ease) .06s both;
+    position:relative;overflow:hidden;box-shadow:0 18px 40px -28px rgba(0,0,0,.5);
   }
   #sessionRoot .brief-card h3{font-size:1.2rem;margin-bottom:16px;}
   #sessionRoot .topic-brief-list{list-style:none;display:flex;flex-direction:column;gap:13px;margin:0;padding:0;}
@@ -94,7 +136,9 @@
   #sessionRoot .topic-brief-index{
     width:24px;height:24px;border-radius:50%;flex:none;background:var(--bg-alt);color:var(--ink-soft);
     display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;margin-top:1px;
+    border:1px solid var(--line);transition:background .2s var(--ease),color .2s var(--ease),border-color .2s var(--ease);
   }
+  #sessionRoot .topic-brief-list li:first-child .topic-brief-index{background:var(--amber);color:var(--navy-deep);border-color:var(--amber);}
   #sessionRoot .brief-note{margin-top:20px;color:var(--ink-soft);font-size:.9rem;padding-top:18px;border-top:1px solid var(--line-soft);}
   #sessionRoot .start-form{max-width:var(--content-max);margin:0 auto;}
 
@@ -110,21 +154,41 @@
   #sessionRoot .btn-white-outline:hover{border-color:var(--coral);color:var(--coral);}
   #sessionRoot .btn-full{width:100%;}
 
-  /* ---------- progress ---------- */
-  #sessionRoot .prog-bar{max-width:var(--content-max);margin:0 auto;height:7px;border-radius:99px;background:var(--bg-alt);overflow:hidden;}
-  #sessionRoot .prog-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--green),var(--amber));transition:width 1s var(--ease);}
-  #sessionRoot .prog-label{max-width:var(--content-max);margin:10px auto 20px;font-size:.85rem;color:var(--ink-soft);}
+  /* ---------- progress: a "route" with a current-position marker ---------- */
+  #sessionRoot .prog-bar{
+    max-width:var(--content-max);margin:0 auto;height:7px;border-radius:99px;position:relative;overflow:hidden;
+    background:var(--route-gradient);
+  }
+  #sessionRoot .prog-bar::before{
+    /* Dims the full-route gradient so only a hint of it shows through as a
+       backdrop — the amber fill on top is what actually reads as progress. */
+    content:"";position:absolute;inset:0;background:var(--bg-alt);opacity:.72;
+  }
+  #sessionRoot .prog-fill{
+    height:100%;border-radius:99px;background:var(--amber);transition:width 1s var(--ease);
+    position:relative;overflow:visible;
+  }
+  #sessionRoot .prog-fill::after{
+    content:"";position:absolute;right:-2px;top:50%;width:15px;height:15px;border-radius:50%;
+    background:var(--amber);border:3px solid var(--surface);transform:translate(50%,-50%);
+    box-shadow:0 0 0 3px rgba(226,166,59,.3);
+  }
+  #sessionRoot .prog-label{max-width:var(--content-max);margin:16px auto 20px;font-size:.85rem;color:var(--ink-soft);}
   #sessionRoot .prog-label strong{color:var(--heading);font-weight:600;}
 
   /* ---------- chat box ---------- */
   #sessionRoot .chat-box{max-width:var(--content-max);margin:0 auto 16px;background:var(--surface);border:1px solid var(--line);
-    border-radius:var(--radius-lg);display:flex;flex-direction:column;overflow:hidden;
-    animation:sRise .55s var(--ease) .1s both;}
-  #sessionRoot #chat-window{height:min(58vh,600px);overflow-y:auto;padding:26px 28px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth;}
-  #sessionRoot #chat-window::-webkit-scrollbar{width:8px;}
-  #sessionRoot #chat-window::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px;}
+    border-radius:var(--radius-lg);display:flex;flex-direction:column;overflow:hidden;position:relative;
+    animation:sRise .55s var(--ease) .1s both; box-shadow:0 24px 50px -30px rgba(0,0,0,.55);}
+  #sessionRoot #chat-window{
+    height:min(58vh,600px);overflow-y:auto;padding:26px 28px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth;
+    background-image:radial-gradient(var(--line-soft) 1px,transparent 1px);background-size:22px 22px;background-position:-4px -4px;
+    scrollbar-width:none; /* Firefox */
+  }
+  #sessionRoot #chat-window::-webkit-scrollbar{display:none;} /* Chrome/Safari/mobile */
 
-  #sessionRoot .msg-row{display:flex;gap:10px;max-width:min(75%,640px);animation:sRise .35s var(--ease) both;}
+  #sessionRoot .msg-row{display:flex;gap:10px;max-width:min(84%,760px);animation:msgIn .4s var(--ease) both;}
+  @keyframes msgIn{from{opacity:0;transform:translateY(10px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
   #sessionRoot .msg-row.ai{align-self:flex-start;}
   #sessionRoot .msg-row.user{align-self:flex-end;flex-direction:row-reverse;}
   #sessionRoot .msg-row.system{align-self:center;max-width:95%;}
@@ -133,9 +197,24 @@
   #sessionRoot .msg-avatar img.logo-dark{display:none;}
   #sessionRoot[data-theme="light"] .msg-avatar img.logo-light{display:none;}
   #sessionRoot[data-theme="light"] .msg-avatar img.logo-dark{display:block;}
-  #sessionRoot .msg-bubble{padding:12px 17px;border-radius:16px;font-size:.94rem;line-height:1.6;word-wrap:break-word;}
-  #sessionRoot .msg-row.ai .msg-bubble{background:var(--bubble-ai);color:var(--bubble-ai-text);border:1px solid var(--line);border-bottom-left-radius:4px;}
-  #sessionRoot .msg-row.user .msg-bubble{background:var(--bubble-user);color:var(--bubble-user-text);border-bottom-right-radius:4px;font-weight:500;}
+  #sessionRoot .msg-bubble{padding:12px 17px;border-radius:16px;font-size:.94rem;line-height:1.6;word-wrap:break-word;position:relative;transition:transform .2s var(--ease);}
+  #sessionRoot .msg-row.ai .msg-bubble{
+    background:var(--bubble-ai);color:var(--bubble-ai-text);border:1px solid var(--line);border-bottom-left-radius:4px;
+    font-family:var(--font-display);font-size:1.05rem;line-height:1.75;font-weight:400;
+  }
+  #sessionRoot .msg-row.ai .msg-bubble::before{
+    content:"";position:absolute;left:-6px;bottom:0;width:12px;height:12px;background:var(--bubble-ai);
+    border-left:1px solid var(--line);border-bottom:1px solid var(--line);
+    clip-path:polygon(100% 0,100% 100%,0 100%);
+  }
+  #sessionRoot .msg-row.user .msg-bubble{
+    background:linear-gradient(135deg,var(--amber),var(--amber-deep));color:var(--bubble-user-text);
+    border-bottom-right-radius:4px;font-weight:500;
+  }
+  #sessionRoot .msg-row.user .msg-bubble::before{
+    content:"";position:absolute;right:-6px;bottom:0;width:12px;height:12px;
+    background:var(--amber-deep);clip-path:polygon(0 0,100% 100%,0 100%);
+  }
   #sessionRoot .msg-row.system .msg-bubble{background:transparent;border:1px dashed var(--line);color:var(--ink-faint);font-size:.8rem;text-align:center;}
   #sessionRoot .msg-bubble sub{font-size:.75em;}
   #sessionRoot .msg-bubble sup{font-size:.72em;}
@@ -156,8 +235,8 @@
 #sessionRoot .msg-bubble .msg-code{background:var(--bg-alt);border:1px solid var(--line);border-radius:8px;padding:10px 14px;overflow-x:auto;font-size:.85rem;margin:10px 0;}
 #sessionRoot .msg-bubble{padding:12px 17px;border-radius:16px;font-size:.94rem;line-height:1.6;word-wrap:break-word;overflow-wrap:anywhere;word-break:break-word;}
 
-  #sessionRoot .typing-row .typing-dots{display:flex;gap:4px;align-items:center;background:var(--bubble-ai);border:1px solid var(--line);padding:13px 16px;border-radius:16px;border-bottom-left-radius:4px;}
-  #sessionRoot .typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);animation:typingBounce 1.2s ease-in-out infinite;}
+  #sessionRoot .typing-row .typing-dots{display:flex;gap:5px;align-items:center;background:var(--bubble-ai);border:1px solid var(--line);padding:13px 16px;border-radius:16px;border-bottom-left-radius:4px;}
+  #sessionRoot .typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--amber);animation:typingBounce 1.2s ease-in-out infinite;}
   #sessionRoot .typing-dots span:nth-child(2){animation-delay:.15s;}
   #sessionRoot .typing-dots span:nth-child(3){animation-delay:.3s;}
 
@@ -165,9 +244,10 @@
   #sessionRoot .understanding-controls{display:none;align-items:center;justify-content:space-between;padding:16px 26px 0;border-top:1px solid var(--line-soft);}
   #sessionRoot .btn-understand{
     display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 20px;border-radius:999px;
-    font-size:.86rem;font-weight:600;cursor:pointer;transition:transform .2s var(--ease),border-color .2s var(--ease),color .2s var(--ease),background .2s var(--ease);
+    font-size:.86rem;font-weight:600;cursor:pointer;transition:transform .15s var(--ease),border-color .2s var(--ease),color .2s var(--ease),background .2s var(--ease);
     border:1px solid var(--line);background:var(--bg-alt);color:var(--ink);font-family:var(--font-body);
   }
+  #sessionRoot .btn-understand:active{transform:scale(.94);}
   #sessionRoot .btn-yes:hover{border-color:var(--green);color:var(--green);background:rgba(74,157,116,.1);transform:translateY(-1px);}
   #sessionRoot .btn-no:hover{border-color:var(--coral);color:var(--coral);background:rgba(217,106,69,.1);transform:translateY(-1px);}
   #sessionRoot .btn-icon{width:16px;height:16px;}
@@ -184,8 +264,9 @@
     width:46px;height:46px;border-radius:50%;flex:none;border:none;background:var(--amber);color:var(--navy-deep);
     display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .2s var(--ease),background .2s var(--ease);
   }
-  #sessionRoot .btn-send svg{display:block;flex:none;pointer-events:none;}
-  #sessionRoot .btn-send:hover{background:var(--amber-deep);transform:translateY(-2px);}
+  #sessionRoot .btn-send svg{display:block;flex:none;pointer-events:none;transition:transform .2s var(--ease);}
+  #sessionRoot .btn-send:hover{background:var(--amber-deep);transform:translateY(-2px) rotate(-6deg);}
+  #sessionRoot .btn-send:active{transform:scale(.88) rotate(8deg);}
 
   /* ---------- restart ---------- */
   #sessionRoot .restart-form{max-width:var(--content-max);margin:24px auto 0;}
@@ -222,8 +303,8 @@
       width:calc(100% + 16px);
       border-radius:0; border-left:none; border-right:none;
     }
-    #sessionRoot #chat-window{ height:min(66vh,620px); padding:14px 10px; gap:10px; }
-    #sessionRoot .msg-row{ max-width:97%; gap:6px; }
+    #sessionRoot #chat-window{ height:min(66vh,620px); padding:14px 8px; gap:10px; }
+    #sessionRoot .msg-row{ max-width:100%; gap:6px; }
     /* Drop the per-bubble avatar on mobile, like a real 1:1 chat thread —
        it was eating ~30px of width on every single AI message. */
     #sessionRoot .msg-avatar{ display:none; }
