@@ -7,6 +7,142 @@ from django.conf import settings
 import math
 from .models import SlideDocument, SlideExtractionChunk, SlideTopicChunk, CourseOutline
 from .models import SlideTopicSplitChunk
+from dataclasses import dataclass
+
+# ─── Page-based splitting helpers ──────────────────────────────────────────────
+PAGE_MARKER_RE = re.compile(r"^--- Page (\d+) ---[ \t]*$", re.MULTILINE)
+CONTINUATION_RE = re.compile(r"^--- \[Slide Continuation\] ---[ \t]*$", re.MULTILINE)
+LLM_PAGE_RE = re.compile(r"^\[\[PAGE (\d+)\]\]$", re.MULTILINE)
+
+TOPIC_PAGE_MAP_INSTRUCTION = (
+    "You are mapping university lecture slide pages to topics. You will be given a "
+    "list of topic names and an excerpt of slide text divided into pages, each "
+    "starting with a line like [[PAGE 12]].\n\n"
+    "For each topic, list the numbers of the pages in THIS excerpt that teach it.\n"
+    "Rules:\n"
+    "1. Return page numbers ONLY. Never return any slide text.\n"
+    "2. Use only page numbers that appear in [[PAGE n]] markers in this excerpt.\n"
+    "3. A page may be listed under more than one topic if it genuinely teaches both. "
+    "But if one topic's name is a broad umbrella over other, more specific topics in "
+    "the list, list a page under the specific topic only, not under the umbrella.\n"
+    "4. A pure title page, agenda, or 'thank you' page belongs to no topic.\n"
+    "5. If none of this excerpt's pages teach a topic, return an empty list for it.\n"
+    "6. Use topic names exactly as given. Return ONLY a JSON object, no markdown "
+    'fences, e.g. {"Topic A": [3, 4], "Topic B": []}'
+)
+
+
+@dataclass
+class Page:
+    seq: int      # 1-based position in the document; unique even if page numbers repeat
+    label: str    # "Page 30", or "Section 4" when the text has no page markers
+    text: str
+
+    def render(self):
+        return f"--- {self.label} ---\n\n{self.text}"
+
+
+def _fallback_sections(text, target_chars=1500):
+    """No page markers in the text: group whole paragraphs into pseudo-pages."""
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    sections, current = [], ""
+    for para in paragraphs:
+        if current and len(current) + len(para) > target_chars:
+            sections.append(current)
+            current = para
+        else:
+            current = f"{current}\n\n{para}" if current else para
+    if current:
+        sections.append(current)
+    return [Page(i, f"Section {i}", s) for i, s in enumerate(sections, start=1)]
+
+
+def split_pages(text):
+    text = CONTINUATION_RE.sub("", text or "")
+    matches = list(PAGE_MARKER_RE.finditer(text))
+    if not matches:
+        return _fallback_sections(text)
+    raw = []
+    preamble = text[:matches[0].start()].strip()
+    if preamble:
+        raw.append(("Front matter", preamble))
+    for i, m in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        body = text[m.end():end].strip()
+        if body:
+            raw.append((f"Page {m.group(1)}", body))
+    return [Page(i, label, body) for i, (label, body) in enumerate(raw, start=1)]
+
+
+def group_pages_into_excerpts(pages, target_chars=9000):
+    """Group WHOLE pages into excerpts. Never cuts inside a page."""
+    excerpts, current, size = [], [], 0
+    for p in pages:
+        plen = len(p.text) + 40
+        if current and size + plen > target_chars:
+            excerpts.append(current)
+            current, size = [], 0
+        current.append(p)
+        size += plen
+    if current:
+        excerpts.append(current)
+    return excerpts
+
+
+def render_for_llm(pages):
+    return "\n\n".join(f"[[PAGE {p.seq}]]\n{p.text}" for p in pages)
+
+
+def rendered_page_numbers(rendered):
+    return {int(n) for n in LLM_PAGE_RE.findall(rendered or "")}
+
+
+def build_chunk_text(pages_by_seq, seqs):
+    """Build a topic chunk by copying pages straight from the source text."""
+    return "\n\n".join(pages_by_seq[s].render() for s in sorted(set(seqs)) if s in pages_by_seq)
+
+
+def _norm(s):
+    return re.sub(r"\s+", " ", str(s)).strip().casefold()
+
+
+def parse_page_map(raw, topic_names, valid_seqs):
+    """Returns {topic: [page seqs]} or None if the response is unusable.
+    Unknown topics and page numbers not in this excerpt are silently dropped."""
+    if not raw or not raw.strip():
+        return None
+    clean = raw.replace("```json", "").replace("```", "").strip()
+    a, b = clean.find("{"), clean.rfind("}")
+    if a == -1 or b <= a:
+        return None
+    try:
+        data = json.loads(clean[a:b + 1])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    canonical = {_norm(t): t for t in topic_names}
+    result = {t: [] for t in topic_names}
+    for key, value in data.items():
+        topic = canonical.get(_norm(key))
+        if topic is None or not isinstance(value, list):
+            continue
+        seqs = set()
+        for v in value:
+            if isinstance(v, bool):
+                continue
+            if isinstance(v, str) and v.strip().isdigit():
+                v = int(v.strip())
+            if isinstance(v, float) and v.is_integer():
+                v = int(v)
+            if isinstance(v, int) and v in valid_seqs:
+                seqs.add(v)
+        result[topic] = sorted(set(result[topic]) | seqs)
+    return result
+
+
+def _markers_preserved(original, cleaned):
+    return PAGE_MARKER_RE.findall(original) == PAGE_MARKER_RE.findall(cleaned)
 
 
 def _get_batch_client():
@@ -306,10 +442,10 @@ def _parse_slide_document(slide):
     extracted_text = ""
     try:
         with pdfplumber.open(slide.file.path) as pdf:
-            for page in pdf.pages:
+            for page_number, page in enumerate(pdf.pages, start=1):
                 text = _extract_page_text_layout_aware(page)
-                if text:
-                    extracted_text += text + "\n"
+                if text and text.strip():
+                    extracted_text += f"--- Page {page_number} ---\n\n{text.strip()}\n\n"
     except Exception as e:
         print(f"PDF extraction failed for {slide.course_code}: {e}")
 
@@ -336,26 +472,36 @@ def _parse_slide_document(slide):
         slide.save(update_fields=["extracted_topics", "topics_incomplete"])
 
 def _macro_chunk_text(text, target_chunk_size=17500, min_chunks=3, max_chunks=None):
-    """Split text into chunks close to target_chunk_size. No hard cap on
-    chunk count by default — for very large decks (400k+ chars), forcing
-    a low max_chunks previously produced megachunks Gemini's 8000-token
-    output limit could never reproduce, causing cleanup/split to silently
-    fall back to raw text on every chunk (see PGG434 upload). If
-    max_chunks is explicitly passed, it still clamps the ceiling, but
-    callers should only do that when they've checked it won't force
-    oversized chunks on a large document."""
+    """Split text into chunks near target_chunk_size, cutting ONLY at page
+    markers (or blank lines / newlines / whitespace if there are none) —
+    never mid-word. ''.join(chunks) always equals the input text."""
     total_len = len(text)
-
     if total_len <= target_chunk_size:
         return [text] if text.strip() else []
 
-    num_chunks = math.ceil(total_len / target_chunk_size)
-    num_chunks = max(min_chunks, num_chunks)
-    if max_chunks:
-        num_chunks = min(num_chunks, max_chunks)
+    if min_chunks and min_chunks > 1:
+        target_chunk_size = min(target_chunk_size, math.ceil(total_len / min_chunks))
 
-    actual_chunk_size = math.ceil(total_len / num_chunks)
-    chunks = [text[i:i + actual_chunk_size] for i in range(0, total_len, actual_chunk_size)]
+    cuts = [m.start() for m in PAGE_MARKER_RE.finditer(text)]
+    if len(cuts) < 2:
+        cuts = [m.end() for m in re.finditer(r"\n\s*\n", text)]
+    if len(cuts) < 2:
+        cuts = [m.end() for m in re.finditer(r"\n", text)]
+    if len(cuts) < 2:
+        cuts = [m.end() for m in re.finditer(r"\s", text)]
+
+    bounds = sorted(set([0] + cuts + [total_len]))
+    segments = [text[a:b] for a, b in zip(bounds, bounds[1:]) if b > a]
+
+    chunks, current = [], ""
+    for seg in segments:
+        if current and len(current) + len(seg) > target_chunk_size:
+            chunks.append(current)
+            current = seg
+        else:
+            current += seg
+    if current:
+        chunks.append(current)
     return [c for c in chunks if c.strip()]
 
 CLEANUP_SYSTEM_INSTRUCTION = (
@@ -384,6 +530,8 @@ CLEANUP_SYSTEM_INSTRUCTION = (
     "Return ONLY the cleaned text itself, nothing else — no markdown code "
     "fences wrapping the whole response.\n\n"
     "If the text has no structural problems at all, simply return it unchanged."
+    "6. Lines like '--- Page 12 ---' are page markers. Copy every one exactly, on "
+    "its own line, in the same order. Never remove, renumber, merge, or move them.\n\n"
 )
 
 def _normalized_len(text):
@@ -461,7 +609,9 @@ def _cleanup_mangled_text_with_ai(course_code, course_title, raw_text, slide=Non
             chunk_label=chunk_label,
         )
 
-        if result and result.strip() and _normalized_len(result) >= _normalized_len(chunk_text) * 0.6:
+        if (result and result.strip()
+                and _normalized_len(result) >= _normalized_len(chunk_text) * 0.6
+                and _markers_preserved(chunk_text, result)):
             chunk_row.status = "COMPLETED"
             chunk_row.cleaned_text = result.strip()
             chunk_row.error_message = ""
@@ -513,7 +663,9 @@ def _cleanup_mangled_text_no_resume(course_code, course_title, raw_text):
             chunk_label=chunk_label,
         )
 
-        if result and result.strip() and _normalized_len(result) >= _normalized_len(chunk_text) * 0.6:
+        if (result and result.strip()
+                and _normalized_len(result) >= _normalized_len(chunk_text) * 0.6
+                and _markers_preserved(chunk_text, result)):
             cleaned_chunks.append(result.strip())
         else:
             if result and result.strip():
@@ -562,205 +714,132 @@ TOPIC_SPLIT_SYSTEM_INSTRUCTION = (
     '{"A": "...text for A...", "B": "...text for B..."}'
 )
 
-
-def split_week_chunk_by_topic(slide, week_number, topic_names):
-    """Split one week's SlideChunk.chunk_text into per-topic buckets and
-    save them as SlideTopicChunk rows. Idempotent. Returns (success, count).
-    On any failure, returns (False, 0) and leaves prior rows untouched —
-    callers fall back to the week-level SlideChunk, never lose content."""
-    from .models import SlideChunk
-
-    if not topic_names:
-        return False, 0
-
-    week_chunk = slide.chunks.filter(week_number=week_number).first()
-    if not week_chunk or not week_chunk.chunk_text.strip():
-        return False, 0
-
-    batch_client = _get_batch_client()
+def _ask_page_map(client, slide, pages, topic_names, label):
+    """Ask Gemini which pages of this excerpt belong to which topics.
+    Returns {topic: [seqs]} or None after 3 failed attempts."""
+    rendered = render_for_llm(pages)
+    valid = {p.seq for p in pages}
     topics_list_str = "\n".join(f"- {t}" for t in topic_names)
 
-    raw = _call_gemini_with_retry(
-        client=batch_client,
-        model="gemini-3.6-flash",
-        contents=(
-            f"Course: {slide.course_code} — {slide.course_title}\n"
-            f"Week {week_number} topics (split into exactly these buckets):\n"
-            f"{topics_list_str}\n\n"
-            f"Week {week_number} slide text:\n{week_chunk.chunk_text}"
-        ),
-        config=types.GenerateContentConfig(
-            system_instruction=TOPIC_SPLIT_SYSTEM_INSTRUCTION,
-            max_output_tokens=8000,
-        ),
-        course_code=slide.course_code,
-        chunk_label=f"Topic split — Week {week_number}",
-    )
-
-    if not raw or not raw.strip():
-        print(f"[{slide.course_code}] Topic split week {week_number}: no response, keeping week-level chunk.")
-        return False, 0
-
-    clean = raw.strip()
-    if clean.startswith("```"):
-        clean = clean.split("```")[1]
-        if clean.startswith("json"):
-            clean = clean[4:]
-    clean = clean.strip()
-
-    try:
-        split_map = json.loads(clean)
-        if not isinstance(split_map, dict):
-            raise ValueError("Model returned non-dict JSON.")
-    except (json.JSONDecodeError, ValueError) as e:
-        print(f"[{slide.course_code}] Topic split week {week_number}: JSON parse failed ({e}).")
-        return False, 0
-
-    total_split_len = sum(len(str(v)) for v in split_map.values())
-    source_len = len(week_chunk.chunk_text)
-    if source_len > 0 and total_split_len < source_len * 0.6:
-        print(f"[{slide.course_code}] Topic split week {week_number}: output too short vs source — discarding.")
-        return False, 0
-
-    created = 0
-    for topic_name in topic_names:
-        topic_text = str(split_map.get(topic_name, "")).strip()
-        SlideTopicChunk.objects.update_or_create(
-            slide=slide,
-            week_number=week_number,
-            topic_name=topic_name,
-            defaults={"chunk_text": topic_text, "is_empty": not bool(topic_text)},
+    for attempt in range(3):
+        raw = _call_gemini_with_retry(
+            client=client,
+            model="gemini-3.6-flash",
+            contents=(
+                f"Course: {slide.course_code} — {slide.course_title}\n\n"
+                f"Topics:\n{topics_list_str}\n\n"
+                f"Slide excerpt:\n{rendered}"
+            ),
+            config=types.GenerateContentConfig(
+                system_instruction=TOPIC_PAGE_MAP_INSTRUCTION,
+                max_output_tokens=8000,
+            ),
+            course_code=slide.course_code,
+            chunk_label=f"{label} (attempt {attempt + 1})",
         )
-        created += 1
+        page_map = parse_page_map(raw, topic_names, valid)
+        if page_map is not None:
+            return page_map
+        time.sleep(3)
+    return None
 
-    print(f"[{slide.course_code}] Topic split week {week_number}: {created} topic chunks saved.")
-    return True, created
 
-
-def split_all_weeks_by_topic(slide):
-    """Always split slide content against the slide's own AI-extracted
-    topics — CourseOutline no longer supplies week-grouped topic buckets."""
-    split_slide_by_extracted_topics(slide)
-
-def _get_or_create_topic_split_chunks(slide):
-    existing = list(slide.topic_split_chunks.all())
+def _get_or_create_topic_split_chunks(slide, pages):
+    """Excerpt rows now hold whole pages ([[PAGE n]] blocks). If existing rows
+    don't match the slide's current text (old mid-word rows, or text appended
+    since), they're deleted and rebuilt."""
+    existing = list(slide.topic_split_chunks.order_by("chunk_index"))
     if existing:
-        return existing
+        stored = "\n\n".join(r.chunk_text for r in existing)
+        if stored == render_for_llm(pages):
+            return existing
+        print(f"[{slide.course_code}] Topic-split rows are stale or old-format — rebuilding.")
+        slide.topic_split_chunks.all().delete()
 
-    chunks_text = _macro_chunk_text(slide.extracted_text, target_chunk_size=9000, min_chunks=1, max_chunks=None)
     created = []
-    for idx, chunk_text in enumerate(chunks_text):
-        obj = SlideTopicSplitChunk.objects.create(
-            slide=slide, chunk_index=idx, chunk_text=chunk_text, status="PENDING",
-        )
-        created.append(obj)
+    for idx, excerpt in enumerate(group_pages_into_excerpts(pages)):
+        created.append(SlideTopicSplitChunk.objects.create(
+            slide=slide, chunk_index=idx,
+            chunk_text=render_for_llm(excerpt), status="PENDING",
+        ))
     return created
 
 
 def split_slide_by_extracted_topics(slide):
-    """Resumable: each chunk's split result is saved to
-    SlideTopicSplitChunk immediately on success. Re-calling this after a
-    quota exhaustion, crash, or manual interrupt skips chunks already
-    COMPLETED and only spends API calls on what's left."""
+    """Resumable. Gemini only returns PAGE NUMBERS per topic; the chunk text is
+    copied from the untouched extracted_text by our own code, so it cannot be
+    truncated, reworded, or mislabeled by the model."""
     if not slide.extracted_topics or not slide.extracted_text.strip():
         return False, 0
 
-    batch_client = _get_batch_client()
-    topics_list_str = "\n".join(f"- {t}" for t in slide.extracted_topics)
+    pages = split_pages(slide.extracted_text)
+    if not pages:
+        return False, 0
+    pages_by_seq = {p.seq: p for p in pages}
+    topics = list(slide.extracted_topics)
 
-    chunk_rows = _get_or_create_topic_split_chunks(slide)
-    pending_rows = [c for c in chunk_rows if c.status != "COMPLETED"]
+    batch_client = _get_batch_client()
+    chunk_rows = _get_or_create_topic_split_chunks(slide, pages)
+    pending_rows = [
+        c for c in chunk_rows
+        if c.status != "COMPLETED" or not set(topics) <= set((c.split_result or {}).keys())
+    ]
 
     if not pending_rows:
         print(f"[{slide.course_code}] All {len(chunk_rows)} topic-split chunks already completed.")
 
-    def _try_parse(raw):
-        if not raw or not raw.strip():
-            return None
-        clean = raw.strip()
-        if clean.startswith("```"):
-            clean = clean.split("```")[1]
-            if clean.startswith("json"):
-                clean = clean[4:]
-        clean = clean.strip()
-        start = clean.find("{")
-        end = clean.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            clean = clean[start:end + 1]
-        try:
-            parsed = json.loads(clean)
-            return parsed if isinstance(parsed, dict) else None
-        except json.JSONDecodeError:
-            return None
-
     for chunk_row in pending_rows:
-        chunk_label = f"Topic split — chunk {chunk_row.chunk_index + 1}/{len(chunk_rows)}"
-        split_map = None
+        label = f"Topic split — chunk {chunk_row.chunk_index + 1}/{len(chunk_rows)}"
+        excerpt_pages = [pages_by_seq[s] for s in sorted(rendered_page_numbers(chunk_row.chunk_text))
+                         if s in pages_by_seq]
 
-        for attempt in range(3):
-            raw = _call_gemini_with_retry(
-                client=batch_client,
-                model="gemini-3.6-flash",
-                contents=(
-                    f"Course: {slide.course_code} — {slide.course_title}\n"
-                    f"Full topic list for this course (only some may appear in "
-                    f"this excerpt — return an empty string for any topic not "
-                    f"present here):\n{topics_list_str}\n\n"
-                    f"Slide text excerpt {chunk_row.chunk_index + 1} of {len(chunk_rows)}:\n{chunk_row.chunk_text}"
-                ),
-                config=types.GenerateContentConfig(
-                    system_instruction=TOPIC_SPLIT_SYSTEM_INSTRUCTION,
-                    max_output_tokens=8000,
-                ),
-                course_code=slide.course_code,
-                chunk_label=f"{chunk_label} (attempt {attempt + 1})",
-            )
-            split_map = _try_parse(raw)
-            if split_map is not None:
-                break
-            time.sleep(3)
+        page_map = _ask_page_map(batch_client, slide, excerpt_pages, topics, label)
 
-        if split_map is None:
+        if page_map is None:
             chunk_row.status = "FAILED"
-            chunk_row.error_message = "All parse attempts failed (rate limit, network, or bad JSON)."
+            chunk_row.error_message = "All attempts failed (rate limit, network, or bad JSON)."
             chunk_row.save(update_fields=["status", "error_message", "updated_at"])
-            time.sleep(3)
-            continue
-
-        chunk_row.status = "COMPLETED"
-        chunk_row.split_result = split_map
-        chunk_row.error_message = ""
-        chunk_row.save(update_fields=["status", "split_result", "error_message", "updated_at"])
+        else:
+            chunk_row.status = "COMPLETED"
+            chunk_row.split_result = page_map
+            chunk_row.error_message = ""
+            chunk_row.save(update_fields=["status", "split_result", "error_message", "updated_at"])
         time.sleep(3)
 
-    # Aggregate from every COMPLETED chunk (old + newly processed)
-    accumulated = {t: [] for t in slide.extracted_topics}
+    # Aggregate page numbers from every COMPLETED excerpt, then build the
+    # chunk text directly from the source pages.
+    topic_seqs = {t: set() for t in topics}
+    assigned = set()
     for row in slide.topic_split_chunks.filter(status="COMPLETED"):
-        for topic_name in slide.extracted_topics:
-            piece = str(row.split_result.get(topic_name, "")).strip()
-            if piece:
-                accumulated[topic_name].append(piece)
+        result = row.split_result or {}
+        for t in topics:
+            for s in result.get(t, []):
+                if s in pages_by_seq:
+                    topic_seqs[t].add(s)
+                    assigned.add(s)
 
     created = 0
-    for topic_name in slide.extracted_topics:
-        topic_text = "\n\n".join(accumulated[topic_name]).strip()
+    for t in topics:
+        text = build_chunk_text(pages_by_seq, topic_seqs[t])
         SlideTopicChunk.objects.update_or_create(
-            slide=slide, week_number=0, topic_name=topic_name,
-            defaults={"chunk_text": topic_text, "is_empty": not bool(topic_text)},
+            slide=slide, week_number=0, topic_name=t,
+            defaults={"chunk_text": text, "is_empty": not bool(text)},
         )
         created += 1
 
+    unassigned = [pages_by_seq[s].label for s in sorted(set(pages_by_seq) - assigned)]
     any_failed = slide.topic_split_chunks.filter(status="FAILED").exists()
     print(f"[{slide.course_code}] Topic split: {created} topic chunks saved"
-          f"{' (some source chunks still FAILED — retry to fill gaps)' if any_failed else ''}.")
+          f"{' (some excerpts FAILED — retry to fill gaps)' if any_failed else ''}.")
+    if unassigned:
+        print(f"[{slide.course_code}] {len(unassigned)} page(s) assigned to NO topic: "
+              f"{', '.join(unassigned[:30])}{'...' if len(unassigned) > 30 else ''}")
     return True, created
 
+
 def retry_missing_topic_splits(slide, topic_names=None):
-    """Re-run the split ONLY for topics currently empty (or explicitly
-    named), without touching already-populated topic chunks. Safer than
-    re-running split_slide_by_extracted_topics wholesale, since that
-    resends every excerpt and can overwrite good results with a fresh,
-    non-deterministic (and possibly worse) response."""
+    """Re-run the page mapping ONLY for topics currently empty (or named),
+    leaving already-populated topic chunks untouched."""
     if topic_names is None:
         topic_names = list(
             slide.topic_chunks.filter(is_empty=True).values_list("topic_name", flat=True)
@@ -769,72 +848,53 @@ def retry_missing_topic_splits(slide, topic_names=None):
         print(f"[{slide.course_code}] No empty topics to retry.")
         return True, 0
 
+    pages = split_pages(slide.extracted_text)
+    pages_by_seq = {p.seq: p for p in pages}
+    excerpts = group_pages_into_excerpts(pages)
     batch_client = _get_batch_client()
-    topics_list_str = "\n".join(f"- {t}" for t in topic_names)
-    source_chunks = _macro_chunk_text(slide.extracted_text, target_chunk_size=9000, min_chunks=1, max_chunks=None)
 
-    accumulated = {t: [] for t in topic_names}
-
-    def _try_parse(raw):
-        if not raw or not raw.strip():
-            return None
-        clean = raw.strip()
-        if clean.startswith("```"):
-            clean = clean.split("```")[1]
-            if clean.startswith("json"):
-                clean = clean[4:]
-        clean = clean.strip()
-        start = clean.find("{")
-        end = clean.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            clean = clean[start:end + 1]
-        try:
-            parsed = json.loads(clean)
-            return parsed if isinstance(parsed, dict) else None
-        except json.JSONDecodeError:
-            return None
-
-    for idx, source_chunk in enumerate(source_chunks):
-        split_map = None
-        for attempt in range(3):
-            raw = _call_gemini_with_retry(
-                client=batch_client,
-                model="gemini-3.6-flash",
-                contents=(
-                    f"Course: {slide.course_code} — {slide.course_title}\n"
-                    f"ONLY look for these specific topics (others may exist "
-                    f"in the course but are already handled — ignore them):\n"
-                    f"{topics_list_str}\n\n"
-                    f"Slide text excerpt {idx + 1} of {len(source_chunks)}:\n{source_chunk}"
-                ),
-                config=types.GenerateContentConfig(
-                    system_instruction=TOPIC_SPLIT_SYSTEM_INSTRUCTION,
-                    max_output_tokens=8000,
-                ),
-                course_code=slide.course_code,
-                chunk_label=f"Retry missing — excerpt {idx + 1}/{len(source_chunks)} (attempt {attempt + 1})",
-            )
-            split_map = _try_parse(raw)
-            if split_map is not None:
-                break
-            time.sleep(3)
-
-        if split_map:
-            for topic_name in topic_names:
-                piece = str(split_map.get(topic_name, "")).strip()
-                if piece:
-                    accumulated[topic_name].append(piece)
+    accumulated = {t: set() for t in topic_names}
+    for idx, excerpt in enumerate(excerpts):
+        page_map = _ask_page_map(
+            batch_client, slide, excerpt, topic_names,
+            f"Retry missing — excerpt {idx + 1}/{len(excerpts)}",
+        )
+        if page_map:
+            for t in topic_names:
+                accumulated[t].update(page_map.get(t, []))
         time.sleep(3)
 
     filled = 0
-    for topic_name in topic_names:
-        topic_text = "\n\n".join(accumulated[topic_name]).strip()
-        if topic_text:
+    for t in topic_names:
+        if accumulated[t]:
             SlideTopicChunk.objects.update_or_create(
-                slide=slide, week_number=0, topic_name=topic_name,
-                defaults={"chunk_text": topic_text, "is_empty": False},
+                slide=slide, week_number=0, topic_name=t,
+                defaults={"chunk_text": build_chunk_text(pages_by_seq, accumulated[t]),
+                          "is_empty": False},
             )
             filled += 1
 
     print(f"[{slide.course_code}] Retry missing: {filled}/{len(topic_names)} topics filled.")
     return True, filled
+
+def is_reference_table_content(text, max_len=1200):
+    """Heuristic: is this chunk mostly a bare table/list of labels+numbers
+    with little to no explanatory prose? If so, it should be rendered
+    directly rather than expanded into a full lecture."""
+    if len(text) > max_len:
+        return False
+
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    if not lines:
+        return False
+
+    # Lines that look like "Label ... number+unit" (ft, m, psi, md, etc.)
+    number_unit_line = re.compile(
+        r'\d+[\s,]*\d*\s*(ft|feet|m|meters|psi|md|rb|scf|stb|max|maximum)\b',
+        re.IGNORECASE
+    )
+    numeric_lines = sum(1 for l in lines if number_unit_line.search(l))
+
+    # High density of short, numeric/label lines relative to total = a table
+    avg_line_len = sum(len(l) for l in lines) / len(lines)
+    return numeric_lines / len(lines) > 0.4 and avg_line_len < 80

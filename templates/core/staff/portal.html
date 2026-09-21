@@ -1,6 +1,7 @@
 {% extends "core/base.html" %}
 {% load core_extras %}
 {% block title %}Staff Portal — Rovea{% endblock %}
+{% block body_attrs %} data-back-target="{% url 'dashboard' %}"{% endblock %}
 
 {% block content %}
 <style>
@@ -172,6 +173,16 @@
       <span class="tile-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/></svg></span>
       <h3>Pre-generate lessons</h3>
       <p>Generate lecture content ahead of time. Students read instantly from the database.</p>
+    </a>
+    <a href="{% url 'staff_generate_battle_questions' %}" class="action-tile">
+      <span class="tile-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6-6 6 6M6 15l6 6 6-6"/></svg></span>
+      <h3>Battle questions</h3>
+      <p>Generate MCQs for quiz-battle mode from existing slide chunks.</p>
+    </a>
+    <a href="{% url 'staff_review_battle_questions' %}" class="action-tile">
+      <span class="tile-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+      <h3>Review battle questions</h3>
+      <p>Approve or retire generated questions — flags likely external citations.</p>
     </a>
   </div>
 

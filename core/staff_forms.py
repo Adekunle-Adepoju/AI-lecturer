@@ -52,3 +52,24 @@ class CourseDefinitionForm(forms.ModelForm):
         labels = {
             "is_elective": "This is an elective course",
         }
+
+
+class BattleQuestionGenerationForm(forms.Form):
+    course_code = forms.ChoiceField(
+        label="Course (leave blank for all eligible 300L/400L courses)",
+        required=False,
+    )
+    limit = forms.IntegerField(
+        label="Chunks to process this run",
+        initial=10, min_value=1, max_value=100,
+        help_text="Each chunk generates several Gemini calls — keep this modest per click.",
+    )
+    retry_failed = forms.BooleanField(
+        label="Also retry previously failed chunks",
+        required=False,
+    )
+
+    def __init__(self, *args, **kwargs):
+        course_choices = kwargs.pop("course_choices", [])
+        super().__init__(*args, **kwargs)
+        self.fields["course_code"].choices = [("", "All eligible courses")] + [(c, c) for c in course_choices]

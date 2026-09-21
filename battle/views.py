@@ -55,3 +55,4 @@ def room_lobby_view(request, room_code):
         "room_code": room.code,
         "student_id": request.user.profile.id,
     })
+

@@ -1,0 +1,36 @@
+<div class="battle-q-card" id="battle-q-{{ q.id }}" style="background:var(--navy-card); border:1px solid {% if flagged %}rgba(240,128,128,0.4){% else %}var(--border){% endif %}; border-radius:var(--radius-xl); padding:1.25rem 1.5rem; margin-bottom:14px">
+
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px">
+    <span style="font-size:12px; color:var(--text-muted)">{{ q.course_code }} — {{ q.level }}L</span>
+    {% if flagged %}<span class="badge" style="background:rgba(240,128,128,0.15); color:#F08080; border:1px solid rgba(240,128,128,0.3)">⚠ Possible citation</span>{% endif %}
+  </div>
+
+  <p style="font-size:14px; font-weight:600; color:var(--text); margin-bottom:10px">{{ q.stem }}</p>
+
+  <div style="margin-bottom:12px">
+    {% for opt in q.options.all %}
+    <div style="font-size:13px; padding:6px 10px; margin-bottom:4px; border-radius:6px; {% if opt.is_correct %}background:var(--teal-glow); color:var(--green-text){% else %}background:var(--navy){% endif %}">
+      {% if opt.is_correct %}✓{% else %}—{% endif %} {{ opt.text }}
+    </div>
+    {% endfor %}
+  </div>
+
+  <details style="margin-bottom:12px">
+    <summary style="font-size:12px; color:var(--amber); cursor:pointer">View source chunk</summary>
+    <div style="font-size:12px; color:var(--text-secondary); white-space:pre-wrap; margin-top:8px; padding:10px; background:var(--navy); border-radius:6px; max-height:300px; overflow-y:auto">
+      {% if q.source_chunk %}{{ q.source_chunk.chunk_text }}{% else %}<em>Source chunk was deleted — no traceability available.</em>{% endif %}
+    </div>
+  </details>
+
+  <div class="battle-q-actions" style="display:flex; gap:8px; flex-wrap:wrap">
+    {% if q.status == "approved" %}
+      <button type="button" class="btn btn-white-outline" onclick="battleQuestionAction({{ q.id }}, 'disapprove')">Disapprove</button>
+      <button type="button" class="btn btn-white-outline" onclick="battleQuestionAction({{ q.id }}, 'retire')">Retire</button>
+    {% else %}
+      <button type="button" class="btn btn-primary" onclick="battleQuestionAction({{ q.id }}, 'approve')">Approve</button>
+      <button type="button" class="btn btn-white-outline" onclick="battleQuestionAction({{ q.id }}, 'retire')">Retire</button>
+      <button type="button" class="btn btn-white-outline" style="border-color:rgba(226,166,59,0.4); color:var(--amber)" onclick="battleQuestionAction({{ q.id }}, 'retire_and_regenerate')">Retire & Regenerate</button>
+    {% endif %}
+  </div>
+  <div class="battle-q-status" style="font-size:12px; color:var(--text-secondary); margin-top:8px; display:none"></div>
+</div>

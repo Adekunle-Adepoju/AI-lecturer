@@ -28,7 +28,7 @@ from .forms import SignupForm, OnboardingForm, ProfileEditForm, ElectiveSelectio
 from .models import (
     StudentProfile, TimetableEntry, Session, TopicSession, ChatMessage,
     SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES, CourseDefinition,
-    PastQuestion, SimulatorTest, PreGeneratedLesson,   
+    PastQuestion, SimulatorTest, PreGeneratedLesson, SlideTopicChunk,
 )
 from .prompt import SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, QUIZ_GENERATION_PROMPT
 from functools import wraps
@@ -38,9 +38,11 @@ from .prompt import (
     SIMULATOR_QUESTION_PROMPT_MULTI_TOPIC, SIMULATOR_QUESTION_PROMPT_MULTI_TOPIC_MCQ,
     TOPIC_BLOCK_TEMPLATE,
 )
-from .slide_topic_extractor import safe_extract_topics_from_slide
+from .slide_topic_extractor import safe_extract_topics_from_slide, is_reference_table_content
 from .lecture_completeness import detect_likely_duplicate_reteach, is_lecture_truncated, find_safe_cutoff, continue_truncated_lecture, MAX_CONTINUATION_ATTEMPTS
-
+from .staff_forms import BattleQuestionGenerationForm
+from battle.generation import run_battle_question_generation
+from battle.models import BattleQuestionGenerationChunk, BattleQuestion
 
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY_CHAT)
@@ -50,7 +52,10 @@ generation_client = genai.Client(api_key=settings.GEMINI_API_KEY_GENERATION)
 IMAGE_MARKER_RE = re.compile(r'\[IMAGE:\s*(.*?)\]', re.IGNORECASE)
 
 MARKDOWN_IMAGE_RE = re.compile(r'!\[(.*?)\]\(https?://\S+\)')
-
+CITATION_HEURISTIC_RE = re.compile(
+    r"\b(edition|glossary|et al\.?|isbn|vol\.|published|textbook)\b", re.IGNORECASE
+)
+MAX_TOPIC_CONTEXT_CHARS = 24000
 
 def _process_chunk_image(chunk_text, course_code):
     """Extract an [IMAGE: ...] marker OR a hallucinated Markdown image
@@ -424,36 +429,6 @@ def _generate_timetable(profile):
         ))
     TimetableEntry.objects.bulk_create(entries)
 
-def _generate_course_schedule_preview(profile, num_days=14):
-    """Project which course lands on each of the next `num_days` calendar
-    days, using the same rolling-queue math as _get_active_course_entry —
-    one course per non-Sunday day, Sunday is always a rest day. Syncs the
-    profile's queue position to today first, so the preview always starts
-    from the actual current state."""
-    courses = list(profile.timetable.order_by("course_code"))
-    if not courses:
-        return []
-
-    _get_active_course_entry(profile)  # syncs queue_position/queue_date to today
-
-    today = date.today()
-    pos = profile.queue_position % len(courses)
-    schedule = []
-
-    for i in range(num_days):
-        d = today + timedelta(days=i)
-        if i > 0:
-            prev_day = d - timedelta(days=1)
-            if prev_day.weekday() != 6:  # Sunday never advances the queue
-                pos = (pos + 1) % len(courses)
-
-        if d.weekday() == 6:
-            schedule.append({"date": d, "course": None, "is_rest": True})
-        else:
-            schedule.append({"date": d, "course": courses[pos], "is_rest": False})
-
-    return schedule
-
 def _get_active_course_entry(profile):
     """Today's course in the rolling queue — purely date-driven, so every
     student with the same enrolled course list gets the same course on
@@ -580,24 +555,52 @@ TOTAL_TEACHING_WEEKS = 15  # fixed course length in teaching rounds
 
 
 def _get_total_topics_for_course(course_code, level):
-    """Full ordered topic list for a course. CourseOutline's flat,
-    validated topic list wins if present; SlideDocument.extracted_topics
-    is the fallback — and, in practice, the more trustworthy source,
-    since it's grounded directly in the deck."""
+    """Full ordered topic list for a course. Prefers whichever source
+    list can actually be backed by real slide content: any candidate
+    topic (from CourseOutline OR SlideDocument.extracted_topics) with no
+    corresponding non-empty SlideTopicChunk is dropped — teaching a topic
+    name with nothing behind it is exactly the failure mode where the
+    model invents content with no fidelity anchor. If no slide exists at
+    all, the outline (or hardcoded COURSE_OUTLINES fallback) is trusted
+    as-is, since there's nothing to cross-check it against."""
+
+    def _filter_to_backed_topics(topics, slide):
+        backed_names = set(
+            slide.topic_chunks.filter(is_empty=False)
+            .values_list("topic_name", flat=True)
+        )
+        return [t for t in topics if t in backed_names]
+
+    slide = None
+    try:
+        slide = SlideDocument.objects.get(course_code=course_code, level=level, parsed=True)
+    except SlideDocument.DoesNotExist:
+        pass
+
     try:
         outline = CourseOutline.objects.get(course_code=course_code, level=level, parsed=True)
         topics = (outline.topics_json or {}).get("topics")
         if topics:
-            return list(topics)
+            if slide is not None:
+                backed = _filter_to_backed_topics(topics, slide)
+                if backed:
+                    return backed
+                # Outline doesn't match any real slide chunk at all — fall
+                # through to the slide's own extracted_topics instead of
+                # returning a list with zero backing.
+            else:
+                return list(topics)
     except (CourseOutline.DoesNotExist, ValueError):
         pass
 
-    try:
-        slide = SlideDocument.objects.get(course_code=course_code, level=level, parsed=True)
-        if slide.extracted_topics:
-            return list(slide.extracted_topics)
-    except SlideDocument.DoesNotExist:
-        pass
+    if slide is not None and slide.extracted_topics:
+        backed = _filter_to_backed_topics(slide.extracted_topics, slide)
+        if backed:
+            return backed
+        # Slide exists but topic-split hasn't run yet — return unfiltered
+        # so the existing empty-chunk fallback in _find_slide_content_for_topic
+        # still catches it downstream, same as today.
+        return list(slide.extracted_topics)
 
     flat = []
     for week in sorted(COURSE_OUTLINES.get(course_code, {}).keys()):
@@ -642,7 +645,11 @@ def _find_slide_content_for_topic(course_code, level, topic_name):
 
     topic_chunk = slide.topic_chunks.filter(topic_name=topic_name).exclude(is_empty=True).first()
     if topic_chunk and topic_chunk.chunk_text.strip():
-        return topic_chunk.chunk_text[:12000]
+        text = topic_chunk.chunk_text
+        if len(text) > MAX_TOPIC_CONTEXT_CHARS:
+            cut = text.rfind("\n\n--- ", 0, MAX_TOPIC_CONTEXT_CHARS)
+            text = text[:cut] if cut > 0 else text[:MAX_TOPIC_CONTEXT_CHARS]
+        return text
 
     # Last-resort keyword fallback only.
     text = slide.extracted_text
@@ -1943,6 +1950,63 @@ def staff_bulk_delete_courses_view(request):
     return redirect("staff_manage_courses")
 
 @staff_required
+def staff_generate_battle_questions_view(request):
+    course_choices = list(
+        SlideTopicChunk.objects.filter(is_empty=False, slide__level__in=["300", "400"])
+        .values_list("slide__course_code", flat=True).distinct().order_by("slide__course_code")
+    )
+
+    if request.method == "POST":
+        form = BattleQuestionGenerationForm(request.POST, course_choices=course_choices)
+        if form.is_valid():
+            logs = []
+            result = run_battle_question_generation(
+                per_chunk=8,
+                sleep_seconds=3.5,
+                course_filter=form.cleaned_data["course_code"] or None,
+                retry_failed=form.cleaned_data["retry_failed"],
+                limit=form.cleaned_data["limit"],
+                log=lambda msg: logs.append(msg),
+            )
+            if result["chunks_processed"] == 0:
+                messages.info(request, "No eligible chunks left to process — everything is already generated (or previously failed; check 'retry failed' to try those again).")
+            else:
+                messages.success(
+                    request,
+                    f"Generated {result['questions_generated']} question(s) across "
+                    f"{result['chunks_processed'] - result['chunks_failed']} chunk(s). "
+                    f"All saved as pending_review — approve them in the admin before they're servable."
+                )
+            for failure in result["failures"]:
+                messages.warning(request, f"Failed: {failure}")
+            return redirect("staff_generate_battle_questions")
+    else:
+        form = BattleQuestionGenerationForm(course_choices=course_choices)
+
+    total_chunks = SlideTopicChunk.objects.filter(is_empty=False, slide__level__in=["300", "400"]).count()
+    completed = BattleQuestionGenerationChunk.objects.filter(status="COMPLETED").count()
+    failed = BattleQuestionGenerationChunk.objects.filter(status="FAILED").count()
+    attempted = BattleQuestionGenerationChunk.objects.count()
+    never_attempted = max(0, total_chunks - attempted)
+
+    return render(request, "core/staff/generate_battle_questions.html", {
+        "form": form,
+        "total_chunks": total_chunks,
+        "completed": completed,
+        "failed": failed,
+        "never_attempted": never_attempted,
+    })
+
+def _render_reference_table_lecture(topic_name, chunk_text):
+    """No LLM call — the source is a bare reference table/chart, so we
+    present it directly rather than risking fabricated explanation."""
+    return (
+        f"**{topic_name}**\n\n"
+        f"This is a quick-reference topic — here's exactly what your lecturer's slide covers:\n\n"
+        f"{chunk_text.strip()}"
+    )
+
+@staff_required
 def staff_pregeneerate_lessons_view(request):
     """Staff portal — pre-generate lessons for a course and week"""
     courses = CourseDefinition.objects.all().order_by("level", "semester", "course_code")
@@ -1985,13 +2049,23 @@ def staff_pregeneerate_lessons_view(request):
                 course=course, week_number=week_number, topic_title=topic,
             ).first()
 
-            # Already complete — nothing to do.
             if existing and existing.content_chunk.strip() and not existing.is_truncated:
                 continue
 
-            # Truncated with content already saved — CONTINUE from it,
-            # don't regenerate from scratch. This is what makes retries
-            # actually make progress instead of resetting every run.
+            # NEW — reference-table topics skip LLM generation entirely.
+            if chunk_text and is_reference_table_content(chunk_text):
+                PreGeneratedLesson.objects.update_or_create(
+                    course=course, week_number=week_number, topic_title=topic,
+                    defaults={
+                        "content_chunk": _render_reference_table_lecture(topic, chunk_text),
+                        "is_published": False,
+                        "is_truncated": False,
+                        "continuation_attempts": 0,
+                    }
+                )
+                generated_count += 1
+                continue
+
             if existing and existing.is_truncated and existing.content_chunk.strip():
                 if existing.continuation_attempts >= MAX_CONTINUATION_ATTEMPTS:
                     errors.append(
@@ -3083,4 +3157,71 @@ def quiz_result_view(request, topic_session_id):
         "is_last_topic": is_last_topic,
         "total_topics": total_topics,
         "topic_number": topic_session.topic_index + 1,
+    })
+
+@staff_required
+def staff_review_battle_questions_view(request):
+    if request.method == "POST":
+        question_id = request.POST.get("question_id")
+        action = request.POST.get("action")
+        question = get_object_or_404(BattleQuestion, id=question_id)
+        result_message = ""
+
+        if action == "approve":
+            question.status = "approved"
+            question.save(update_fields=["status"])
+            result_message = "Approved."
+        elif action == "disapprove":
+            question.status = "pending_review"
+            question.save(update_fields=["status"])
+            result_message = "Moved back to pending review."
+        elif action == "retire":
+            question.status = "retired"
+            question.save(update_fields=["status"])
+            result_message = "Retired."
+        elif action == "retire_and_regenerate":
+            question.status = "retired"
+            question.save(update_fields=["status"])
+            if question.source_chunk:
+                BattleQuestionGenerationChunk.objects.filter(source_chunk=question.source_chunk).delete()
+                result_message = "Retired — source chunk reset for regeneration."
+            else:
+                result_message = "Retired — no source chunk to regenerate."
+
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"ok": True, "message": result_message})
+        return redirect("staff_review_battle_questions")
+
+    course_filter = request.GET.get("course_code", "")
+
+    questions = BattleQuestion.objects.filter(status="pending_review").select_related(
+        "source_chunk"
+    ).prefetch_related("options").order_by("course_code", "-created_at")
+    if course_filter:
+        questions = questions.filter(course_code=course_filter)
+
+    approved_questions = BattleQuestion.objects.filter(status="approved").select_related(
+        "source_chunk"
+    ).prefetch_related("options").order_by("course_code", "-created_at")
+    if course_filter:
+        approved_questions = approved_questions.filter(course_code=course_filter)
+
+    flagged, normal = [], []
+    for q in questions:
+        combined_text = q.stem + " " + " ".join(o.text for o in q.options.all())
+        (flagged if CITATION_HEURISTIC_RE.search(combined_text) else normal).append(q)
+
+    course_choices = list(
+        BattleQuestion.objects.exclude(status="retired")
+        .values_list("course_code", flat=True).distinct().order_by("course_code")
+    )
+
+    return render(request, "core/staff/review_battle_questions.html", {
+        "flagged_questions": flagged,
+        "normal_questions": normal,
+        "approved_questions": approved_questions,
+        "course_choices": course_choices,
+        "selected_course": course_filter,
+        "pending_count": len(flagged) + len(normal),
+        "approved_count": approved_questions.count(),
     })

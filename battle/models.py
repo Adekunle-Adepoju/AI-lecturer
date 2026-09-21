@@ -229,7 +229,19 @@ class BattleMatchQuestion(models.Model):
 
     class Meta:
         ordering = ["match", "sequence_number"]
-        unique_together = ["match", "sequence_number"]
+        unique_together = ["match", "sequence_number", "is_bonus"]
 
     def __str__(self):
         return f"{self.match} — Q{self.sequence_number}"
+
+class BattleMatchPlayer(models.Model):
+    match = models.ForeignKey(BattleMatch, on_delete=models.CASCADE, related_name="players")
+    student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="battle_match_results")
+    team = models.CharField(max_length=1, choices=TEAM_CHOICES)
+    won = models.BooleanField(null=True, blank=True)  # null until the match resolves
+    disconnected = models.BooleanField(default=False)
+    xp_awarded = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ["match", "student"]
+        indexes = [models.Index(fields=["student", "won"])]

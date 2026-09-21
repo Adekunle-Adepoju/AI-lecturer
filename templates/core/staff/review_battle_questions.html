@@ -1,0 +1,91 @@
+{% extends "core/base.html" %}
+{% block title %}Review Battle Questions — Rovea{% endblock %}
+{% block body_attrs %} data-back-target="{% url 'staff_portal' %}"{% endblock %}
+
+{% csrf_token %}
+{% block content %}
+<div class="page-container">
+  <a href="{% url 'staff_portal' %}" style="font-size:13px; color:var(--text-secondary)">← Back to Staff Portal</a>
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">🔍 Review Battle Questions</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:20px">
+    {{ pending_count }} question(s) awaiting review. Check each one against its source
+    chunk — the highlighted "possible external source" flag is a keyword scan only, not
+    a real fidelity check. A question can still be ungrounded without tripping it.
+  </p>
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="message" style="margin-bottom:12px">{{ message }}</div>
+  {% endfor %}
+  {% endif %}
+
+  {% if course_choices %}
+  <div style="margin-bottom:20px">
+    <select onchange="window.location.href = this.value ? '?course_code=' + this.value : window.location.pathname">
+      <option value="">All courses</option>
+      {% for code in course_choices %}
+      <option value="{{ code }}" {% if code == selected_course %}selected{% endif %}>{{ code }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  {% if flagged_questions %}
+  <p class="section-label" style="color:#F08080">⚠ Possible External Source — Check Carefully</p>
+  {% for q in flagged_questions %}
+    {% include "core/staff/_battle_question_card.html" with q=q flagged=True %}
+  {% endfor %}
+  {% endif %}
+
+  <p class="section-label">{% if flagged_questions %}Other Pending Questions{% else %}Pending Questions{% endif %}</p>
+  {% for q in normal_questions %}
+    {% include "core/staff/_battle_question_card.html" with q=q flagged=False %}
+  {% empty %}
+  {% if not flagged_questions %}
+  <p style="font-size:13px; color:var(--text-secondary)">Nothing pending review right now.</p>
+  {% endif %}
+  {% endfor %}
+</div>
+  <p class="section-label" style="margin-top:28px">Approved Questions ({{ approved_count }})</p>
+  {% for q in approved_questions %}
+    {% include "core/staff/_battle_question_card.html" with q=q flagged=False %}
+  {% empty %}
+  <p style="font-size:13px; color:var(--text-secondary)">No approved questions yet.</p>
+  {% endfor %}
+
+<script>
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? match[2] : null;
+}
+
+function battleQuestionAction(questionId, action) {
+  const card = document.getElementById(`battle-q-${questionId}`);
+  const actionsRow = card.querySelector('.battle-q-actions');
+  const statusEl = card.querySelector('.battle-q-status');
+  actionsRow.querySelectorAll('button').forEach(b => b.disabled = true);
+
+  fetch(window.location.pathname + window.location.search, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRFToken': getCookie('csrftoken'),
+    },
+    body: new URLSearchParams({question_id: questionId, action: action}),
+  })
+    .then(r => r.json())
+    .then(data => {
+      actionsRow.style.display = 'none';
+      statusEl.textContent = data.message || 'Done.';
+      statusEl.style.display = 'block';
+      card.style.opacity = '0.5';
+    })
+    .catch(() => {
+      actionsRow.querySelectorAll('button').forEach(b => b.disabled = false);
+      alert('Something went wrong — try again.');
+    });
+}
+</script>
+{% endblock %}

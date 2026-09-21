@@ -1,6 +1,7 @@
 {% extends "core/base.html" %}
 {% load simulator_tags %}
 {% block title %}Test — {{ test.course_code }} — Rovea{% endblock %}
+{% block body_attrs %} data-back-target="{% url 'simulator_home' %}"{% endblock %}
 
 {% block content %}
 <div class="page-container">
@@ -68,4 +69,32 @@
   </form>
 
 </div>
+<script>
+(function() {
+  var hasAnswered = false;
+
+  document.getElementById('testForm').addEventListener('input', function() {
+    hasAnswered = true;
+  });
+  document.getElementById('testForm').addEventListener('change', function() {
+    hasAnswered = true;
+  });
+
+  // Called by base.html's Back-button guard at the moment Back is pressed —
+  // returning a message shows the confirm dialog; returning null/false skips
+  // it entirely, so leaving an untouched test page is silent, as it should be.
+  window.roveaLeaveGuard = function() {
+    return hasAnswered
+      ? "Leave this test? Your answers won't be saved — you'll need to start over."
+      : null;
+  };
+
+  // The guard is for accidental navigation only — an actual submit should
+  // never be intercepted or asked to confirm twice (the existing onclick
+  // confirm on the submit button already handles that separately).
+  document.getElementById('testForm').addEventListener('submit', function() {
+    window.roveaLeaveGuard = function() { return null; };
+  });
+})();
+</script>
 {% endblock %}

@@ -59,4 +59,6 @@ urlpatterns = [
     path("lecture/<int:topic_session_id>/", views.topic_lecture_view, name="topic_lecture"),
     path("result/<int:topic_session_id>/", views.quiz_result_view, name="quiz_result"),
     path("simulator/topics-for-course/", views.topics_for_course_view, name="topics_for_course"),
+    path("staff/battle-questions/generate/", views.staff_generate_battle_questions_view, name="staff_generate_battle_questions"),
+    path("staff/battle-questions/review/", views.staff_review_battle_questions_view, name="staff_review_battle_questions"),
 ]

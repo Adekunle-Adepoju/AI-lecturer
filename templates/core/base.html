@@ -221,7 +221,7 @@
 
 </head>
 
-<body>
+<body{% block body_attrs %}{% endblock %}>
 
 {% if user.is_authenticated %}
 <nav class="navbar">
@@ -413,6 +413,38 @@
       behavior: "smooth"
     });
   });
+</script>
+<script>
+(function() {
+  var backTarget = document.body.getAttribute('data-back-target');
+  var guardMessage = document.body.getAttribute('data-leave-guard');
+  if (!backTarget && !guardMessage && typeof window.roveaLeaveGuard !== 'function') return;
+
+  history.pushState({ roveaBackGuard: true }, '', location.href);
+
+  window.addEventListener('popstate', function() {
+    // A page can define window.roveaLeaveGuard = function(){ return "message" or null/false; }
+    // to decide dynamically, at the moment Back is pressed, whether a
+    // warning is actually warranted — e.g. a test page only wants to warn
+    // once the student has actually started answering, not before.
+    var message = guardMessage;
+    if (typeof window.roveaLeaveGuard === 'function') {
+      message = window.roveaLeaveGuard();
+    }
+
+    if (message) {
+      var proceed = confirm(message);
+      if (!proceed) {
+        history.pushState({ roveaBackGuard: true }, '', location.href);
+        return;
+      }
+    }
+
+    if (backTarget) {
+      window.location.replace(backTarget);
+    }
+  });
+})();
 </script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 {% extends "core/base.html" %}
 {% block title %}Battle Room {{ room_code }} — Rovea{% endblock %}
+{% block body_attrs %} data-back-target="{% url 'dashboard' %}" data-leave-guard="Leave this battle room? If a match is in progress, your team may end up short a player."{% endblock %}
 
 {% block content %}
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">

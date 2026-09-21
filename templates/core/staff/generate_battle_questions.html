@@ -1,0 +1,54 @@
+{% extends "core/base.html" %}
+{% block title %}Generate Battle Questions — Rovea{% endblock %}
+{% block body_attrs %} data-back-target="{% url 'staff_portal' %}"{% endblock %}
+
+{% csrf_token %}
+{% block content %}
+<div class="page-container">
+  <a href="{% url 'staff_portal' %}" style="font-size:13px; color:var(--text-secondary)">← Back to Staff Portal</a>
+
+  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">⚔️ Generate Battle Questions</h2>
+  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
+    Generates MCQs from non-empty slide topic chunks for battle mode. Runs synchronously —
+    the page will pause while it works, same as Pre-generate Lessons. Keep the chunk limit
+    modest so one click doesn't run too long. Everything generated lands as
+    <strong>pending review</strong> — approve or retire questions in Django admin before
+    they enter real matches.
+  </p>
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="message" style="margin-bottom:12px">{{ message }}</div>
+  {% endfor %}
+  {% endif %}
+
+  <div style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-xl); padding:1.25rem 1.5rem; margin-bottom:24px">
+    <div style="font-size:12px; font-weight:700; color:var(--amber); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:10px">Bank Status</div>
+    <p style="font-size:14px; color:var(--text-secondary)">
+      {{ total_chunks }} eligible chunk(s) total —
+      <strong style="color:var(--text)">{{ completed }}</strong> completed,
+      <strong style="color:var(--text)">{{ failed }}</strong> failed,
+      <strong style="color:var(--text)">{{ never_attempted }}</strong> never attempted.
+    </p>
+  </div>
+
+  <form method="POST">
+    {% csrf_token %}
+    <div class="form-group" style="margin-bottom:16px">
+      <label style="display:block; font-size:13px; margin-bottom:6px">{{ form.course_code.label }}</label>
+      {{ form.course_code }}
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label style="display:block; font-size:13px; margin-bottom:6px">{{ form.limit.label }}</label>
+      {{ form.limit }}
+      <div style="font-size:12px; color:var(--text-muted); margin-top:4px">{{ form.limit.help_text }}</div>
+    </div>
+    <div class="form-group" style="margin-bottom:20px">
+      <label style="display:flex; align-items:center; gap:8px; font-size:13px">
+        {{ form.retry_failed }} {{ form.retry_failed.label }}
+      </label>
+    </div>
+    <button type="submit" class="btn btn-primary btn-full">Generate →</button>
+  </form>
+</div>
+{% endblock %}
