@@ -17,9 +17,9 @@
      mirror document.documentElement's data-theme instead of
      adding a second toggle here.
 
-     Backend contract is untouched: {{ form.username }} and
-     {{ form.password }} are still Django's own widget output —
-     never replaced with hand-written <input> tags — and every
+     Backend contract is untouched: the username and password fields
+     are still Django's own widget output — never replaced with
+     hand-written <input> tags — and every
      url tag, csrf_token, and JS hook (#togglePassword,
      #id_password) keeps its original id/name/behavior.
      ========================================================= */
