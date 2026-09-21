@@ -372,7 +372,7 @@
   let currentChunkIndex = {{ current_chunk_index|default:0 }};
   let totalChunks = {{ total_chunks|default:0 }};
   let isLastChunk = {{ is_last_chunk|yesno:"true,false" }};
-  const firstChunk = "{{ first_chunk|default:"''"|safe|escapejs }}";
+  const firstChunk = {{ first_chunk|default:""|escapejs|json_script }}
 
   function getCookie(name) {
     const value = `; ${document.cookie}`;
