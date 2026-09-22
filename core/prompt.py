@@ -871,8 +871,12 @@ HOW TO WRITE IT
   the slide's number and match your working to it. Never give two different values for
   the same quantity.
 - Comparisons in a table use pipe format, with a blank line before and after.
-- Never use image markers, ASCII art, code fences, Markdown image syntax, or
-  ---separators---.
+- Never use image markers, ASCII art, Markdown image syntax, or
+  ---separators---. The only code fences you may ever use are the three
+  sanctioned visual-block fences (```json_chart, ```mermaid, ```svg)
+  described later in this prompt, and only under that section's own
+  pre-check and limits — never a bare ``` fence for anything else,
+  including tables, quotes, or plain text.
 """
 
 
@@ -955,6 +959,17 @@ HARD LIMITS (apply regardless of the pre-check):
   write the chart — a chart with invented numbers is a fidelity violation
   identical to inventing a fact in prose, and is worse than no chart.
 
+## SPECIFIC TRIGGER — COMPUTED DATA TABLES
+Whenever you compute or present a table of paired numeric values across a
+range (Pwf vs q for an IPR curve, pressure vs rate, time vs production
+rate, and similar) — render that data as a json_chart. A text table of
+numbers you just computed from the slide's own formula is real numeric
+data straight from the source; it satisfies both the explicit-requirement
+and genuine-complexity bars in the pre-check by definition, not the bar
+for inventing content. You may keep the text table alongside the chart
+if it aids reference, but the chart itself is not optional once the data
+exists in this form.
+
 ## ```json_chart``` — exact shape, nothing else
 ```json_chart
 {
@@ -1029,3 +1044,4 @@ flowchart LR
 
 SYSTEM_PROMPT = SYSTEM_PROMPT + "\n" + VISUAL_BLOCK_PROMPT
 CHAT_SYSTEM_PROMPT = CHAT_SYSTEM_PROMPT + "\n" + VISUAL_BLOCK_PROMPT
+LECTURE_PROMPT = LECTURE_PROMPT + "\n" + VISUAL_BLOCK_PROMPT

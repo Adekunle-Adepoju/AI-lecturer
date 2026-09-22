@@ -814,19 +814,49 @@ def _parse_lecture(full_text):
         "explanation": explanation,
     }
 
+_WORKED_EXAMPLE_ANCHOR_RE = re.compile(r"(let us walk through|worked example)", re.IGNORECASE)
+_HEADING_START_RE = re.compile(r"^\*\*[^*]+\*\*")
+_WORKED_EXAMPLE_MAX_MERGE = 3600  # hard cap so one merge run can't swallow the rest of the lecture
+
+
+def _merge_worked_example_paragraphs(paragraphs):
+    """Group a worked example's intro paragraph with every sub-step
+    paragraph that follows it into one atomic block, so the greedy
+    packer in _split_into_pages can never place a page break inside
+    one — it either keeps the whole example together on one page, or
+    (if the example alone exceeds target_chars) gives it its own page,
+    but never opens mid-calculation or mid-sentence."""
+    merged = []
+    i, n = 0, len(paragraphs)
+    while i < n:
+        para = paragraphs[i]
+        if _WORKED_EXAMPLE_ANCHOR_RE.search(para):
+            block = para
+            j = i + 1
+            while j < n:
+                nxt = paragraphs[j]
+                if _WORKED_EXAMPLE_ANCHOR_RE.search(nxt) or _HEADING_START_RE.match(nxt.strip()):
+                    break
+                if len(block) + len(nxt) > _WORKED_EXAMPLE_MAX_MERGE:
+                    break
+                block = f"{block}\n\n{nxt}"
+                j += 1
+            merged.append(block)
+            i = j
+        else:
+            merged.append(para)
+            i += 1
+    return merged
 
 def _split_into_pages(text, target_chars=1800):
-    """Break a long pre-generated lecture into digestible pages. Tries
-    paragraph boundaries first; if the text has no blank-line breaks at
-    all (single-newline formatting), falls back to sentence boundaries
-    so pagination always works regardless of how Gemini formatted it."""
     text = text.strip()
     paragraphs = [p for p in re.split(r"\n\s*\n", text) if p.strip()]
 
     if len(paragraphs) <= 1:
-        # No real paragraph breaks found — split on sentences instead.
         sentences = re.split(r"(?<=[.!?])\s+", text)
         paragraphs = [s for s in sentences if s.strip()]
+
+    paragraphs = _merge_worked_example_paragraphs(paragraphs)   # ← new line
 
     pages = []
     current = ""
