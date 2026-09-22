@@ -30,7 +30,10 @@ from .models import (
     SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES, CourseDefinition,
     PastQuestion, SimulatorTest, PreGeneratedLesson, SlideTopicChunk,
 )
-from .prompt import SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, QUIZ_GENERATION_PROMPT
+from .prompt import (
+    SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, QUIZ_GENERATION_PROMPT,
+    LECTURE_PROMPT, LECTURE_VERIFIER_PROMPT,
+)
 from functools import wraps
 from .staff_forms import SlideUploadForm, CourseOutlineUploadForm, PastQuestionUploadForm, CourseDefinitionForm
 from .prompt import (
@@ -50,49 +53,10 @@ client = genai.Client(api_key=settings.GEMINI_API_KEY_CHAT)
 simulator_client = genai.Client(api_key=settings.GEMINI_API_KEY_SIMULATOR)
 extraction_client = genai.Client(api_key=settings.GEMINI_API_KEY_EXTRACTION)
 generation_client = genai.Client(api_key=settings.GEMINI_API_KEY_GENERATION)
-IMAGE_MARKER_RE = re.compile(r'\[IMAGE:\s*(.*?)\]', re.IGNORECASE)
-
-MARKDOWN_IMAGE_RE = re.compile(r'!\[(.*?)\]\(https?://\S+\)')
 CITATION_HEURISTIC_RE = re.compile(
     r"\b(edition|glossary|et al\.?|isbn|vol\.|published|textbook)\b", re.IGNORECASE
 )
 MAX_TOPIC_CONTEXT_CHARS = 24000
-
-def _process_chunk_image(chunk_text, course_code):
-    """Extract an [IMAGE: ...] marker OR a hallucinated Markdown image
-    tag (![alt](url) — models sometimes fabricate real-looking URLs to
-    third-party image services despite instructions not to) from
-    pregenerated chunk text, generate the real image, and return
-    (clean_text, image_url). image_url is None if no marker is present
-    or generation fails — caller just gets clean text with no image,
-    never an error."""
-    image_url = None
-    description = None
-
-    match = IMAGE_MARKER_RE.search(chunk_text)
-    if match:
-        description = match.group(1).strip()
-        chunk_text = IMAGE_MARKER_RE.sub("", chunk_text).strip()
-    else:
-        md_match = MARKDOWN_IMAGE_RE.search(chunk_text)
-        if md_match:
-            # Salvage the alt text as a description, discard the
-            # fabricated URL entirely — it will never resolve to a
-            # real image, so it must never reach the student as text.
-            description = md_match.group(1).strip()
-            chunk_text = MARKDOWN_IMAGE_RE.sub("", chunk_text).strip()
-
-    if description:
-        try:
-            from .lecture_images import generate_topic_image
-            image_path = generate_topic_image(description, course_code)
-            if image_path:
-                image_url = settings.MEDIA_URL + image_path
-        except Exception:
-            import traceback
-            traceback.print_exc()
-
-    return chunk_text, image_url
 
 
 def _build_history(topic_session):
@@ -224,22 +188,6 @@ def chat_message_view(request):
             return
 
         image_url = None
-        image_match = IMAGE_MARKER_RE.search(full_reply)
-        if image_match:
-            description = image_match.group(1).strip()
-            full_reply = IMAGE_MARKER_RE.sub("", full_reply)
-            if description:
-                try:
-                    from .lecture_images import generate_topic_image
-                    image_path = generate_topic_image(
-                        description, topic_session.session.course_code
-                    )
-                    if image_path:
-                        image_url = settings.MEDIA_URL + image_path
-                except Exception:
-                    import traceback
-                    traceback.print_exc()
-
         is_complete = "TOPIC_COMPLETE" in full_reply
         clean_reply = full_reply.replace("TOPIC_COMPLETE", "").strip()
         ChatMessage.objects.create(
@@ -696,6 +644,15 @@ def _generate_topic_lecture(course_code, course_title, topic_name, week, level, 
         for pq in past_questions:
             past_q_text += f"- {pq.get('question', '')}\n"
 
+    course_opening = ""
+    if week == 1 and topic_index == 0:
+        course_opening = (
+            "COURSE OPENING: This is the very first lesson of the entire course. "
+            "Open with a one- or two-sentence welcome to the course by title, say what this "
+            "first topic covers, and assume the student knows nothing yet: define every term "
+            "before you use it.\n"
+        )
+
     user_message = (
         f"Student name: {student_name}\n"
         f"Level: {level}L\n"
@@ -705,6 +662,7 @@ def _generate_topic_lecture(course_code, course_title, topic_name, week, level, 
         f"Week: {week} of {TOTAL_TEACHING_WEEKS}\n"
         f"STRICT INSTRUCTION: Teach ONLY '{topic_name}'. Do not teach any other topic. "
         f"Follow the course outline strictly. This is the exact topic scheduled for this session."
+        f"{course_opening}"
         f"{slide_text}"
         f"{past_q_text}"
     )
@@ -1181,14 +1139,11 @@ def _render_chat_session(request, entry, profile, session):
             ).count()
 
             if saved_chunk_count == 0 and topic_session.chunks:
-                clean_text, image_url = _process_chunk_image(
-                    topic_session.chunks[0], session.course_code
-                )
                 ChatMessage.objects.create(
                     topic_session=topic_session,
                     role="ai",
-                    content=clean_text,
-                    image_url=image_url,
+                    content=topic_session.chunks[0],
+                    image_url=None,
                     is_pregenerated=True,
                 )
                 saved_chunk_count = 1
@@ -2007,6 +1962,155 @@ def _render_reference_table_lecture(topic_name, chunk_text):
         f"{chunk_text.strip()}"
     )
 
+def _call_generation_model(contents, system_instruction, max_output_tokens, temperature, label):
+    """Same retry behaviour as _generate_topic_lecture, but with temperature control."""
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = generation_client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    max_output_tokens=max_output_tokens,
+                    temperature=temperature,
+                ),
+            )
+            text = response.text
+            if not text or not text.strip():
+                raise ValueError("Empty response")
+            hit_limit = False
+            try:
+                hit_limit = "MAX_TOKENS" in str(response.candidates[0].finish_reason)
+            except Exception:
+                pass
+            return text, hit_limit
+        except Exception as e:
+            last_error = e
+            s = str(e)
+            if "429" in s or "RESOURCE_EXHAUSTED" in s:
+                print(f"{label}: 429 (attempt {attempt + 1}/3) — sleeping 20s...")
+                time.sleep(20)
+                continue
+            transient = any(m in s for m in (
+                "503", "UNAVAILABLE", "timeout", "Timeout",
+                "ConnectionError", "RemoteDisconnected",
+            ))
+            if transient and attempt < 2:
+                print(f"{label}: transient error (attempt {attempt + 1}/3) — retrying in 10s...")
+                time.sleep(10)
+                continue
+            break
+    raise RuntimeError(f"{label} failed: {last_error}")
+
+
+def _generate_pregenerated_lecture(course_code, course_title, topic_name, chunk_text,
+                                   fix_notes="", is_course_opening=False):
+    opening = ""
+    if is_course_opening:
+        opening = (
+            "COURSE OPENING (this overrides the 'no greeting' rule): this is the very first "
+            f"lesson of {course_code} — {course_title}. Begin with one sentence welcoming "
+            "students to the course by its title, then two sentences on what this first topic "
+            "covers. Nothing has been taught in this course yet, so do not refer back to earlier "
+            "material, and define every course-specific term before you use it.\n\n"
+        )
+
+    fix_block = ""
+    if fix_notes:
+        fix_block = (
+            "\n\nA PREVIOUS DRAFT OF THIS LECTURE HAD THE FOLLOWING FIDELITY ISSUES — DO NOT "
+            "REPEAT THEM. Rewrite the lecture from scratch, fixing every one of these:\n"
+            f"{fix_notes}\n"
+        )
+
+    contents = (
+        opening +
+        f"Course: {course_code} — {course_title}\n"
+        f"Topic to teach: {topic_name}\n\n"
+        f"LECTURER SLIDES:\n{chunk_text}"
+        f"{fix_block}"
+    )
+
+    return _call_generation_model(
+        contents=contents,
+        system_instruction=LECTURE_PROMPT,
+        max_output_tokens=16000,
+        temperature=0.4,
+        label=f"Lecture gen — {topic_name}",
+    )
+
+
+def _generate_verified_lecture(course_code, course_title, topic_name, chunk_text, is_course_opening=False):
+    """Returns (lecture_text, review_note, hit_limit)."""
+    text, hit_limit = _generate_pregenerated_lecture(
+        course_code, course_title, topic_name, chunk_text, is_course_opening=is_course_opening
+    )
+    if hit_limit:
+        return text, "the model hit its output limit, so the lecture is cut off", True
+    time.sleep(3)
+    issues = _lecture_issues(_verify_lecture(chunk_text, text))
+
+    if issues == []:
+        return text, "", False
+    if issues is None:
+        return text, "the checker gave no usable report — read this one against the slides", False
+
+    time.sleep(3.5)
+    text2, hit_limit2 = _generate_pregenerated_lecture(
+        course_code, course_title, topic_name, chunk_text,
+        fix_notes="\n".join(issues), is_course_opening=is_course_opening,
+    )
+    if hit_limit2:
+        return text, "checker flagged: " + " ".join(issues[:5]), False
+    time.sleep(3)
+    issues2 = _lecture_issues(_verify_lecture(chunk_text, text2))
+
+    if issues2 == []:
+        return text2, "", False
+    if issues2 is None:
+        return text2, "second draft could not be checked — read it against the slides", False
+    if len(issues2) <= len(issues):
+        return text2, "checker still flags: " + " ".join(issues2[:5]), False
+    return text, "checker still flags: " + " ".join(issues[:5]), False
+
+_VERIFIER_LABELS = {
+    "unsupported": "Not in the slides",
+    "strengthened": "Stated more strongly than the slides",
+    "misplaced": "Fact attached to the wrong concept",
+    "missing": "Slide point never taught",
+    "unexplained_terms": "Topic-specific term used without explanation",
+    "inconsistent": "Two different values given for one quantity",
+}
+
+def _verify_lecture(chunk_text, lecture):
+    """Returns the verifier's report as a dict, or None if it couldn't be obtained/parsed."""
+    prompt = LECTURE_VERIFIER_PROMPT.replace("__SLIDE__", chunk_text).replace("__LECTURE__", lecture)
+    try:
+        raw, _ = _call_generation_model(prompt, None, 2000, 0.0, "Lecture verifier")
+    except Exception as e:
+        print(f"Lecture verifier unavailable: {e}")
+        return None
+    start, end = raw.find("{"), raw.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    try:
+        report = json.loads(raw[start:end + 1])
+    except json.JSONDecodeError:
+        return None
+    return report if isinstance(report, dict) else None
+
+
+def _lecture_issues(report):
+    """List of issue strings ([] = clean), or None if there was no usable report."""
+    if report is None:
+        return None
+    issues = []
+    for key, label in _VERIFIER_LABELS.items():
+        for item in (report.get(key) or []):
+            issues.append(f"- {label}: {item}")
+    return issues
+
 @staff_required
 def staff_pregeneerate_lessons_view(request):
     """Staff portal — pre-generate lessons for a course and week"""
@@ -2120,40 +2224,40 @@ def staff_pregeneerate_lessons_view(request):
 
                 continue  # move to next topic — don't fall through to fresh generation
 
-            # No existing content at all — fresh generation.
-            try:
-                full_text = _generate_topic_lecture(
-                    course.course_code, course.course_title, topic, week_number,
-                    course.level, student_name="Student", topic_index=i,
-                    slide_text=slide_text + outline_text,
-                    total_topics_in_round=len(topics),
+                        # No existing content at all — fresh generation.
+            if not chunk_text:
+                errors.append(
+                    f"{topic}: no slide content found for this topic — skipped "
+                    f"(run the topic split first)."
                 )
+                continue
+
+            try:
+                full_text, review_note, hit_limit = _generate_verified_lecture(
+                course.course_code, course.course_title, topic, chunk_text,
+                is_course_opening=(week_number == 1 and i == 0),
+            )
+
+                if hit_limit:
+                    errors.append(f"{topic}: hit the output limit — not saved. Run again to regenerate.")
+                    continue
 
                 if not full_text or not full_text.strip():
                     errors.append(f"{topic}: AI returned empty response — skipping.")
                     continue
 
-                truncated = is_lecture_truncated(full_text)
-                parsed = _parse_lecture(full_text)
-                content = parsed["lecture"] if parsed.get("lecture") else full_text
-                safe_content = content if not truncated else find_safe_cutoff(content)
-
-                if not safe_content or not safe_content.strip():
-                    errors.append(f"{topic}: Parsed content was empty — skipping.")
-                    continue
-
                 PreGeneratedLesson.objects.update_or_create(
                     course=course, week_number=week_number, topic_title=topic,
                     defaults={
-                        "content_chunk": safe_content,
+                        "content_chunk": full_text,
                         "is_published": False,
-                        "is_truncated": truncated,
+                        "is_truncated": False,
                         "continuation_attempts": 0,
                     }
                 )
                 generated_count += 1
-                if truncated:
-                    errors.append(f"{topic}: generated but truncated — will continue on next run.")
+                if review_note:
+                    errors.append(f"{topic}: saved, but review before publishing — {review_note}")
 
                 time.sleep(3.5)
 
@@ -2883,15 +2987,11 @@ def chunk_next_view(request):
     raw_chunk_text = topic_session.chunks[next_index]
     is_last = (next_index == total_chunks - 1)
 
-    clean_text, image_url = _process_chunk_image(
-        raw_chunk_text, topic_session.session.course_code
-    )
-
     ChatMessage.objects.create(
         topic_session=topic_session,
         role="ai",
-        content=clean_text,
-        image_url=image_url,
+        content=raw_chunk_text,
+        image_url=None,
         is_pregenerated=True,
     )
 
@@ -2901,8 +3001,8 @@ def chunk_next_view(request):
 
     return JsonResponse({
         "action": "next_chunk",
-        "chunk": clean_text,
-        "image_url": image_url,
+        "chunk": raw_chunk_text,
+        "image_url": None,
         "chunk_index": next_index,
         "total_chunks": total_chunks,
         "is_last": is_last,

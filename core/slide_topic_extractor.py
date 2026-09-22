@@ -836,6 +836,9 @@ def split_slide_by_extracted_topics(slide):
               f"{', '.join(unassigned[:30])}{'...' if len(unassigned) > 30 else ''}")
     return True, created
 
+def split_all_weeks_by_topic(slide):
+    """Kept because _parse_slide_document and older code still call this name."""
+    return split_slide_by_extracted_topics(slide)
 
 def retry_missing_topic_splits(slide, topic_names=None):
     """Re-run the page mapping ONLY for topics currently empty (or named),

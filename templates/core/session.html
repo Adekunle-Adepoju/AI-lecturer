@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load static %}
 {% block title %}{{ entry.course_code }} — Rovea{% endblock %}
 {% block body_attrs %}{% if chat_mode %} data-back-target="{% url 'dashboard' %}" data-leave-guard="Leave this lecture? Your progress is saved, and you can pick up right where you left off next time."{% else %} data-back-target="{% url 'dashboard' %}"{% endif %}{% endblock %}
 
@@ -341,6 +342,14 @@
 
 </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+  window.mermaid = mermaid;
+  mermaid.initialize({ startOnLoad: false, theme: "dark" });
+</script>
+<script src="{% static 'core/js/rovea-visual-renderer.js' %}"></script>
+<script src="{% static 'core/js/session.js' %}"></script>
 <script>
 (function(){
   "use strict";
@@ -645,6 +654,31 @@
     } catch (e) {}
   }
 
+function fillAiBubble(bubble, rawText) {
+  const segments = window.RoveaVisualRenderer
+    ? window.RoveaVisualRenderer._internal.splitIntoSegments(rawText)
+    : [{ type: "text", content: rawText }];
+
+  segments.forEach(seg => {
+    if (seg.type === "text") {
+      if (!seg.content.trim()) return;
+      const wrap = document.createElement("div");
+      wrap.innerHTML = renderMarkdown(seg.content);
+      renderMathIn(wrap);
+      bubble.appendChild(wrap);
+    } else if (window.RoveaVisualRenderer) {
+      const { renderJsonChart, renderMermaid, renderSvg } = window.RoveaVisualRenderer._internal;
+      let node = null;
+      if (seg.type === "json_chart") node = renderJsonChart(seg.raw);
+      else if (seg.type === "mermaid") node = renderMermaid(seg.raw);
+      else if (seg.type === "svg") node = renderSvg(seg.raw);
+      if (node) bubble.appendChild(node);
+    }
+  });
+
+  attachSpeakButton(bubble, rawText);
+}
+
   function showTypingIndicator() {
     const row = document.createElement("div");
     row.className = "msg-row ai typing-row";
@@ -777,11 +811,9 @@
         }
 
         if (payload.done) {
-          aiBubble.innerHTML = renderMarkdown(rawText);
-          renderMathIn(aiBubble);
-                    attachSpeakButton(aiBubble, rawText);
-          // Show understanding buttons again after Gemini replies
+          fillAiBubble(aiBubble, rawText);
           understandingControls.style.display = "flex";
+          scrollChatToBottom();
         }
       }
     }
@@ -789,10 +821,8 @@
 
     // ── Deliver a chunk as an AI bubble ──────────────────────────────────────
     function deliverChunk(chunkText, chunkIndex, totalChunks, isLast, imageUrl) {
-    const bubble = createAiBubble();
-    bubble.innerHTML = renderMarkdown(stripImageMarker(chunkText));
-    renderMathIn(bubble);
-    attachSpeakButton(bubble, stripImageMarker(chunkText));
+      const bubble = createAiBubble();
+      fillAiBubble(bubble, stripImageMarker(chunkText));
 
     if (imageUrl) {
       const img = document.createElement("img");
@@ -921,9 +951,7 @@
         }
 
         if (payload.done) {
-          aiBubble.innerHTML = renderMarkdown(stripImageMarker(rawText.replace("TOPIC_COMPLETE", "")));
-          renderMathIn(aiBubble);
-                    attachSpeakButton(aiBubble, stripImageMarker(rawText.replace("TOPIC_COMPLETE", "")));
+          fillAiBubble(aiBubble, stripImageMarker(rawText.replace("TOPIC_COMPLETE", "")));
           if (payload.image_url) {
             const img = document.createElement("img");
             img.src = payload.image_url;
@@ -1002,9 +1030,7 @@
               appendSystemBubble(`— Part ${pregenPartNumber} of ${totalChunks} —`);
             }
             const bubble = createAiBubble();
-            bubble.innerHTML = renderMarkdown(stripImageMarker(msg.content));
-            renderMathIn(bubble);
-            attachSpeakButton(bubble, stripImageMarker(msg.content));
+            fillAiBubble(bubble, stripImageMarker(msg.content));
             if (msg.image_url) {
               const img = document.createElement("img");
               img.src = msg.image_url;
@@ -1033,9 +1059,7 @@
           appendUserBubble(msg.content);
         } else {
           const bubble = createAiBubble();
-          bubble.innerHTML = renderMarkdown(stripImageMarker(msg.content.replace("TOPIC_COMPLETE", "")));
-          renderMathIn(bubble);
-          attachSpeakButton(bubble, stripImageMarker(msg.content.replace("TOPIC_COMPLETE", "")));
+          fillAiBubble(bubble, stripImageMarker(msg.content.replace("TOPIC_COMPLETE", "")));
           if (msg.image_url) {
             const img = document.createElement("img");
             img.src = msg.image_url;
