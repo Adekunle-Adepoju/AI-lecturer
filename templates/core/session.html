@@ -6,7 +6,7 @@
 {% block content %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
 <style>
   /* =========================================================
      Rovea lecture session — clean, simple UI.
@@ -14,19 +14,21 @@
      endpoints, element ids/classes) is untouched — only
      presentation changed.
      ========================================================= */
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  /* Colors, radii and fonts below are aliased straight from Rovea's
+     own site-wide tokens (main.css :root / [data-theme]) so this page
+     is never out of sync with the rest of the app's navy/amber identity. */
   #sessionRoot{
-    --bg:#16171B; --bg-alt:#1D1E23; --surface:#1D1E23; --surface-2:#25262C;
-    --ink:#F2F2F0; --ink-soft:#A7A8AD; --ink-faint:#77787E;
-    --line:rgba(242,242,240,.12); --line-soft:rgba(242,242,240,.06);
-    --accent:#7B84FF; --accent-deep:#5F68F0; --accent-ink:#12131A;
-    --heading:#F6F6F4;
-    --amber:#E7B65C; --coral:#EF7A63; --green:#4FCE8C;
+    --bg:var(--navy); --bg-alt:var(--navy-mid); --surface:var(--navy-card); --surface-2:var(--navy-raised);
+    --ink:var(--text); --ink-soft:var(--text-secondary); --ink-faint:var(--text-muted);
+    --line:var(--border); --line-soft:var(--border);
+    --heading:var(--text);
+    --accent:var(--amber); --accent-deep:var(--amber-dark); --accent-ink:#0D1B2A;
+    --coral:var(--red-soft); --green:var(--green-text);
     --bubble-ai:var(--surface-2); --bubble-user:var(--accent);
-    --bubble-ai-text:var(--ink); --bubble-user-text:#FFFFFF;
-    --font-body:'Inter',system-ui,sans-serif;
-    --ease:cubic-bezier(.22,.61,.36,1);
-    --radius-sm:10px; --radius-md:14px; --radius-lg:16px;
+    --bubble-ai-text:var(--ink); --bubble-user-text:var(--accent-ink);
+    --font-body:'Montserrat',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --font-heading:'Montserrat',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --ease:cubic-bezier(.4,0,.2,1);
     --content-max:760px;
     color-scheme: dark;
     max-width:none; margin:0; position:relative; overflow-x:clip;
@@ -34,22 +36,12 @@
     line-height:1.55; padding:28px clamp(16px,4vw,32px) 60px;
     transition:background .25s var(--ease),color .25s var(--ease);
   }
-  #sessionRoot[data-theme="light"]{
-    --bg:#FFFFFF; --bg-alt:#F6F6F4; --surface:#FFFFFF; --surface-2:#F1F1EF;
-    --ink:#1B1B1D; --ink-soft:#66666B; --ink-faint:#9B9B9F;
-    --line:#E7E7E4; --line-soft:rgba(0,0,0,.05);
-    --heading:#111113;
-    --accent:#4F46E5; --accent-deep:#4338CA; --accent-ink:#FFFFFF;
-    --bubble-ai:var(--surface-2); --bubble-user:var(--accent);
-    --bubble-ai-text:var(--ink); --bubble-user-text:#FFFFFF;
-    --green:#1E9E5A; --coral:#DC5B45;
-    color-scheme: light;
-  }
+  [data-theme="light"] #sessionRoot{ color-scheme: light; }
   #sessionRoot *{box-sizing:border-box;}
   #sessionRoot img{max-width:100%;display:block;}
-  #sessionRoot a{color:inherit;}
+  #sessionRoot a{color:var(--accent);}
   #sessionRoot :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
-  #sessionRoot h1,#sessionRoot h2,#sessionRoot h3{font-family:var(--font-body);font-weight:600;color:var(--heading);letter-spacing:-.01em;margin:0;}
+  #sessionRoot h1,#sessionRoot h2,#sessionRoot h3{font-family:var(--font-heading);font-weight:700;color:var(--heading);letter-spacing:-.01em;margin:0;}
   #sessionRoot .max{max-width:var(--content-max);margin-inline:auto;}
   #sessionRoot .ic{width:16px;height:16px;flex:none;}
   @keyframes sFade{from{opacity:0;}to{opacity:1;}}
@@ -72,14 +64,14 @@
   #sessionRoot[data-theme="light"] .ai-avatar img.logo-light{display:none;}
   #sessionRoot[data-theme="light"] .ai-avatar img.logo-dark{display:block;}
   #sessionRoot .session-titles{min-width:0;flex:1;}
-  #sessionRoot .session-title{font-size:1.05rem;font-weight:600;color:var(--heading);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #sessionRoot .session-title{font-family:var(--font-heading);font-size:1.05rem;font-weight:700;color:var(--heading);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   #sessionRoot .session-sub{font-size:.82rem;color:var(--ink-soft);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   #sessionRoot .header-spacer{flex:0 0 8px;}
 
   #sessionRoot .badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:.75rem;font-weight:600;flex:none;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-soft);}
-  #sessionRoot .badge-green{color:var(--green);}
+  #sessionRoot .badge-green{background:var(--teal-glow);border-color:rgba(26,158,122,.3);color:var(--green);}
   #sessionRoot .live-badge .live-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
-  #sessionRoot .badge-amber{color:var(--amber);}
+  #sessionRoot .badge-amber{background:var(--amber-glow);border-color:var(--border-accent);color:var(--amber);}
 
   /* ---------- error ---------- */
   #sessionRoot .error-banner{

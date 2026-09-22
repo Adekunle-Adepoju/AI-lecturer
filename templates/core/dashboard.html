@@ -187,7 +187,28 @@
 
   /* ---------- side col: search + avatar ---------- */
   #dashboardRoot .search-header-row{display:flex;align-items:center;gap:10px;margin-bottom:26px;}
-  #dashboardRoot .search-container{flex:1;min-width:0;}
+  #dashboardRoot .search-container{flex:1;min-width:0;position:relative;}
+
+  /* ---------- hovering search results dropdown ---------- */
+  #dashboardRoot .search-dropdown{
+    position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:40;
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);
+    box-shadow:0 16px 36px -14px rgba(0,0,0,.5);
+    max-height:300px;overflow-y:auto;
+    opacity:0;transform:translateY(-4px);pointer-events:none;
+    transition:opacity .15s var(--ease),transform .15s var(--ease);
+  }
+  #dashboardRoot .search-dropdown.is-open{opacity:1;transform:translateY(0);pointer-events:auto;}
+  #dashboardRoot .search-dropdown-item{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:11px 15px;border-bottom:1px solid var(--line-soft);font-size:.86rem;
+  }
+  #dashboardRoot .search-dropdown-item:last-child{border-bottom:none;}
+  #dashboardRoot .search-dropdown-item:hover,
+  #dashboardRoot .search-dropdown-item:focus-visible{background:var(--bg-alt);}
+  #dashboardRoot .search-dropdown-name{font-weight:600;color:var(--heading);}
+  #dashboardRoot .search-dropdown-code{font-size:.76rem;color:var(--ink-faint);margin-top:1px;}
+  #dashboardRoot .search-dropdown-empty{padding:16px;text-align:center;color:var(--ink-faint);font-size:.82rem;}
   #dashboardRoot .search-wrapper{display:flex;align-items:center;gap:8px;background:var(--surface);
     border:1px solid var(--line);border-radius:999px;padding:0 16px;height:42px;}
   #dashboardRoot .search-wrapper .ic{color:var(--ink-faint);}
@@ -273,9 +294,10 @@
   <button type="submit" class="search-icon-btn" aria-label="Search courses">
     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
   </button>
-  <label for="courseSearchInput" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;">Search courses</label>
-  <input type="text" name="q" placeholder="Search courses" class="search-input" id="courseSearchInput" autocomplete="off">
+  <label for="courseSearchInputTop" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;">Search courses</label>
+  <input type="text" name="q" placeholder="Search courses" class="search-input" id="courseSearchInputTop" autocomplete="off">
 </form>
+        <div class="search-dropdown" id="searchDropdownTop"></div>
       </div>
 
       <div class="header-avatar-frame">
@@ -398,9 +420,10 @@
       <div class="search-container">
         <form method="GET" action="#" class="search-wrapper" onsubmit="event.preventDefault();">
           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-          <label for="courseSearchInput" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;">Search courses</label>
-          <input type="text" name="q" placeholder="Search courses" class="search-input" id="courseSearchInput" autocomplete="off">
+          <label for="courseSearchInputSide" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;">Search courses</label>
+          <input type="text" name="q" placeholder="Search courses" class="search-input" id="courseSearchInputSide" autocomplete="off">
         </form>
+        <div class="search-dropdown" id="searchDropdownSide"></div>
       </div>
 
       <div class="header-avatar-frame">
@@ -631,35 +654,85 @@
   (function(){
   const inputs = Array.from(document.querySelectorAll('#dashboardRoot .search-input'));
   const forms = Array.from(document.querySelectorAll('#dashboardRoot .search-wrapper'));
+  const dropdowns = Array.from(document.querySelectorAll('#dashboardRoot .search-dropdown'));
   const list = document.getElementById('courseList');
-  const emptyMsg = document.getElementById('courseSearchEmpty');
   if (!inputs.length || !list) return;
   const pills = Array.from(list.querySelectorAll('.course-pill'));
 
-  function applyFilter(q){
-    q = q.trim().toLowerCase();
-    let visibleCount = 0;
-    pills.forEach(p => {
-      const match = !q || (p.dataset.courseSearch || '').indexOf(q) !== -1;
-      p.style.display = match ? '' : 'none';
-      if (match) visibleCount++;
-    });
-    if (emptyMsg) emptyMsg.style.display = (q && visibleCount === 0) ? 'block' : 'none';
+  // Build a lightweight lookup of {name, code, url, searchText} once —
+  // the "Your courses" list on the page is never touched by any of this.
+  const courseData = pills.map(p => ({
+    name: p.querySelector('.course-name') ? p.querySelector('.course-name').textContent.trim() : '',
+    code: p.querySelector('.course-code') ? p.querySelector('.course-code').textContent.trim() : '',
+    url: p.getAttribute('href') || '#',
+    searchText: p.dataset.courseSearch || ''
+  }));
+
+  function closeDropdown(dd){
+    dd.classList.remove('is-open');
+    dd.innerHTML = '';
+  }
+
+  function renderDropdown(dd, q){
+    const matches = courseData.filter(c => c.searchText.indexOf(q) !== -1).slice(0, 6);
+    dd.innerHTML = '';
+    if (matches.length === 0){
+      const empty = document.createElement('div');
+      empty.className = 'search-dropdown-empty';
+      empty.textContent = 'No courses match that search.';
+      dd.appendChild(empty);
+    } else {
+      matches.forEach(c => {
+        const item = document.createElement('a');
+        item.href = c.url;
+        item.className = 'search-dropdown-item';
+        item.innerHTML =
+          '<span><span class="search-dropdown-name">' + c.name + '</span>' +
+          '<div class="search-dropdown-code">' + c.code + '</div></span>';
+        dd.appendChild(item);
+      });
+    }
+    dd.classList.add('is-open');
+  }
+
+  function handleInput(input){
+    const q = input.value.trim().toLowerCase();
+    const dd = input.closest('.search-container').querySelector('.search-dropdown');
+    if (!dd) return;
+    if (!q){ closeDropdown(dd); return; }
+    renderDropdown(dd, q);
   }
 
   inputs.forEach(input => {
     input.addEventListener('input', function(){
       inputs.forEach(other => { if (other !== input) other.value = input.value; });
-      applyFilter(input.value);
+      handleInput(input);
     });
+
+    input.addEventListener('focus', function(){
+      if (input.value.trim()) handleInput(input);
+    });
+
+    input.addEventListener('keydown', function(e){
+      if (e.key === 'Escape'){
+        input.value = '';
+        handleInput(input);
+        input.blur();
+      }
+    });
+
   });
 
   forms.forEach(form => {
     form.addEventListener('submit', function(e){
       e.preventDefault();
-      const input = form.querySelector('.search-input');
-      if (input) applyFilter(input.value);
     });
+  });
+
+  document.addEventListener('click', function(e){
+    if (!e.target.closest('#dashboardRoot .search-container')){
+      dropdowns.forEach(closeDropdown);
+    }
   });
 })();
 
