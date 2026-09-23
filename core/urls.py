@@ -64,4 +64,5 @@ urlpatterns = [
     path("staff/lessons/bulk-delete/", views.staff_bulk_delete_lessons_view, name="staff_bulk_delete_lessons"),
     path("staff/lessons/bulk-publish/", views.staff_bulk_publish_lessons_view, name="staff_bulk_publish_lessons"),
     path("staff/lessons/bulk-unpublish/", views.staff_bulk_unpublish_lessons_view, name="staff_bulk_unpublish_lessons"),
+    path("staff/slides/<int:slide_id>/retry-cleanup/", views.retry_slide_cleanup_view, name="retry_slide_cleanup"),
 ]

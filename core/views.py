@@ -1582,13 +1582,21 @@ def staff_portal_view(request):
         empty = slide.topic_chunks.filter(is_empty=True).count()
         slide_split_status[slide.id] = {"total": total, "empty": empty}
 
+    cleanup_fallback_status = {}
+    for slide in slides:
+        fallback_count = slide.cleanup_chunks.exclude(error_message="").count()
+        if fallback_count:
+            cleanup_fallback_status[slide.id] = fallback_count
+
     return render(request, "core/staff/portal.html", {
         "slides": slides,
         "outlines": outlines,
         "past_questions": past_questions,
         "courses": courses,
         "slide_split_status": slide_split_status,
+        "cleanup_fallback_status": cleanup_fallback_status,
     })
+    
 
 
 @staff_required
@@ -1855,6 +1863,64 @@ def retry_slide_topic_split_view(request, slide_id):
         import traceback
         traceback.print_exc()
         messages.warning(request, f"Topic split retry failed: {str(e)}")
+
+    return redirect("staff_portal")
+
+@staff_required
+@require_POST
+def retry_slide_cleanup_view(request, slide_id):
+    """Retry the AI text-cleanup pass for a slide. Cleanup chunks that
+    fell back to raw (uncleaned) text — because the model failed or
+    returned something suspiciously short — are reset to PENDING and
+    reprocessed; chunks that already cleaned successfully are left
+    untouched. The reassembled result is saved back onto
+    slide.extracted_text.
+
+    Cleanup chunks are always saved as COMPLETED even on fallback (to
+    avoid endlessly reprocessing them on every unrelated retry), so
+    without this reset step a plain re-run would find nothing left to do."""
+    slide = get_object_or_404(SlideDocument, id=slide_id)
+
+    if not slide.extracted_text:
+        messages.warning(request, "Can't retry — no extracted text saved for this slide.")
+        return redirect("staff_portal")
+
+    try:
+        from .slide_topic_extractor import _cleanup_mangled_text_with_ai
+
+        reset_count = slide.cleanup_chunks.exclude(error_message="").update(
+            status="PENDING", error_message="",
+        )
+
+        cleaned = _cleanup_mangled_text_with_ai(
+            slide.course_code, slide.course_title, slide.extracted_text, slide=slide,
+        )
+        slide.extracted_text = cleaned
+        slide.save(update_fields=["extracted_text"])
+
+        still_failed = slide.cleanup_chunks.exclude(error_message="").count()
+        if still_failed:
+            messages.warning(
+                request,
+                f"Cleanup retried ({reset_count} chunk(s) reprocessed) — {still_failed} "
+                "still fell back to raw text. Run again to retry those, or check the "
+                "terminal for details."
+            )
+        else:
+            note = (
+                " Note: topics and topic-split content generated before this retry "
+                "may now be out of date — consider re-running topic extraction and "
+                "topic split too."
+                if reset_count else ""
+            )
+            messages.success(
+                request,
+                f"Cleanup retried successfully ({reset_count} chunk(s) reprocessed)." + note
+            )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        messages.warning(request, f"Cleanup retry failed: {str(e)}")
 
     return redirect("staff_portal")
 

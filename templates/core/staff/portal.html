@@ -211,31 +211,42 @@
         </div>
       </div>
       <div class="item-actions">
-        {% if slide.parsed and slide.topics_incomplete %}
-        <form method="post" action="{% url 'retry_slide_topics' slide.id %}" style="margin:0">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-warn">⚠ Incomplete — retry topics</button>
-        </form>
-        {% elif slide.parsed and not slide.extracted_topics %}
-        <form method="post" action="{% url 'retry_slide_topics' slide.id %}" style="margin:0">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-primary">Retry topics</button>
-        </form>
+      <form method="post" action="{% url 'retry_slide_cleanup' slide.id %}" style="margin:0">
+        {% csrf_token %}
+        <button type="submit" class="btn">Retry cleanup</button>
+      </form>
+
+      {% if slide.parsed and slide.topics_incomplete %}
+      <form method="post" action="{% url 'retry_slide_topics' slide.id %}" style="margin:0">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-warn">⚠ Incomplete — retry topics</button>
+      </form>
+      {% elif slide.parsed and not slide.extracted_topics %}
+      <form method="post" action="{% url 'retry_slide_topics' slide.id %}" style="margin:0">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary">Retry topics</button>
+      </form>
+      {% endif %}
+
+      {% with status=slide_split_status|get_item:slide.id %}
+        {% if status.total > 0 %}
+          <span class="badge {% if status.empty > 0 %}badge-amber{% else %}badge-green{% endif %}">{{ status.total }} chunks ({{ status.empty }} empty)</span>
         {% endif %}
+        <a href="{% url 'staff_slide_diagnostics' slide.id %}" class="btn">Diagnostics</a>
+        <form method="post" action="{% url 'run_topic_split' slide.id %}" style="margin:0">
+          {% csrf_token %}
+          <button type="submit" class="btn {% if status.empty > 0 %}btn-primary{% endif %}">{% if status.empty > 0 %}Backfill{% else %}Run split{% endif %}</button>
+        </form>
+      {% endwith %}
 
-        {% with status=slide_split_status|get_item:slide.id %}
-          {% if status.total > 0 %}
-            <span class="badge {% if status.empty > 0 %}badge-amber{% else %}badge-green{% endif %}">{{ status.total }} chunks ({{ status.empty }} empty)</span>
-          {% endif %}
-          <a href="{% url 'staff_slide_diagnostics' slide.id %}" class="btn">Diagnostics</a>
-          <form method="post" action="{% url 'run_topic_split' slide.id %}" style="margin:0">
-            {% csrf_token %}
-            <button type="submit" class="btn {% if status.empty > 0 %}btn-primary{% endif %}">{% if status.empty > 0 %}Backfill{% else %}Run split{% endif %}</button>
-          </form>
-        {% endwith %}
+      {% with fallback_count=cleanup_fallback_status|get_item:slide.id %}
+        {% if fallback_count %}
+          <span class="badge badge-amber">{{ fallback_count }} cleanup fallback(s)</span>
+        {% endif %}
+      {% endwith %}
 
-        <button type="button" class="btn btn-danger" onclick="openDeleteModal('slide', '{{ slide.id }}', '{{ slide.course_code }} slide deck')">Delete</button>
-      </div>
+      <button type="button" class="btn btn-danger" onclick="openDeleteModal('slide', '{{ slide.id }}', '{{ slide.course_code }} slide deck')">Delete</button>
+    </div>
     </div>
     {% empty %}
     <p class="empty-note">No slides uploaded yet.</p>
