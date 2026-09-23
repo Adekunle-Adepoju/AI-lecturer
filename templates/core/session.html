@@ -372,6 +372,8 @@
   let currentChunkIndex = {{ current_chunk_index|default:0 }};
   let totalChunks = {{ total_chunks|default:0 }};
   let isLastChunk = {{ is_last_chunk|yesno:"true,false" }};
+  const topicNumber = {{ topic_number|default:1 }};
+  const totalTopicsCount = {{ total_topics|default:1 }};
   const firstChunk = "{{ first_chunk|escapejs }}";
 
   function getCookie(name) {
@@ -811,6 +813,19 @@ function fillAiBubble(bubble, rawText) {
     }
   }
 
+    // ── Progress bar: reflects both the current topic AND how far through
+    // its chunks the learner has gotten, so it moves continuously instead
+    // of only jumping when a whole topic finishes. ─────────────────────────
+    function updateProgressBar(chunkIdx, chunksTotal) {
+      const fill = document.querySelector("#sessionRoot .prog-fill");
+      if (!fill) return;
+      const completedTopics = topicNumber - 1;
+      const chunkFrac = chunksTotal > 0 ? Math.min(1, chunkIdx / chunksTotal) : 0;
+      const pct = Math.min(100, Math.max(0, ((completedTopics + chunkFrac) / totalTopicsCount) * 100));
+      fill.style.width = pct + "%";
+    }
+    updateProgressBar(currentChunkIndex, totalChunks);
+
     // ── Deliver a chunk as an AI bubble ──────────────────────────────────────
     function deliverChunk(chunkText, chunkIndex, totalChunks, isLast, imageUrl) {
       const bubble = createAiBubble();
@@ -828,6 +843,7 @@ function fillAiBubble(bubble, rawText) {
     inputRow.style.display = "none";
 
     isLastChunk = !!isLast;
+    updateProgressBar(chunkIndex + 1, totalChunks);
     const gotItLabel = document.getElementById("gotItLabel");
     if (gotItLabel) {
       gotItLabel.textContent = isLastChunk ? "Go to Quiz" : "Got it";

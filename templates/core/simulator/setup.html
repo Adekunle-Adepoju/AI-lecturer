@@ -2,43 +2,153 @@
 {% block title %}Test Setup — Rovea{% endblock %}
 
 {% block content %}
-<div class="page-container">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  /* Scoped to #testSetupRoot only — colors/radii are aliased from Rovea's
+     own site-wide tokens (main.css :root / [data-theme]) so this page
+     never drifts from the rest of the app's navy/amber identity. */
+  #testSetupRoot{
+    --font-body:'Poppins',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --font-heading:'Space Grotesk',sans-serif;
+    font-family:var(--font-body);
+  }
+  #testSetupRoot .back-link{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:13px; font-weight:500; color:var(--text-secondary);
+    text-decoration:none; transition:color .15s;
+  }
+  #testSetupRoot .back-link:hover{ color:var(--amber); }
 
-  <a href="{% url 'simulator_home' %}" style="font-size:13px; color:var(--text-secondary)">← Back to Simulator</a>
+  #testSetupRoot .setup-head{ margin:22px 0 24px; }
+  #testSetupRoot .setup-head .eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--amber); margin-bottom:8px;
+  }
+  #testSetupRoot .setup-head h2{
+    font-family:var(--font-heading); font-weight:700; font-size:1.5rem;
+    color:var(--text); margin:0 0 6px;
+  }
+  #testSetupRoot .setup-head p{
+    font-size:14px; line-height:1.6; color:var(--text-secondary); margin:0; max-width:52ch;
+  }
+  #testSetupRoot .setup-head strong{ color:var(--text); }
+
+  #testSetupRoot .setup-card{
+    background:var(--navy-card); border:1px solid var(--border);
+    border-radius:var(--radius-xl); padding:1.75rem;
+  }
+
+  /* auto-test "you will be tested on" block */
+  #testSetupRoot .scope-note{
+    background:var(--amber-glow); border:1px solid var(--border-accent);
+    border-radius:var(--radius-lg); padding:16px 18px; margin-bottom:22px;
+  }
+  #testSetupRoot .scope-note .scope-label{
+    font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+    color:var(--amber); margin-bottom:6px;
+  }
+  #testSetupRoot .scope-note .scope-topic{ font-weight:600; font-size:15px; color:var(--text); }
+
+  #testSetupRoot .field-label{
+    display:block; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--text-secondary); margin-bottom:8px;
+  }
+
+  /* custom select chrome — same size/colors as the site's inputs, plus a chevron */
+  #testSetupRoot select{
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    width:100%; padding:12px 40px 12px 14px; font-size:14.5px; font-family:inherit;
+    background-color:var(--navy-raised); color:var(--text);
+    border:1px solid var(--border); border-radius:var(--radius-md);
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%237E94B0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center;
+    cursor:pointer; transition:border-color .15s,box-shadow .15s;
+  }
+  #testSetupRoot select:disabled{ cursor:not-allowed; opacity:.6; }
+  #testSetupRoot select:focus{ border-color:var(--amber); box-shadow:0 0 0 3px var(--amber-glow); }
+
+  #testSetupRoot #courseSelect{ margin-bottom:22px; }
+
+  #testSetupRoot .topics-block{ margin-bottom:8px; }
+  #testSetupRoot .topic-row{
+    display:flex; align-items:center; gap:10px; margin-bottom:10px;
+    animation:setupRowIn .2s ease both;
+  }
+  @keyframes setupRowIn{ from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);} }
+  #testSetupRoot .topic-row .row-index{
+    flex:none; width:26px; height:26px; border-radius:50%;
+    background:var(--navy-raised); border:1px solid var(--border); color:var(--text-secondary);
+    display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;
+  }
+  #testSetupRoot .topic-row select{ flex:1; }
+  #testSetupRoot .remove-row-btn{
+    flex:none; width:38px; height:38px; border-radius:var(--radius-md);
+    border:1px solid var(--border); background:transparent; color:var(--text-muted);
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    font-size:18px; line-height:1; transition:border-color .15s,color .15s,background .15s;
+  }
+  #testSetupRoot .remove-row-btn:hover{ border-color:var(--red-soft); color:var(--red-soft); background:var(--red-glow); }
+
+  #testSetupRoot .add-row-wrap{ margin:14px 0 24px; }
+  #testSetupRoot .btn-white-outline.btn-add{
+    display:inline-flex; align-items:center; gap:6px; width:auto; padding:10px 18px; font-size:13.5px;
+  }
+  #testSetupRoot .topics-hint{ font-size:12px; color:var(--text-muted); margin:10px 0 0; }
+
+  #testSetupRoot .message{
+    background:var(--amber-glow); border:1px solid var(--border-accent); color:var(--text);
+    border-radius:var(--radius-md); padding:11px 15px; font-size:13.5px; margin-bottom:16px;
+  }
+</style>
+
+<div class="page-container" id="testSetupRoot">
+
+  <a href="{% url 'simulator_home' %}" class="back-link">← Back to Simulator</a>
 
   {% if mode == "auto" %}
-  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">📋 Test Week — {{ entry.course_code }}</h2>
-  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
-    This test covers everything you've studied in <strong>{{ entry.course_title }}</strong> from Weeks 1 to 6.
-    It is compulsory and cannot be skipped.
-  </p>
-  <div style="background:var(--navy-card); border:1px solid var(--border-accent); border-radius:var(--radius-xl); padding:1.5rem; margin-bottom:24px">
-    <div style="font-size:14px; color:var(--text-secondary); margin-bottom:8px">You will be tested on:</div>
-    <div style="font-weight:600; font-size:15px; color:var(--text)">{{ topic }}</div>
+  <div class="setup-head">
+    <div class="eyebrow">📋 Test week</div>
+    <h2>{{ entry.course_code }}</h2>
+    <p>
+      This test covers everything you've studied in <strong>{{ entry.course_title }}</strong> from Weeks 1 to 6.
+      It is compulsory and cannot be skipped.
+    </p>
   </div>
-  <form method="POST">
-    {% csrf_token %}
-    <input type="hidden" name="course_code" value="{{ entry.course_code }}">
-    <button type="submit" class="btn btn-primary btn-full">Begin Test →</button>
-  </form>
+
+  <div class="setup-card">
+    <div class="scope-note">
+      <div class="scope-label">You will be tested on</div>
+      <div class="scope-topic">{{ topic }}</div>
+    </div>
+    <form method="POST">
+      {% csrf_token %}
+      <input type="hidden" name="course_code" value="{{ entry.course_code }}">
+      <button type="submit" class="btn btn-primary btn-full">Begin Test →</button>
+    </form>
+  </div>
 
   {% else %}
-  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">📝 Practice Test Setup</h2>
-  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
-    Pick a course, then choose up to {{ max_topics|default:4 }} topics from it. You'll be tested on all of them mixed together.
-  </p>
+  <div class="setup-head">
+    <div class="eyebrow">📝 Practice test</div>
+    <h2>Practice Test Setup</h2>
+    <p>Pick a course, then choose up to {{ max_topics|default:4 }} topics from it. You'll be tested on all of them mixed together.</p>
+  </div>
 
   {% if messages %}
   {% for message in messages %}
-  <div class="message" style="margin-bottom:16px">{{ message }}</div>
+  <div class="message">{{ message }}</div>
   {% endfor %}
   {% endif %}
 
-  <form method="POST" id="multiTopicForm">
-    {% csrf_token %}
+  <div class="setup-card">
+    <form method="POST" id="multiTopicForm">
+      {% csrf_token %}
 
-    <div class="form-group" style="margin-bottom:16px">
-      <select name="course_code" id="courseSelect" style="width:100%" required>
+      <label class="field-label" for="courseSelect">Course</label>
+      <select name="course_code" id="courseSelect" required>
         <option value="">— Pick a course —</option>
         {% for entry in timetable %}
         <option value="{{ entry.course_code }}" {% if entry.course_code == selected_code %}selected{% endif %}>
@@ -46,22 +156,27 @@
         </option>
         {% endfor %}
       </select>
-    </div>
 
-    <div id="topicRows">
-      <div class="topic-row" style="display:flex; gap:8px; margin-bottom:10px">
-        <select name="topics" class="row-topic form-group" style="flex:1" required disabled>
-          <option value="">— Pick a course first —</option>
-        </select>
+      <label class="field-label">Topics</label>
+      <div class="topics-block" id="topicRows">
+        <div class="topic-row">
+          <span class="row-index">1</span>
+          <select name="topics" class="row-topic form-group" required disabled>
+            <option value="">— Pick a course first —</option>
+          </select>
+        </div>
       </div>
-    </div>
 
-    <button type="button" id="addRowBtn" class="btn btn-white-outline" style="margin-bottom:16px" disabled>
-      + Add another topic
-    </button>
+      <div class="add-row-wrap">
+        <button type="button" id="addRowBtn" class="btn btn-white-outline btn-add" disabled>
+          + Add another topic
+        </button>
+        <p class="topics-hint">Up to {{ max_topics|default:4 }} topics per test.</p>
+      </div>
 
-    <button type="submit" class="btn btn-primary btn-full">Generate Test →</button>
-  </form>
+      <button type="submit" class="btn btn-primary btn-full">Generate Test →</button>
+    </form>
+  </div>
 
   <script>
     const MAX_TOPICS = {{ max_topics|default:4 }};
@@ -72,6 +187,13 @@
     const addRowBtn = document.getElementById('addRowBtn');
 
     let currentTopics = [];
+
+    function renumberRows() {
+      document.querySelectorAll('#topicRows .topic-row').forEach((row, i) => {
+        const badge = row.querySelector('.row-index');
+        if (badge) badge.textContent = i + 1;
+      });
+    }
 
     function buildTopicOptions(select, keepValue) {
       if (currentTopics.length === 0) {
@@ -86,11 +208,13 @@
 
     function resetToSingleRow() {
       topicRows.innerHTML = `
-        <div class="topic-row" style="display:flex; gap:8px; margin-bottom:10px">
-          <select name="topics" class="row-topic form-group" style="flex:1" required disabled>
+        <div class="topic-row">
+          <span class="row-index">1</span>
+          <select name="topics" class="row-topic form-group" required disabled>
             <option value="">— Pick a course first —</option>
           </select>
         </div>`;
+      addRowBtn.style.display = '';
     }
 
     function loadTopicsForCourse(courseCode) {
@@ -136,18 +260,35 @@
         alert(`You can select up to ${MAX_TOPICS} topics per test.`);
         return;
       }
-      const container = document.getElementById('topicRows');
       const newRow = document.createElement('div');
       newRow.className = 'topic-row';
-      newRow.style = 'display:flex; gap:8px; margin-bottom:10px';
+
+      const badge = document.createElement('span');
+      badge.className = 'row-index';
+
       const newSelect = document.createElement('select');
       newSelect.name = 'topics';
       newSelect.className = 'row-topic form-group';
-      newSelect.style.flex = '1';
       newSelect.required = true;
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'remove-row-btn';
+      removeBtn.setAttribute('aria-label', 'Remove this topic');
+      removeBtn.innerHTML = '&times;';
+      removeBtn.addEventListener('click', () => {
+        newRow.remove();
+        renumberRows();
+        addRowBtn.disabled = currentTopics.length === 0;
+        addRowBtn.style.display = '';
+      });
+
+      newRow.appendChild(badge);
       newRow.appendChild(newSelect);
-      container.appendChild(newRow);
+      newRow.appendChild(removeBtn);
+      topicRows.appendChild(newRow);
       buildTopicOptions(newSelect, "");
+      renumberRows();
 
       if (document.querySelectorAll('.topic-row').length >= MAX_TOPICS) {
         addRowBtn.style.display = 'none';
@@ -160,7 +301,7 @@
       loadTopicsForCourse(courseSelect.value);
     }
   </script>
-{% endif %}
+  {% endif %}
 
 </div>
 {% endblock %}
