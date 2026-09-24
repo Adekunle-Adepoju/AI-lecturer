@@ -255,6 +255,10 @@
   });
 </script>
 
+{% if user.is_authenticated %}
+<meta name="csrf-token" content="{{ csrf_token }}">
+<script defer src="{% static 'engagement/js/rovea-pulse.js' %}" data-endpoint="{% url 'engagement:ingest' %}"></script>
+{% endif %}
 </head>
 
 <body{% block body_attrs %}{% endblock %}>

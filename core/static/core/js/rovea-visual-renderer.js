@@ -44,7 +44,7 @@
 
   // ── Fence extraction ──────────────────────────────────────────────────
   // Matches ```json_chart|mermaid|svg ... ``` blocks, non-greedy, multiline.
-  const FENCE_RE = /```(json_chart|mermaid|svg)\n([\s\S]*?)```/g;
+  const FENCE_RE = /```(json_chart|mermaid|svg)[ \t]*\r?\n([\s\S]*?)```/g;
 
   /**
    * Splits raw markdown into an ordered list of segments:

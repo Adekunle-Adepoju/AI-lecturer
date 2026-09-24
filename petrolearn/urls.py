@@ -7,6 +7,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("core.urls")),
     path("battle/", include("battle.urls")),
+    path("pulse/", include("engagement.urls")),
 ]
 
 if settings.DEBUG:

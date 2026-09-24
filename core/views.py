@@ -849,26 +849,44 @@ def _merge_worked_example_paragraphs(paragraphs):
     return merged
 
 def _split_into_pages(text, target_chars=1800):
+    """Break a long pre-generated lecture into digestible pages. Tries
+    paragraph boundaries first; falls back to sentence boundaries.
+    Fenced code blocks (```lang ... ```) are protected as atomic units
+    so a mermaid/json_chart/svg block never gets split mid-fence —
+    a partial fence renders as broken raw text instead of a diagram."""
     text = text.strip()
-    paragraphs = [p for p in re.split(r"\n\s*\n", text) if p.strip()]
+
+    FENCE_RE = re.compile(r"```.*?\n[\s\S]*?```", re.MULTILINE)
+    placeholders = {}
+    def _stash(m):
+        key = f"\x00FENCE{len(placeholders)}\x00"
+        placeholders[key] = m.group(0)
+        return key
+    protected_text = FENCE_RE.sub(_stash, text)
+
+    paragraphs = [p for p in re.split(r"\n\s*\n", protected_text) if p.strip()]
 
     if len(paragraphs) <= 1:
-        sentences = re.split(r"(?<=[.!?])\s+", text)
+        sentences = re.split(r"(?<=[.!?])\s+", protected_text)
         paragraphs = [s for s in sentences if s.strip()]
 
-    paragraphs = _merge_worked_example_paragraphs(paragraphs)   # ← new line
+    def _restore(s):
+        for key, val in placeholders.items():
+            s = s.replace(key, val)
+        return s
 
     pages = []
     current = ""
     for para in paragraphs:
-        if current and len(current) + len(para) > target_chars:
-            pages.append(current.strip())
+        real_len = len(placeholders.get(para.strip(), para))
+        if current and len(current) + real_len > target_chars:
+            pages.append(_restore(current.strip()))
             current = para
         else:
             current = f"{current}\n\n{para}" if current else para
     if current.strip():
-        pages.append(current.strip())
-    return pages if pages else [text]
+        pages.append(_restore(current.strip()))
+    return pages if pages else [_restore(protected_text)]
 
 def _parse_quiz_json(text):
     clean = text.replace("```json", "").replace("```", "").strip()
@@ -931,16 +949,6 @@ def session_view(request, course_code):
 
     profile = request.user.profile
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
-
-        # ── Rolling queue gate ──────────────────────────────────────────────────
-    if not _bypasses_restrictions(request):
-        active_entry = _get_active_course_entry(profile)
-        if active_entry is None:
-            messages.info(request, "It's Sunday — rest day! Head to the Simulator to practice topics you've already covered.")
-            return redirect("simulator_home")
-        if active_entry.course_code != course_code:
-            messages.info(request, f"It's not {entry.course_code}'s turn yet — today's course is {active_entry.course_code}.")
-            return redirect("dashboard")
 
     if request.method == "GET":
         existing_session = Session.objects.filter(

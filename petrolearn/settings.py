@@ -19,7 +19,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-u%rlvs18-#6_#hgxc^p#_
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["10.223.123.165", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["10.251.19.165", "localhost", "127.0.0.1"]
 
 
 # Application definition
@@ -41,7 +41,12 @@ INSTALLED_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
+    'engagement',
 ]
+
+# Staff/superuser traffic is ignored by default so sponsor numbers are clean.
+# Set ANALYTICS_TRACK_STAFF=1 in .env while you're testing as staff.
+ANALYTICS_TRACK_STAFF = os.environ.get("ANALYTICS_TRACK_STAFF") == "1"
 
 SITE_ID = 1
 
@@ -109,6 +114,12 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
+        # Django 5.1+. Lets chat-stream writes and pulse writes coexist.
+        "OPTIONS": {
+            "transaction_mode": "IMMEDIATE",
+            "timeout": 20,
+            "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
+        },
     }
 }
 
@@ -153,6 +164,7 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 STATICFILES_DIRS = []
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 
 GEMINI_API_KEY_CHAT = os.environ.get("GEMINI_API_KEY_CHAT")
@@ -161,6 +173,7 @@ GEMINI_API_KEY_IMAGES = os.environ.get("GEMINI_API_KEY_IMAGES")
 GEMINI_API_KEY_SIMULATOR = os.environ.get('GEMINI_API_KEY_SIMULATOR')
 GEMINI_API_KEY_GENERATION = os.environ.get('GEMINI_API_KEY_GENERATION')
 GEMINI_API_KEY_BATTLE = os.environ.get('GEMINI_API_KEY_BATTLE')
+GEMINI_API_KEY_CLEANUP = os.environ.get("GEMINI_API_KEY_CLEANUP")
 
 LOGIN_URL = '/'
 

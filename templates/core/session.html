@@ -341,7 +341,6 @@
   mermaid.initialize({ startOnLoad: false, theme: "dark" });
 </script>
 <script src="{% static 'core/js/rovea-visual-renderer.js' %}"></script>
-<script src="{% static 'core/js/session.js' %}"></script>
 <script>
 (function(){
   "use strict";
@@ -375,6 +374,12 @@
   const topicNumber = {{ topic_number|default:1 }};
   const totalTopicsCount = {{ total_topics|default:1 }};
   const firstChunk = "{{ first_chunk|escapejs }}";
+
+    document.addEventListener("DOMContentLoaded", function () {
+    if (window.RoveaTrack && topicSessionId) {
+      window.RoveaTrack.setContext({ topicSessionId: topicSessionId, idleMs: 120000 });
+    }
+  });
 
   function getCookie(name) {
     const value = `; ${document.cookie}`;
@@ -445,9 +450,12 @@
     bubbleEl.appendChild(wrap);
   }
 
+    let activeUtterance = null;
+
   function speakText(rawText, btnElement) {
     if (speechSynthesis.speaking) {
       const wasThisButton = currentSpeakingBtn === btnElement;
+      if (activeUtterance) activeUtterance._byUser = true;
       speechSynthesis.cancel();
       if (currentSpeakingBtn) currentSpeakingBtn.textContent = '🔊';
       currentSpeakingBtn = null;
@@ -463,9 +471,22 @@
     const voice = getBestVoice();
     if (voice) utterance.voice = voice;
 
-    utterance.onstart = () => { btnElement.textContent = '⏸️'; currentSpeakingBtn = btnElement; };
-    utterance.onend = () => { btnElement.textContent = '🔊'; currentSpeakingBtn = null; };
-    utterance.onerror = () => { btnElement.textContent = '🔊'; currentSpeakingBtn = null; };
+    utterance.onstart = () => {
+      btnElement.textContent = '⏸️';
+      currentSpeakingBtn = btnElement;
+      activeUtterance = utterance;
+      utterance._trk = window.RoveaTrack ? window.RoveaTrack.ttsStart() : null;
+    };
+    utterance.onend = () => {
+      btnElement.textContent = '🔊';
+      if (currentSpeakingBtn === btnElement) currentSpeakingBtn = null;
+      if (window.RoveaTrack) window.RoveaTrack.ttsStop(utterance._trk, !utterance._byUser);
+    };
+    utterance.onerror = () => {
+      btnElement.textContent = '🔊';
+      if (currentSpeakingBtn === btnElement) currentSpeakingBtn = null;
+      if (window.RoveaTrack) window.RoveaTrack.ttsStop(utterance._trk, false);
+    };
 
     speechSynthesis.speak(utterance);
   }
@@ -828,6 +849,7 @@ function fillAiBubble(bubble, rawText) {
 
     // ── Deliver a chunk as an AI bubble ──────────────────────────────────────
     function deliverChunk(chunkText, chunkIndex, totalChunks, isLast, imageUrl) {
+      if (window.RoveaTrack) window.RoveaTrack.part();
       const bubble = createAiBubble();
       fillAiBubble(bubble, stripImageMarker(chunkText));
 

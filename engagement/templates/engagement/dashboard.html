@@ -1,0 +1,152 @@
+{% extends "core/base.html" %}
+{% block title %}Engagement — Rovea{% endblock %}
+{% block body_attrs %} data-back-target="{% url 'staff_portal' %}"{% endblock %}
+
+{% block content %}
+<style>
+  #pulseRoot{
+    --bg:#0F1D2B; --bg-alt:#16283A; --surface:#13212F; --surface-2:#1A2C3D;
+    --ink:#ECEFF3; --ink-soft:#B7C2CB; --ink-faint:#8A97A0;
+    --line:rgba(236,239,243,.14); --line-soft:rgba(236,239,243,.08);
+    --navy:#0F4677; --heading:#E7EDF3; --amber:#E2A63B; --coral:#D96A45; --green:#4A9D74;
+    --font-display:'Newsreader',serif; --font-body:'Inter',sans-serif;
+    --radius-md:14px; --radius-lg:20px;
+    color-scheme:dark; background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    line-height:1.55; padding:clamp(36px,6vh,64px) clamp(14px,3vw,32px) 70px;
+    border-radius:0 0 var(--radius-lg) var(--radius-lg);
+  }
+  #pulseRoot[data-theme="light"]{
+    --bg:#F1EFE6; --bg-alt:#E7E2D3; --surface:#FBFAF4; --surface-2:#FFFFFF;
+    --ink:#17212B; --ink-soft:#54626D; --ink-faint:#818D94;
+    --line:rgba(23,33,43,.14); --line-soft:rgba(23,33,43,.07); --heading:#0A2E4D; color-scheme:light;
+  }
+  #pulseRoot *{box-sizing:border-box;}
+  #pulseRoot a{color:inherit;text-decoration:none;}
+  #pulseRoot h2,#pulseRoot h3{font-family:var(--font-display);font-weight:500;color:var(--heading);margin:0;}
+  #pulseRoot .max{max-width:1240px;margin-inline:auto;}
+  #pulseRoot .head{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:22px;}
+  #pulseRoot .head h2{font-size:clamp(1.5rem,3vw,2rem);}
+  #pulseRoot .sub{color:var(--ink-soft);font-size:.85rem;margin-top:4px;}
+  #pulseRoot .range{display:flex;gap:6px;flex-wrap:wrap;}
+  #pulseRoot .pill{border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);border-radius:999px;padding:7px 14px;font-size:.78rem;font-weight:600;}
+  #pulseRoot .pill.on{background:var(--amber);color:#0A2E4D;border-color:transparent;}
+  #pulseRoot .note{background:rgba(226,166,59,.14);color:var(--amber);border:1px solid rgba(226,166,59,.3);border-radius:12px;padding:10px 14px;font-size:.82rem;margin-bottom:14px;}
+  #pulseRoot .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px;}
+  #pulseRoot .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);padding:16px 18px;}
+  #pulseRoot .num{font-size:1.9rem;font-weight:700;color:var(--heading);line-height:1.1;}
+  #pulseRoot .lbl{font-size:.76rem;color:var(--ink-faint);margin-top:4px;}
+  #pulseRoot .card h3{font-family:var(--font-body);font-weight:600;font-size:.92rem;margin-bottom:12px;}
+  #pulseRoot .bars{display:flex;align-items:flex-end;gap:2px;height:160px;}
+  #pulseRoot .bar{flex:1;background:var(--amber);border-radius:2px 2px 0 0;min-height:2px;}
+  #pulseRoot .bar.zero{background:var(--line);}
+  #pulseRoot .axis{display:flex;justify-content:space-between;color:var(--ink-faint);font-size:.72rem;margin-top:6px;}
+  #pulseRoot .scroll{overflow-x:auto;}
+  #pulseRoot table{border-collapse:collapse;width:100%;font-size:.84rem;}
+  #pulseRoot th,#pulseRoot td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line-soft);white-space:nowrap;}
+  #pulseRoot th{color:var(--ink-faint);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;}
+  #pulseRoot .n{text-align:right;}
+  #pulseRoot .foot{color:var(--ink-faint);font-size:.76rem;margin-top:18px;}
+</style>
+
+<div class="page-container" id="pulseRoot" data-theme="dark">
+ <div class="max">
+  <div class="head">
+    <div>
+      <h2>Engagement</h2>
+      <div class="sub">Staff only · Lagos calendar days{% if last_pulse %} · last data received {{ last_pulse }}{% endif %}</div>
+    </div>
+    <div class="range">
+      <a class="pill" href="{% url 'staff_portal' %}">← Staff portal</a>
+      <a class="pill {% if days == 7 %}on{% endif %}" href="?days=7">7 days</a>
+      <a class="pill {% if days == 30 %}on{% endif %}" href="?days=30">30 days</a>
+      <a class="pill {% if days == 90 %}on{% endif %}" href="?days=90">90 days</a>
+    </div>
+  </div>
+
+  {% if not tracking_staff %}
+  <div class="note">Staff and superuser activity is excluded, so your own testing won't appear. To see it while testing, set <b>ANALYTICS_TRACK_STAFF=1</b> in .env and restart the server.</div>
+  {% endif %}
+  {% if not last_pulse %}
+  <div class="note">No data received yet. Numbers appear about 30 seconds after someone opens a page.</div>
+  {% endif %}
+
+  <div class="stats">
+    <div class="card"><div class="num">{{ today_users }}</div><div class="lbl">Active today</div></div>
+    <div class="card"><div class="num">{{ avg_dau }}</div><div class="lbl">Avg daily active ({{ days }}d)</div></div>
+    <div class="card"><div class="num">{{ wau }}</div><div class="lbl">Unique students, 7 days</div></div>
+    <div class="card"><div class="num">{{ unique }}</div><div class="lbl">Unique students, {{ days }} days</div></div>
+    <div class="card"><div class="num">{% if stickiness is not None %}{{ stickiness }}%{% else %}–{% endif %}</div><div class="lbl">Stickiness (avg daily ÷ unique)</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h3>Daily active users</h3>
+    <div class="bars">
+      {% for s in series %}
+      <div class="bar {% if s.users == 0 %}zero{% endif %}" style="height:{{ s.pct }}%" title="{{ s.date|date:'D j M' }}: {{ s.users }}"></div>
+      {% endfor %}
+    </div>
+    <div class="axis"><span>{{ series.0.date|date:"j M" }}</span><span>Today</span></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h3>Text-to-speech (last {{ days }} days)</h3>
+    <div class="stats" style="margin:0">
+      <div><div class="num">{{ tts.listen_hours }}</div><div class="lbl">Hours listened</div></div>
+      <div><div class="num">{{ tts.listeners }}</div><div class="lbl">Students who listened</div></div>
+      <div><div class="num">{% if tts.adoption_pct is not None %}{{ tts.adoption_pct }}%{% else %}–{% endif %}</div><div class="lbl">Of active students</div></div>
+      <div><div class="num">{{ tts.plays }}</div><div class="lbl">Plays started</div></div>
+      <div><div class="num">{% if tts.finish_pct is not None %}{{ tts.finish_pct }}%{% else %}–{% endif %}</div><div class="lbl">Played to the end</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Modules (last {{ days }} days)</h3>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>Course</th><th class="n">Week</th><th>Topic</th><th class="n">Readers</th>
+          <th class="n">Avg read (min)</th><th class="n">Avg listen (min)</th>
+          <th class="n">Parts</th><th class="n">TTS plays</th><th class="n">Finished</th>
+        </tr></thead>
+        <tbody>
+        {% for m in modules %}
+          <tr>
+            <td>{{ m.course_code }}</td><td class="n">{{ m.week_number }}</td><td>{{ m.topic_name }}</td>
+            <td class="n">{{ m.readers }}</td><td class="n">{{ m.avg_read_min }}</td><td class="n">{{ m.avg_listen_min }}</td>
+            <td class="n">{{ m.parts|default:0 }}</td><td class="n">{{ m.plays|default:0 }}</td><td class="n">{{ m.finished|default:0 }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="9" style="color:var(--ink-faint)">No module activity in this period.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="foot"><b>Active user:</b> a student with at least 30 seconds of active time or any TTS listening on a day. <b>Read time:</b> seconds the lecture page was visible with interaction in the last 2 minutes (presence, not comprehension). Students with JavaScript blocked, or offline all session, are undercounted.</p>
+ </div>
+</div>
+
+<script>
+  (function(){
+    const root = document.getElementById('pulseRoot');
+    if(!root) return;
+    function detectTheme(){
+      const html = document.documentElement, body = document.body;
+      const attr = html.getAttribute('data-theme') || (body && body.getAttribute('data-theme'));
+      if (attr) return attr;
+      if (html.classList.contains('dark') || (body && body.classList.contains('dark'))) return 'dark';
+      if (html.classList.contains('light') || (body && body.classList.contains('light'))) return 'light';
+      try{
+        const stored = localStorage.getItem('theme') || localStorage.getItem('appearance') || localStorage.getItem('rovea-theme');
+        if (stored) return stored;
+      }catch(e){}
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    function sync(){ root.setAttribute('data-theme', detectTheme()); }
+    sync();
+    new MutationObserver(sync).observe(document.documentElement, { attributes:true, attributeFilter:['class','data-theme'] });
+    if (document.body) new MutationObserver(sync).observe(document.body, { attributes:true, attributeFilter:['class','data-theme'] });
+  })();
+</script>
+{% endblock %}

@@ -151,6 +151,11 @@ def _get_batch_client():
         http_options=types.HttpOptions(timeout=60_000),  # ms — raises instead of hanging forever
     )
 
+def _get_cleanup_client():
+    return genai.Client(
+        api_key=settings.GEMINI_API_KEY_CLEANUP,
+        http_options=types.HttpOptions(timeout=60_000),
+    )
 
 DEFAULT_MODEL_FALLBACK_CHAIN = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"]
 
@@ -348,6 +353,9 @@ def extract_topics_for_slide_resumable(slide):
     slide.extracted_topics = merged
     slide.topics_incomplete = incomplete
     slide.save(update_fields=["extracted_topics", "topics_incomplete"])
+
+    merged = dedup_topics_semantically(slide)
+    
 
     return merged, incomplete
 
@@ -577,7 +585,7 @@ def _cleanup_mangled_text_with_ai(course_code, course_title, raw_text, slide=Non
         # behaves like the old non-resumable version.
         return _cleanup_mangled_text_no_resume(course_code, course_title, raw_text)
 
-    client = _get_batch_client()
+    client = _get_cleanup_client()
     chunk_rows = _get_or_create_cleanup_chunks(slide, raw_text)
     pending_rows = [c for c in chunk_rows if c.status != "COMPLETED"]
 
@@ -642,7 +650,7 @@ def _cleanup_mangled_text_with_ai(course_code, course_title, raw_text, slide=Non
 def _cleanup_mangled_text_no_resume(course_code, course_title, raw_text):
     """Original non-persistent behavior, kept for any caller that doesn't
     pass a slide object."""
-    client = _get_batch_client()
+    client = _get_cleanup_client()
     chunks = _macro_chunk_text(raw_text)
     cleaned_chunks = []
 
@@ -901,3 +909,95 @@ def is_reference_table_content(text, max_len=1200):
     # High density of short, numeric/label lines relative to total = a table
     avg_line_len = sum(len(l) for l in lines) / len(lines)
     return numeric_lines / len(lines) > 0.4 and avg_line_len < 80
+
+TOPIC_DEDUP_SYSTEM_INSTRUCTION = (
+    "You are reviewing a list of topic names extracted from one course's lecture "
+    "slides. Because extraction ran in separate chunks, some topics may be "
+    "near-duplicates — different wording for substantially the same material "
+    "(e.g. 'Introduction to X' and 'X for Y Case' when both actually teach the "
+    "same core concept and worked examples).\n\n"
+    "Your job: group any topics that teach SUBSTANTIALLY the same material, and "
+    "for each group, pick or write ONE canonical name to represent it — prefer "
+    "the clearest, most specific existing name in the group, not a vague umbrella "
+    "title.\n\n"
+    "Rules:\n"
+    "1. Only merge topics you're confident overlap — a legitimately distinct "
+    "sub-topic (e.g. 'IPR for Two-Phase Reservoirs' vs 'IPR for Partial Two-Phase "
+    "Reservoirs' vs 'Constructing IPR Curves from Field Test Data') must stay "
+    "separate, even if related, if each covers genuinely different content or "
+    "worked examples.\n"
+    "2. Do not merge topics just because they share a subject area — only merge "
+    "when they would produce near-identical lecture content.\n"
+    "3. A topic with no duplicates stays exactly as given, unchanged.\n"
+    "4. Return ONLY a JSON object mapping EVERY original topic name (as given) "
+    "to its canonical name after merging. Topics with no duplicate map to "
+    "themselves. No markdown fences, no explanation.\n\n"
+    'Example: {"Introduction to X": "X Fundamentals", "X Fundamentals": '
+    '"X Fundamentals", "Y Basics": "Y Basics"}'
+)
+
+
+def dedup_topics_semantically(slide):
+    """Collapses near-duplicate topic names in slide.extracted_topics into
+    canonical names, preserving list order (first occurrence of each
+    canonical name wins its position). Returns the deduplicated list and
+    saves it onto the slide. Safe to call on a slide with no duplicates —
+    the mapping will just be identity for every topic."""
+    topics = list(slide.extracted_topics or [])
+    if len(topics) < 2:
+        return topics
+
+    client = _get_batch_client()
+    topics_list_str = "\n".join(f"- {t}" for t in topics)
+
+    raw = _call_gemini_with_retry(
+        client=client,
+        model="gemini-3.6-flash",
+        contents=f"Course: {slide.course_code} — {slide.course_title}\n\nTopics:\n{topics_list_str}",
+        config=types.GenerateContentConfig(
+            system_instruction=TOPIC_DEDUP_SYSTEM_INSTRUCTION,
+            max_output_tokens=3000,
+        ),
+        course_code=slide.course_code,
+        chunk_label="Topic dedup pass",
+    )
+
+    if not raw or not raw.strip():
+        print(f"[{slide.course_code}] Topic dedup: no response, keeping topics as-is.")
+        return topics
+
+    clean = raw.replace("```json", "").replace("```", "").strip()
+    a, b = clean.find("{"), clean.rfind("}")
+    if a == -1 or b <= a:
+        print(f"[{slide.course_code}] Topic dedup: unparseable response, keeping topics as-is.")
+        return topics
+
+    try:
+        mapping = json.loads(clean[a:b + 1])
+    except json.JSONDecodeError:
+        print(f"[{slide.course_code}] Topic dedup: JSON decode failed, keeping topics as-is.")
+        return topics
+
+    if not isinstance(mapping, dict):
+        return topics
+
+    canonical_order = []
+    seen = set()
+    for t in topics:
+        canon = mapping.get(t, t)
+        if not isinstance(canon, str) or not canon.strip():
+            canon = t  # bad/missing mapping — fall back to original, never drop a topic
+        if canon not in seen:
+            seen.add(canon)
+            canonical_order.append(canon)
+
+    merged_count = len(topics) - len(canonical_order)
+    if merged_count > 0:
+        print(f"[{slide.course_code}] Topic dedup: merged {merged_count} duplicate topic(s), "
+              f"{len(topics)} → {len(canonical_order)}.")
+        slide.extracted_topics = canonical_order
+        slide.save(update_fields=["extracted_topics"])
+    else:
+        print(f"[{slide.course_code}] Topic dedup: no duplicates found.")
+
+    return canonical_order
