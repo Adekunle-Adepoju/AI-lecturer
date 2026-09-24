@@ -2,40 +2,40 @@
 {% block title %}Timetable — Rovea{% endblock %}
 
 {% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
 <style>
   /* =========================================================
-     Rovea timetable — scoped under #timetableRoot, same tokens
-     as the dashboard/session pages. Only presentation changes;
-     schedule_preview / today / timetable / profile context is
-     read exactly as the view already provides it.
+     Rovea timetable — scoped under #timetableRoot. Colors, radii
+     and fonts are aliased straight from Rovea's own site-wide
+     tokens (main.css :root / [data-theme]) instead of a parallel
+     palette, so this page can't drift from the rest of the app.
+     Only presentation changes here; schedule_preview / today /
+     timetable / profile context is read exactly as the view
+     already provides it.
      ========================================================= */
   #timetableRoot{
-    --bg:#0F1D2B; --bg-alt:#16283A; --surface:#13212F; --surface-2:#1A2C3D;
-    --ink:#ECEFF3; --ink-soft:#B7C2CB; --ink-faint:#8A97A0;
-    --line:rgba(236,239,243,.14); --line-soft:rgba(236,239,243,.08);
-    --navy:#0F4677; --navy-deep:#0A2E4D; --heading:#E7EDF3;
-    --amber:#E2A63B; --amber-deep:#C98A22;
-    --coral:#D96A45; --green:#4A9D74;
-    --font-display:'Newsreader',serif; --font-body:'Inter',sans-serif;
-    --ease:cubic-bezier(.22,.61,.36,1);
-    --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
+    --bg:var(--navy); --bg-alt:var(--navy-mid); --surface:var(--navy-card); --surface-2:var(--navy-raised);
+    --ink:var(--text); --ink-soft:var(--text-secondary); --ink-faint:var(--text-muted);
+    --line:var(--border); --line-soft:var(--border);
+    --heading:var(--text);
+    --accent:var(--amber); --accent-deep:var(--amber-dark); --accent-ink:#0D1B2A;
+    --coral:var(--red-soft); --green:var(--green-text);
+    --font-body:'Poppins',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --font-heading:'Space Grotesk',sans-serif;
+    --ease:cubic-bezier(.4,0,.2,1);
     color-scheme: dark;
     background:var(--bg); color:var(--ink); font-family:var(--font-body);
     line-height:1.55; padding:clamp(36px,6vh,72px) clamp(14px,3vw,32px) 60px;
     border-radius:0 0 var(--radius-lg) var(--radius-lg);
     transition:background .35s var(--ease),color .35s var(--ease);
   }
-  #timetableRoot[data-theme="light"]{
-    --bg:#F1EFE6; --bg-alt:#E7E2D3; --surface:#FBFAF4; --surface-2:#FFFFFF;
-    --ink:#17212B; --ink-soft:#54626D; --ink-faint:#818D94;
-    --line:rgba(23,33,43,.14); --line-soft:rgba(23,33,43,.07);
-    --heading:#0A2E4D;
-    color-scheme: light;
-  }
+  [data-theme="light"] #timetableRoot{ color-scheme: light; }
   #timetableRoot *{box-sizing:border-box;}
   #timetableRoot a{color:inherit;text-decoration:none;}
-  #timetableRoot :focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:4px;}
-  #timetableRoot h1,#timetableRoot h2,#timetableRoot h3{font-family:var(--font-display);font-weight:500;color:var(--heading);letter-spacing:-.01em;margin:0;}
+  #timetableRoot :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+  #timetableRoot h1,#timetableRoot h2,#timetableRoot h3{font-family:var(--font-heading);font-weight:700;color:var(--heading);letter-spacing:-.01em;margin:0;}
   #timetableRoot .ic{width:15px;height:15px;flex:none;}
   @keyframes tRise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
   @media(prefers-reduced-motion:reduce){#timetableRoot *{animation-duration:.001ms!important;transition-duration:.001ms!important;}}
@@ -49,68 +49,76 @@
   #timetableRoot .greeting-sub{color:var(--ink-soft);font-size:.92rem;margin-top:4px;}
 
   #timetableRoot .section-label{
-    display:flex;align-items:center;gap:8px;font-size:.82rem;font-weight:600;color:var(--ink-soft);margin:22px 0 14px;
+    display:flex;align-items:center;gap:8px;font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--ink-soft);margin:22px 0 14px;
   }
-  #timetableRoot .section-label .ic{color:var(--amber);}
+  #timetableRoot .section-label .ic{color:var(--accent);}
 
   /* ---------- day strip (the "real timetable" grid) ---------- */
   #timetableRoot .day-strip{
     display:grid;grid-auto-flow:column;grid-auto-columns:minmax(148px,1fr);gap:12px;
-    overflow-x:auto;padding-bottom:6px;
+    overflow-x:auto;padding:2px 2px 10px;
   }
-  #timetableRoot .day-strip::-webkit-scrollbar{height:8px;}
+  #timetableRoot .day-strip::-webkit-scrollbar{height:6px;}
   #timetableRoot .day-strip::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px;}
 
   #timetableRoot .day-col{
-    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);
+    position:relative;
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);
     padding:14px;display:flex;flex-direction:column;gap:12px;min-height:190px;
     opacity:0;transform:translateY(8px);animation:tRise .5s var(--ease) forwards;
-    transition:border-color .2s var(--ease);
+    transition:border-color .2s var(--ease),transform .2s var(--ease),box-shadow .2s var(--ease);
   }
-  #timetableRoot .day-col.is-today{border-color:var(--amber);background:rgba(226,166,59,.06);}
-  #timetableRoot .day-col-head{text-align:center;padding-bottom:10px;border-bottom:1px solid var(--line-soft);position:relative;}
+  #timetableRoot .day-col:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(0,0,0,.18);}
+  #timetableRoot .day-col.is-today{border-color:var(--accent);background:var(--amber-glow);}
+  #timetableRoot .day-col-head{text-align:center;padding-bottom:10px;border-bottom:1px solid var(--line-soft);}
   #timetableRoot .day-name{font-size:.82rem;font-weight:700;color:var(--ink-soft);}
-  #timetableRoot .day-col.is-today .day-name{color:var(--amber);}
+  #timetableRoot .day-col.is-today .day-name{color:var(--accent);}
   #timetableRoot .day-date{font-size:.74rem;color:var(--ink-faint);margin-top:2px;}
-  #timetableRoot .today-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--amber);margin-left:4px;vertical-align:middle;}
+  #timetableRoot .today-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin-left:4px;vertical-align:middle;}
 
   #timetableRoot .day-block{flex:1;display:flex;flex-direction:column;justify-content:center;}
   #timetableRoot .course-block{
-    background:var(--navy);color:#fff;border-radius:10px;padding:12px;font-size:.8rem;line-height:1.4;
+    background:var(--bg);color:var(--text);border:1px solid var(--line-soft);border-radius:var(--radius-sm);
+    padding:12px;font-size:.8rem;line-height:1.4;
   }
-  #timetableRoot .course-block .cb-code{font-weight:700;font-size:.84rem;}
-  #timetableRoot .course-block .cb-title{opacity:.85;margin-top:2px;}
-  #timetableRoot .course-block .cb-week{opacity:.7;font-size:.72rem;margin-top:8px;}
+  #timetableRoot .course-block .cb-code{font-weight:700;font-size:.84rem;color:var(--heading);}
+  #timetableRoot .course-block .cb-title{opacity:.8;margin-top:2px;}
+  #timetableRoot .course-block .cb-week{opacity:.65;font-size:.72rem;margin-top:8px;}
   #timetableRoot .rest-block{
-    text-align:center;color:var(--ink-faint);font-size:.78rem;padding:10px;border:1px dashed var(--line);border-radius:10px;
+    display:flex;align-items:center;justify-content:center;gap:6px;text-align:center;
+    color:var(--ink-faint);font-size:.76rem;padding:10px;border:1px dashed var(--line);border-radius:var(--radius-sm);
   }
 
-  #timetableRoot .badge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;font-size:.68rem;font-weight:700;}
-  #timetableRoot .badge-amber{background:var(--amber);color:var(--navy-deep);}
+  #timetableRoot .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;font-size:.65rem;font-weight:700;letter-spacing:.02em;}
+  #timetableRoot .badge-amber{background:var(--accent);color:var(--accent-ink);position:absolute;top:-8px;right:12px;}
 
   /* ---------- empty state ---------- */
-  #timetableRoot .side-widget-card.empty-state{text-align:center;padding:36px 20px;color:var(--ink-soft);font-size:.9rem;}
+  #timetableRoot .side-widget-card.empty-state{
+    display:flex;flex-direction:column;align-items:center;gap:10px;
+    text-align:center;padding:40px 24px;color:var(--ink-soft);font-size:.88rem;
+  }
+  #timetableRoot .empty-state .empty-icon{font-size:1.8rem;}
+  #timetableRoot .empty-state a{
+    margin-top:4px;color:var(--accent);font-weight:600;font-size:.85rem;
+  }
+  #timetableRoot .empty-state a:hover{text-decoration:underline;}
 
   /* ---------- sidebar cards ---------- */
   #timetableRoot .side-widget-card{
-    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);padding:18px;margin-bottom:16px;
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:18px;margin-bottom:16px;
     opacity:0;transform:translateY(8px);animation:tRise .5s var(--ease) forwards;
   }
-  #timetableRoot .progress-row{display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:8px;}
-  #timetableRoot .progress-row span:first-child{color:var(--ink-soft);}
-  #timetableRoot .progress-row span:last-child{font-weight:600;color:var(--amber);}
-  #timetableRoot .prog-bar{height:6px;border-radius:99px;background:var(--bg-alt);overflow:hidden;}
-  #timetableRoot .prog-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--green),var(--amber));transition:width 1s var(--ease);}
-  #timetableRoot .meta-list{display:flex;flex-direction:column;gap:9px;margin-top:16px;padding-top:12px;border-top:1px solid var(--line-soft);font-size:.82rem;}
+  #timetableRoot .meta-list{display:flex;flex-direction:column;gap:9px;margin-top:0;padding-top:0;border-top:none;font-size:.82rem;}
   #timetableRoot .meta-row{display:flex;justify-content:space-between;color:var(--ink-soft);}
   #timetableRoot .meta-row strong{color:var(--heading);font-weight:600;}
 
   #timetableRoot .btn{
     display:flex;align-items:center;gap:9px;border-radius:999px;font-weight:600;font-size:.85rem;
     padding:11px 16px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;
-    transition:.2s var(--ease);
+    transition:border-color .2s var(--ease),background .2s var(--ease),color .2s var(--ease);
   }
-  #timetableRoot .btn:hover{border-color:var(--navy);background:var(--bg-alt);}
+  #timetableRoot .btn:hover{border-color:var(--accent);background:var(--amber-glow);color:var(--accent);}
   #timetableRoot .btn-full{width:100%;justify-content:flex-start;}
 </style>
 
@@ -130,6 +138,7 @@
     <div class="day-strip">
       {% for day in schedule_preview %}
         <div class="day-col {% if day.date == today %}is-today{% endif %}" style="animation-delay: {{ forloop.counter0|floatformat:0 }}0ms;">
+          {% if day.date == today %}<span class="badge badge-amber">Today</span>{% endif %}
           <div class="day-col-head">
             <div class="day-name">
               {{ day.date|date:"D" }}{% if day.date == today %}<span class="today-dot"></span>{% endif %}
@@ -138,7 +147,7 @@
           </div>
           <div class="day-block">
             {% if day.is_rest %}
-              <div class="rest-block">Rest day — free, or practice in the Simulator</div>
+              <div class="rest-block">🌤️ Rest day — free, or practice in the Simulator</div>
             {% else %}
               <div class="course-block">
                 <div class="cb-code">{{ day.course.course_code }}</div>
@@ -147,26 +156,25 @@
               </div>
             {% endif %}
           </div>
-          {% if day.date == today %}<span class="badge badge-amber">Today</span>{% endif %}
         </div>
       {% endfor %}
     </div>
 
     {% if not timetable %}
     <div class="side-widget-card empty-state">
-      No timetable items configured yet. Complete your profile setup to generate your learning track.
+      <div class="empty-icon">🗓️</div>
+      <div>No timetable items configured yet. Complete your profile setup to generate your learning track.</div>
+      <a href="{% url 'profile_edit' %}">Complete profile setup →</a>
     </div>
     {% endif %}
   </div>
 
   <div class="dashboard-side-col">
     <p class="section-label">
-      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M7 15l4-6 3 3 5-8"/></svg>
-      Semester progress
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5-10-5Z"/><path d="M6 12v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5"/></svg>
+      Your program
     </p>
     <div class="side-widget-card">
-      <div class="progress-row"><span>Term timeline</span><span>Week 1 / 15</span></div>
-      <div class="prog-bar"><div class="prog-fill" style="width: 7.1%;"></div></div>
       <div class="meta-list">
         <div class="meta-row"><span>Academic track:</span><strong>{{ profile.level }} Level</strong></div>
         <div class="meta-row"><span>Current term:</span><strong>Semester {{ profile.semester }}</strong></div>
@@ -193,35 +201,15 @@
 
 <script>
 (function(){
+  // Theme mirrors the site-wide toggle in the hamburger drawer (base.html) —
+  // same pattern as dashboard.html/session.html/leaderboard.html.
   const root = document.getElementById('timetableRoot');
-  if(!root) return;
-
-  /* Follow whatever theme base.html's own Appearance toggle sets on
-     <html>/<body> (data-theme attribute, or a "dark"/"light" class),
-     falling back to a stored key or the OS preference if neither is
-     present yet. Re-checks live via MutationObserver so flipping the
-     toggle elsewhere on the page updates this component immediately,
-     without needing to know exactly which mechanism base.html uses. */
-  function detectTheme(){
-    const html = document.documentElement, body = document.body;
-    const attr = html.getAttribute('data-theme') || (body && body.getAttribute('data-theme'));
-    if (attr) return attr;
-    if (html.classList.contains('dark') || (body && body.classList.contains('dark'))) return 'dark';
-    if (html.classList.contains('light') || (body && body.classList.contains('light'))) return 'light';
-    try{
-      const stored = localStorage.getItem('theme') || localStorage.getItem('appearance') || localStorage.getItem('rovea-theme');
-      if (stored) return stored;
-    }catch(e){}
-    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  if (!root) return;
+  function syncTheme(){
+    root.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') || 'dark');
   }
-
-  function sync(){ root.setAttribute('data-theme', detectTheme()); }
-  sync();
-
-  new MutationObserver(sync).observe(document.documentElement, { attributes:true, attributeFilter:['class','data-theme'] });
-  if (document.body){
-    new MutationObserver(sync).observe(document.body, { attributes:true, attributeFilter:['class','data-theme'] });
-  }
+  syncTheme();
+  new MutationObserver(syncTheme).observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] });
 })();
 </script>
 {% endblock %}

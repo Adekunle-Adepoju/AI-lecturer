@@ -2,12 +2,51 @@
 {% block title %}History — Rovea{% endblock %}
 
 {% block content %}
+<style>
+  #weakTopicsSection .weak-pill{ border-left:3px solid var(--red-soft); }
+</style>
 <div class="page-container">
 
   <h2 style="font-family:'Poppins',sans-serif; margin-bottom:4px">📚 Lecture History</h2>
   <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">All your completed topics, organized by course</p>
 
   {% if history_by_course %}
+    <div id="weakTopicsSection" style="margin-bottom:32px">
+      <p class="section-label" style="margin-top:0">⚠️ Review Weak Topics</p>
+      <div class="course-list" id="weakTopicsList">
+        {% for code, data in history_by_course.items %}
+          {% for topic in data.topics %}
+            {% if not topic.passed_quiz %}
+            <a href="{% url 'review' topic.id %}" class="course-pill weak-pill">
+              <div class="course-pill-left">
+                <div class="course-info">
+                  <div class="course-name">{{ topic.topic_name }}</div>
+                  <div class="course-code">{{ code }} · Week {{ topic.session.week_number }} · Topic {{ topic.topic_index|add:1 }}</div>
+                </div>
+              </div>
+              <span class="arrow">Review →</span>
+            </a>
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      </div>
+      <div class="done-card" id="weakTopicsEmpty" style="display:none">
+        <div class="done-emoji">🎯</div>
+        <div class="done-title">You're all caught up!</div>
+        <div class="done-sub">No failed topics right now — keep it up.</div>
+      </div>
+    </div>
+    <script>
+      (function(){
+        var list = document.getElementById("weakTopicsList");
+        var empty = document.getElementById("weakTopicsEmpty");
+        if (list && empty && list.children.length === 0) {
+          list.style.display = "none";
+          empty.style.display = "";
+        }
+      })();
+    </script>
+
     {% for code, data in history_by_course.items %}
     <div style="margin-bottom:28px">
       <p class="section-label">{{ code }} — {{ data.course_title }}</p>
