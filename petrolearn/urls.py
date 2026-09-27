@@ -8,6 +8,7 @@ urlpatterns = [
     path("", include("core.urls")),
     path("battle/", include("battle.urls")),
     path("pulse/", include("engagement.urls")),
+    path("focus-sprint/", include("focus_sprint.urls"))
 ]
 
 if settings.DEBUG:

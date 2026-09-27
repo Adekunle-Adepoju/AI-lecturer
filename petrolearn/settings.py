@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
     'engagement',
+    'focus_sprint',
 ]
 
 # Staff/superuser traffic is ignored by default so sponsor numbers are clean.
@@ -88,6 +89,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.active_focus_sprint',
             ],
         },
     },

@@ -284,6 +284,16 @@
   @media(prefers-reduced-motion:reduce){
     #dashboardRoot *{animation-duration:.001ms!important;transition-duration:.001ms!important;}
   }
+.fs-started-ring{
+  width:72px;height:72px;border-radius:50%;
+  border:4px solid var(--line);border-top-color:var(--amber);
+  animation:fsSpin .9s linear infinite, fsPulse 1.4s ease-in-out infinite;
+}
+@keyframes fsSpin{ to{ transform:rotate(360deg); } }
+@keyframes fsPulse{
+  0%,100%{ box-shadow:0 0 0 0 rgba(226,166,59,.35); }
+  50%{ box-shadow:0 0 0 14px rgba(226,166,59,0); }
+}
 </style>
 
 <div class="page-container dashboard-grid-container" id="dashboardRoot" data-theme="dark">
@@ -476,29 +486,77 @@
     </div>
 
     <p class="section-label">
-      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-      Focus sprint
-    </p>
-    <div class="side-widget-card focus-widget" id="focusWidget"
-         data-course-url="{% if todays_courses %}{% url 'session' todays_courses.0.course_code %}{% endif %}"
-         data-course-title="{% if todays_courses %}{{ todays_courses.0.course_title|escapejs }}{% endif %}">
-      <div class="focus-ring">
-        <svg width="64" height="64" viewBox="0 0 64 64">
-          <circle class="focus-ring-bg" cx="32" cy="32" r="28"/>
-          <circle class="focus-ring-fg" id="focusRingFg" cx="32" cy="32" r="28" stroke-dasharray="175.9" stroke-dashoffset="0"/>
-        </svg>
-        <div class="focus-time" id="focusTime">25:00</div>
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+  Focus sprint
+</p>
+<div class="side-widget-card" id="focusSprintWidget">
+  {% if active_focus_sprint %}
+    <div style="text-align:center;padding:6px 0 4px;">
+      <div style="font-size:.86rem;color:var(--ink-soft);">
+        Sprint in progress — staking
+        <strong style="color:var(--amber);">{{ active_focus_sprint.stake_current }} XP</strong>
       </div>
-      <div class="focus-info">
-        <div class="focus-task" id="focusTask">
-          {% if todays_courses %}Next up: {{ todays_courses.0.course_title }}{% else %}Pick a course and start a sprint{% endif %}
-        </div>
-        <div class="focus-controls" id="focusControls">
-          <button type="button" class="btn btn-primary btn-xs" id="focusStartBtn">Start</button>
-          <button type="button" class="btn btn-white-outline btn-xs" id="focusResetBtn">Reset</button>
-        </div>
+      <div style="font-size:.74rem;color:var(--ink-faint);margin-top:6px;">
+        Track it from the timer at the bottom of your screen.
       </div>
     </div>
+  {% else %}
+    <form id="focusSprintForm" style="display:flex;flex-direction:column;gap:10px;">
+      <div>
+        <label for="fsStakeInput" style="font-size:.78rem;color:var(--ink-soft);display:block;margin-bottom:4px;">
+          Stake (XP)
+        </label>
+        <input type="number" id="fsStakeInput" min="1" max="{{ profile.xp }}" value="{{ profile.xp|default:0 }}"
+               style="width:100%;height:36px;border-radius:8px;border:1px solid var(--line);
+                      background:var(--bg-alt);color:var(--ink);padding:0 10px;
+                      font-family:var(--font-body);font-size:.86rem;">
+        <div style="font-size:.72rem;color:var(--ink-faint);margin-top:3px;">
+          You have {{ profile.xp }} XP available.
+        </div>
+      </div>
+      <div>
+        <label for="fsDurationInput" style="font-size:.78rem;color:var(--ink-soft);display:block;margin-bottom:4px;">
+          Duration (hours){% if not profile.is_staff_member %} — min 2{% endif %}
+        </label>
+        <input type="number" id="fsDurationInput"
+               min="{% if profile.is_staff_member %}0.1{% else %}2{% endif %}" step="0.5"
+               value="{% if profile.is_staff_member %}0.5{% else %}2{% endif %}"
+               style="width:100%;height:36px;border-radius:8px;border:1px solid var(--line);
+                      background:var(--bg-alt);color:var(--ink);padding:0 10px;
+                      font-family:var(--font-body);font-size:.86rem;">
+      </div>
+      <div id="fsFormError" style="font-size:.78rem;color:var(--coral);display:none;"></div>
+      <button type="submit" class="btn btn-primary" id="fsStartBtn"
+              style="width:100%;justify-content:center;">
+        Start sprint
+      </button>
+    </form>
+  {% endif %}
+</div>
+<div id="fsConfirmModal" style="display:none;position:fixed;inset:0;z-index:1000;
+     background:rgba(0,0,0,.6);align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;
+       padding:26px;max-width:380px;width:90%;color:var(--ink);">
+    <h3 style="margin:0 0 12px;font-size:1.05rem;">Start this focus sprint?</h3>
+    <p id="fsConfirmSummary" style="font-size:.86rem;color:var(--ink-soft);margin:0 0 14px;"></p>
+    <ul style="font-size:.8rem;color:var(--ink-soft);margin:0 0 18px;padding-left:18px;line-height:1.6;">
+      <li>Leaving the app for 10 minutes straight costs you a <strong>strike</strong> — your stake is halved.</li>
+      <li>After a strike you choose: keep going, or stop and take the reduced stake back.</li>
+      <li>You can end the sprint voluntarily any time — you get your current stake back, no bonus.</li>
+      <li>Reach the full duration and your stake <strong>doubles</strong>. That's the only way to get the bonus.</li>
+    </ul>
+    <div style="display:flex;gap:10px;">
+      <button type="button" id="fsConfirmCancelBtn" class="btn btn-white-outline" style="flex:1;">Cancel</button>
+      <button type="button" id="fsConfirmBeginBtn" class="btn btn-primary" style="flex:1;">Begin sprint</button>
+    </div>
+  </div>
+</div>
+
+<div id="fsStartedOverlay" style="display:none;position:fixed;inset:0;z-index:1001;
+     background:var(--bg);align-items:center;justify-content:center;flex-direction:column;gap:14px;">
+  <div class="fs-started-ring"></div>
+  <div style="font-family:var(--font-display);font-size:1.3rem;color:var(--heading);">Sprint started — good luck!</div>
+</div>
 
     <p class="section-label">
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
@@ -748,108 +806,81 @@
     }
   });
 })();
+  // ---------- Focus sprint: stake + duration setup (real, server-backed) ----------
+    (function(){
+    const form = document.getElementById('focusSprintForm');
+    if (!form) return;
 
-  // ---------- Focus sprint timer (25/5 Pomodoro, now tied to the real course) ----------
-  (function(){
-    const WORK = 25 * 60, BREAK = 5 * 60, CIRC = 175.9;
-    let secondsLeft = WORK, total = WORK, onBreak = false, interval = null;
+    const stakeInput = document.getElementById('fsStakeInput');
+    const durationInput = document.getElementById('fsDurationInput');
+    const errorEl = document.getElementById('fsFormError');
+    const startBtn = document.getElementById('fsStartBtn');
+    const confirmModal = document.getElementById('fsConfirmModal');
+    const confirmSummary = document.getElementById('fsConfirmSummary');
+    const confirmBeginBtn = document.getElementById('fsConfirmBeginBtn');
+    const confirmCancelBtn = document.getElementById('fsConfirmCancelBtn');
+    const startedOverlay = document.getElementById('fsStartedOverlay');
 
-    const widgetEl = document.getElementById('focusWidget');
-    const timeEl = document.getElementById('focusTime');
-    const ringEl = document.getElementById('focusRingFg');
-    const taskEl = document.getElementById('focusTask');
-    const controlsEl = document.getElementById('focusControls');
-    if (!widgetEl || !timeEl || !ringEl || !taskEl || !controlsEl) return;
+    const ERROR_MESSAGES = {
+      invalid_stake: 'Enter a stake greater than 0.',
+      invalid_input: 'Enter valid numbers for stake and duration.',
+      below_minimum_duration: 'Sprints must be at least 2 hours long.',
+      insufficient_xp: "You don't have that much XP to stake.",
+      sprint_already_active: 'You already have a sprint running — refresh the page.',
+      server_error: 'Something went wrong on our end — try again.',
+    };
 
-    const courseUrl = widgetEl.dataset.courseUrl || '';
-    const courseTitle = widgetEl.dataset.courseTitle || 'your next course';
-    const defaultTask = taskEl.textContent.trim();
+    function csrf(){ return document.querySelector('meta[name="csrf-token"]').content; }
+    function showError(msg){ errorEl.textContent = msg; errorEl.style.display = 'block'; }
 
-    function render(){
-      const clamped = Math.max(secondsLeft, 0);
-      const m = String(Math.floor(clamped/60)).padStart(2,'0');
-      const s = String(Math.floor(clamped%60)).padStart(2,'0');
-      timeEl.textContent = m + ':' + s;
-      const progress = Math.max(0, Math.min(1, 1 - secondsLeft/total));
-      ringEl.style.strokeDashoffset = String(CIRC * (1 - progress));
-    }
+    let pendingStake = null, pendingHours = null;
 
-    // Normal Start/Pause + Reset controls — used any time the timer is
-    // actively counting down (either a work sprint or a break).
-    function renderActiveControls(){
-      const label = interval ? 'Pause' : (secondsLeft < total ? 'Resume' : 'Start');
-      controlsEl.innerHTML =
-        '<button type="button" class="btn btn-primary btn-xs" id="focusStartBtn">' + label + '</button>' +
-        '<button type="button" class="btn btn-white-outline btn-xs" id="focusResetBtn">Reset</button>';
-      document.getElementById('focusStartBtn').addEventListener('click', toggleTimer);
-      document.getElementById('focusResetBtn').addEventListener('click', resetTimer);
-    }
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      errorEl.style.display = 'none';
 
-    // Shown the moment a WORK sprint hits zero — the actual point of the
-    // feature: send them straight into the course they were sprinting for,
-    // instead of silently ticking over into a break they never asked for.
-    function renderSprintCompleteControls(){
-      if (courseUrl){
-        controlsEl.innerHTML =
-          '<a href="' + courseUrl + '" class="btn btn-primary btn-xs">Start studying →</a>' +
-          '<button type="button" class="btn btn-white-outline btn-xs" id="focusBreakBtn">Take a break</button>';
-      } else {
-        controlsEl.innerHTML =
-          '<button type="button" class="btn btn-primary btn-xs" id="focusBreakBtn">Take a break</button>' +
-          '<button type="button" class="btn btn-white-outline btn-xs" id="focusResetBtn">Reset</button>';
-        document.getElementById('focusResetBtn').addEventListener('click', resetTimer);
+      const stake = parseInt(stakeInput.value, 10);
+      const hours = parseFloat(durationInput.value);
+      if (!stake || stake <= 0 || !hours || hours <= 0){
+        showError(ERROR_MESSAGES.invalid_input);
+        return;
       }
-      document.getElementById('focusBreakBtn').addEventListener('click', startBreak);
-    }
+      pendingStake = stake; pendingHours = hours;
+      confirmSummary.textContent = `Staking ${stake} XP for ${hours} hour${hours === 1 ? '' : 's'}.`;
+      confirmModal.style.display = 'flex';
+    });
 
-    function tick(){
-      secondsLeft--;
-      if (secondsLeft < 0){
-        clearInterval(interval); interval = null;
-        if (onBreak){
-          // Break's over — reset to a fresh sprint, but let them start it
-          // on purpose rather than looping forever in the background.
-          onBreak = false; total = WORK; secondsLeft = WORK;
-          taskEl.textContent = defaultTask;
-          renderActiveControls();
-        } else {
-          secondsLeft = 0;
-          taskEl.textContent = courseUrl
-            ? 'Nice sprint! Ready to jump into ' + courseTitle + '?'
-            : 'Nice sprint! Take a 5-minute break.';
-          renderSprintCompleteControls();
-        }
-      }
-      render();
-    }
+    confirmCancelBtn.addEventListener('click', () => { confirmModal.style.display = 'none'; });
 
-    function toggleTimer(){
-      if (interval){
-        clearInterval(interval); interval = null;
-      } else {
-        interval = setInterval(tick, 1000);
-      }
-      renderActiveControls();
-    }
+    confirmBeginBtn.addEventListener('click', () => {
+      confirmModal.style.display = 'none';
+      startBtn.disabled = true;
+      startBtn.textContent = 'Starting…';
 
-    function startBreak(){
-      onBreak = true; total = BREAK; secondsLeft = BREAK;
-      taskEl.textContent = 'Break time — step away for a bit.';
-      interval = setInterval(tick, 1000);
-      renderActiveControls();
-      render();
-    }
+      const durationSeconds = Math.round(pendingHours * 3600);
+      const fd = new FormData();
+      fd.append('csrfmiddlewaretoken', csrf());
+      fd.append('stake_xp', pendingStake);
+      fd.append('duration_seconds', durationSeconds);
 
-    function resetTimer(){
-      clearInterval(interval); interval = null;
-      onBreak = false; total = WORK; secondsLeft = WORK;
-      taskEl.textContent = defaultTask;
-      renderActiveControls();
-      render();
-    }
-
-    renderActiveControls();
-    render();
+      fetch('/focus-sprint/start/', { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(r => r.json().then(data => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok || data.error){
+            showError(ERROR_MESSAGES[data.error] || 'Could not start the sprint — try again.');
+            startBtn.disabled = false;
+            startBtn.textContent = 'Start sprint';
+            return;
+          }
+          startedOverlay.style.display = 'flex';
+          setTimeout(() => location.reload(), 1300);
+        })
+        .catch(() => {
+          showError('Something went wrong — try again.');
+          startBtn.disabled = false;
+          startBtn.textContent = 'Start sprint';
+        });
+    });
   })();
 </script>
 {% endblock %}

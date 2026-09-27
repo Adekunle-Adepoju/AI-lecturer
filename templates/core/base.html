@@ -258,6 +258,182 @@
 {% if user.is_authenticated %}
 <meta name="csrf-token" content="{{ csrf_token }}">
 <script defer src="{% static 'engagement/js/rovea-pulse.js' %}" data-endpoint="{% url 'engagement:ingest' %}"></script>
+{% if active_focus_sprint %}
+<div id="focusSprintBadge" style="position:fixed;bottom:16px;left:16px;z-index:999;
+     background:var(--navy-card);border:1px solid var(--border);border-radius:999px;
+     padding:8px 16px;font-size:.8rem;color:var(--text);display:flex;gap:10px;align-items:center;">
+  <span id="fsElapsed">0:00:00</span>
+  <span style="color:var(--text-muted);">·</span>
+  <span id="fsAwayBudget" style="color:var(--text-muted);">10:00 left</span>
+  <span style="color:var(--text-muted);">·</span>
+  <button type="button" id="fsEndBtn" style="background:none;border:none;color:var(--text-muted);
+    font-size:.78rem;cursor:pointer;text-decoration:underline;padding:0;">End sprint</button>
+</div>
+
+<div id="focusStrikeModal" style="display:none;position:fixed;inset:0;z-index:1000;
+     background:rgba(0,0,0,.6);align-items:center;justify-content:center;">
+  <div style="background:var(--navy-card);border:1px solid var(--border);border-radius:12px;
+       padding:28px;max-width:360px;width:90%;color:var(--text);text-align:center;">
+    <p id="fsStrikeMessage" style="margin:0 0 20px;font-size:.95rem;"></p>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button type="button" id="fsStrikeContinueBtn" class="btn btn-primary" style="flex:1;">Continue</button>
+      <button type="button" id="fsStrikeStopBtn" class="btn btn-white-outline" style="flex:1;">Stop</button>
+    </div>
+  </div>
+</div>
+
+<div id="focusEndModal" style="display:none;position:fixed;inset:0;z-index:1000;
+     background:rgba(0,0,0,.6);align-items:center;justify-content:center;">
+  <div id="fsEndCard" style="background:var(--navy-card);border:1px solid var(--border);border-radius:12px;
+       padding:32px 28px;max-width:380px;width:90%;color:var(--text);text-align:center;">
+    <div id="fsEndTitle" style="font-size:1.2rem;font-weight:700;margin-bottom:10px;"></div>
+    <p id="fsEndBody" style="margin:0 0 22px;font-size:.92rem;color:var(--text-muted);"></p>
+    <button type="button" id="fsEndContinueBtn" class="btn btn-primary" style="width:100%;">Nice</button>
+  </div>
+</div>
+<style>
+  @keyframes fsCelebratePulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(226,166,59,.4); }
+    50%{ box-shadow:0 0 0 18px rgba(226,166,59,0); }
+  }
+  #fsEndCard.fs-end-celebrate{
+    border-color:rgba(226,166,59,.5);
+    animation:fsCelebratePulse 1.6s ease-in-out infinite;
+  }
+</style>
+
+<script>
+window.RoveaFocusSprint = (function(){
+  const sprintId = {{ active_focus_sprint.id }};
+  const startedAt = new Date("{{ active_focus_sprint.started_at.isoformat }}");
+  let awayBudgetRemaining = {{ active_focus_sprint.away_budget_remaining_seconds|default:600 }};
+  let pausedSeconds = {{ active_focus_sprint.paused_seconds|default:0 }};
+
+  function csrf(){ return document.querySelector('meta[name="csrf-token"]').content; }
+  function post(path, body){
+    const fd = new FormData();
+    fd.append("csrfmiddlewaretoken", csrf());
+    for (const k in body) fd.append(k, body[k]);
+    return fetch(`/focus-sprint/${sprintId}/${path}/`, { method: "POST", body: fd, credentials: "same-origin" });
+  }
+
+  function renderElapsed(){
+    // Pause-aware: subtract total time spent away so the displayed clock
+    // freezes while you're gone and only resumes once you're back.
+    const raw = Math.max(0, Math.floor((Date.now() - startedAt) / 1000) - pausedSeconds);
+    const h = Math.floor(raw/3600), m = Math.floor((raw%3600)/60), sec = raw%60;
+    document.getElementById("fsElapsed").textContent =
+      `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  }
+  setInterval(renderElapsed, 1000); renderElapsed();
+
+  function renderAwayBudget(){
+    const m = Math.floor(awayBudgetRemaining/60), s = awayBudgetRemaining%60;
+    document.getElementById("fsAwayBudget").textContent = `${m}:${String(s).padStart(2,'0')} left`;
+  }
+  renderAwayBudget();
+
+  function handleState(state){
+    if (!state || state.error) return;
+    awayBudgetRemaining = state.away_budget_remaining_seconds;
+    if (typeof state.paused_seconds === "number") pausedSeconds = state.paused_seconds;
+    renderAwayBudget();
+    renderElapsed();
+    if (state.awaiting_strike_decision) { showStrikePopup(state); return; }
+    if (state.status && state.status !== "active") { showEndModal(state); }
+  }
+
+  function showStrikePopup(state){
+    const modal = document.getElementById("focusStrikeModal");
+    document.getElementById("fsStrikeMessage").textContent =
+      `You left Rovea for too long — your stake is now ${state.stake_current} XP. ` +
+      `Keep going for the double, or stop now and take the ${state.stake_current} XP back.`;
+    document.getElementById("fsStrikeStopBtn").textContent = `Stop — take ${state.stake_current} XP`;
+    modal.style.display = "flex";
+
+    document.getElementById("fsStrikeContinueBtn").onclick = () => {
+      modal.style.display = "none";
+      post("resolve-strike", { continue: "true" }).then(r => r.json()).then(handleState);
+    };
+    document.getElementById("fsStrikeStopBtn").onclick = () => {
+      modal.style.display = "none";
+      post("resolve-strike", { continue: "false" }).then(r => r.json()).then(showEndModal);
+    };
+  }
+
+  function showEndModal(state){
+    const modal = document.getElementById("focusEndModal");
+    const card = document.getElementById("fsEndCard");
+    const titleEl = document.getElementById("fsEndTitle");
+    const bodyEl = document.getElementById("fsEndBody");
+
+    if (state.status === "completed"){
+      const reward = state.stake_current * 2;
+      titleEl.textContent = "🎉 Sprint complete!";
+      bodyEl.textContent = `Your ${state.stake_current} XP just became ${reward} XP.`;
+      card.classList.add("fs-end-celebrate");
+    } else {
+      titleEl.textContent = "Sprint ended";
+      bodyEl.textContent = `Your ${state.stake_current} XP has been returned — no bonus this time.`;
+      card.classList.remove("fs-end-celebrate");
+    }
+    modal.style.display = "flex";
+    document.getElementById("fsEndContinueBtn").onclick = () => location.reload();
+  }
+
+  document.getElementById("fsEndBtn").addEventListener("click", () => {
+    if (!confirm("End this sprint now? You'll get your current stake back, with no bonus.")) return;
+    post("stop", {}).then(r => r.json()).then(showEndModal);
+  });
+
+    function beaconAway(){
+    const body = new Blob(
+      [`csrfmiddlewaretoken=${encodeURIComponent(csrf())}`],
+      { type: "application/x-www-form-urlencoded" }
+    );
+    navigator.sendBeacon(`/focus-sprint/${sprintId}/away/`, body);
+  }
+
+  // Presence = tab is the visible tab AND the browser window has OS focus.
+  // Page Visibility API alone only catches tab switches / minimizing —
+  // it does NOT fire when you switch to a different application while
+  // the browser window stays open in the background. window.blur/focus
+  // catches that case; visibilitychange catches tab-switch and minimize.
+  // Either one going "away" is treated as away.
+  function isPresent(){
+    return !document.hidden && document.hasFocus();
+  }
+
+  let wasPresent = isPresent();
+
+  function reconcilePresence(){
+    const nowPresent = isPresent();
+    if (nowPresent === wasPresent) return;
+    wasPresent = nowPresent;
+    if (nowPresent) {
+      post("heartbeat", {}).then(r => r.json()).then(handleState);
+    } else {
+      beaconAway();
+    }
+  }
+
+  document.addEventListener("visibilitychange", reconcilePresence);
+  window.addEventListener("blur", reconcilePresence);
+  window.addEventListener("focus", reconcilePresence);
+  window.addEventListener("pagehide", beaconAway);
+
+  post("heartbeat", {}).then(r => r.json()).then(handleState);
+  setInterval(() => {
+    // Belt-and-suspenders: reconcile on every periodic tick too, in case
+    // a blur/focus event was ever missed by the browser.
+    reconcilePresence();
+    if (isPresent()) post("heartbeat", {}).then(r => r.json()).then(handleState);
+  }, 30000);
+
+  return { stop: () => post("stop", {}).then(r => r.json()).then(showEndModal) };
+})();
+</script>
+{% endif %}
 {% endif %}
 </head>
 
