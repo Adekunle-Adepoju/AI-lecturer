@@ -1,0 +1,261 @@
+{% extends "core/base.html" %}
+{% block title %}Your Progress — Rovea{% endblock %}
+
+{% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  #progressRoot{
+    --bg:#0F1D2B; --bg-alt:#16283A; --surface:#13212F; --surface-2:#1A2C3D;
+    --ink:#ECEFF3; --ink-soft:#B7C2CB; --ink-faint:#8A97A0;
+    --line:rgba(236,239,243,.14); --line-soft:rgba(236,239,243,.08);
+    --navy:#0F4677; --heading:#E7EDF3;
+    --amber:#E2A63B; --green:#4A9D74; --coral:#D96A45;
+    --font-display:'Newsreader',serif; --font-body:'Inter',sans-serif;
+    --ease:cubic-bezier(.22,.61,.36,1);
+    --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
+    color-scheme: dark;
+    background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    line-height:1.55; padding:32px clamp(16px,3vw,32px) 80px;
+    max-width:900px; margin-inline:auto;
+    transition:background .3s var(--ease),color .3s var(--ease);
+  }
+  #progressRoot[data-theme="light"]{
+    --bg:#F4F7FA; --bg-alt:#E4EBF2; --surface:#FFFFFF;
+    --ink:#17212B; --ink-soft:#54626D; --ink-faint:#818D94;
+    --line:rgba(23,33,43,.14); --line-soft:rgba(23,33,43,.07);
+    --heading:#0A2E4D;
+    color-scheme: light;
+  }
+  #progressRoot *{box-sizing:border-box;}
+  #progressRoot a{color:inherit;text-decoration:none;}
+  #progressRoot h1,#progressRoot h2{font-family:var(--font-display);font-weight:500;color:var(--heading);margin:0;}
+  #progressRoot .page-title{font-size:1.7rem;margin-bottom:24px;display:flex;align-items:center;gap:10px;}
+  #progressRoot .back-link{display:inline-flex;align-items:center;gap:6px;color:var(--ink-soft);font-size:.86rem;margin-bottom:16px;}
+  #progressRoot .ic{width:16px;height:16px;flex:none;}
+
+  #progressRoot .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:32px;}
+  @media(max-width:640px){#progressRoot .stats-row{grid-template-columns:1fr 1fr;}}
+  #progressRoot .stat-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);padding:18px 20px;}
+  #progressRoot .stat-icon{color:var(--amber);margin-bottom:10px;}
+  #progressRoot .stat-val{font-family:var(--font-display);font-size:1.9rem;color:var(--heading);}
+  #progressRoot .stat-lbl{font-size:.8rem;color:var(--ink-soft);margin-top:2px;}
+
+  #progressRoot .section-label{display:flex;align-items:center;gap:8px;font-size:.82rem;font-weight:600;color:var(--ink-soft);margin:0 0 14px;}
+  #progressRoot .section-label .ic{color:var(--amber);}
+
+  #progressRoot .search-wrapper{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:0 16px;height:42px;margin-bottom:16px;}
+  #progressRoot .search-input{border:none;background:none;outline:none;width:100%;font-size:.88rem;color:var(--ink);font-family:var(--font-body);}
+  #progressRoot .search-input::placeholder{color:var(--ink-faint);}
+
+  #progressRoot .course-list{display:flex;flex-direction:column;gap:12px;margin-bottom:36px;}
+  #progressRoot .course-pill{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:14px;transition:transform .2s var(--ease),border-color .2s var(--ease);}
+  #progressRoot .course-pill:hover{transform:translateY(-2px);border-color:var(--navy);}
+  #progressRoot .course-name{font-weight:600;font-size:.98rem;color:var(--heading);}
+  #progressRoot .course-code{font-size:.82rem;color:var(--ink-faint);margin-top:2px;}
+  #progressRoot .course-empty{text-align:center;padding:40px 20px;color:var(--ink-soft);border:1px dashed var(--line);border-radius:var(--radius-md);}
+
+  #progressRoot .progress-circle-container{position:relative;width:46px;height:46px;flex:none;}
+  #progressRoot .progress-circle-outer{width:46px;height:46px;border-radius:50%;background:conic-gradient(var(--amber) calc(var(--progress-val,0) * 1%), var(--bg-alt) 0);display:flex;align-items:center;justify-content:center;}
+  #progressRoot .progress-circle-inner{width:36px;height:36px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;}
+  #progressRoot .progress-circle-text{font-size:.72rem;font-weight:700;color:var(--heading);}
+
+  #progressRoot .side-widget-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);padding:16px 18px;margin-bottom:26px;}
+  #progressRoot .session-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-soft);}
+  #progressRoot .session-row:last-child{border-bottom:none;}
+  #progressRoot .session-course{font-size:.86rem;font-weight:600;color:var(--heading);}
+  #progressRoot .session-date{font-size:.75rem;color:var(--ink-faint);margin-top:1px;}
+  #progressRoot .badge{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:999px;font-size:.76rem;font-weight:700;}
+  #progressRoot .badge-amber{background:rgba(226,166,59,.16);color:var(--amber);}
+  #progressRoot .badge-green{background:rgba(74,157,116,.16);color:var(--green);}
+</style>
+
+<div id="progressRoot" data-theme="dark">
+  <a href="{% url 'dashboard' %}" class="back-link">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    Back to dashboard
+  </a>
+  <h1 class="page-title">Your Progress</h1>
+
+  <div class="stats-row">
+    <div class="stat-card">
+      <svg class="ic-lg stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M12 2c1 3-2 4-2 7a4 4 0 0 0 8 0c0-1-.5-2-1-3 2 1 3 3.5 3 6a7 7 0 0 1-14 0c0-4 3-6 4-10 .3 1 1 2 2 0Z"/></svg>
+      <div class="stat-val">{{ profile.streak }}</div>
+      <div class="stat-lbl">Day streak</div>
+    </div>
+    <div class="stat-card">
+      <svg class="ic-lg stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/></svg>
+      <div class="stat-val">{{ profile.xp }}</div>
+      <div class="stat-lbl">Total XP</div>
+    </div>
+    <div class="stat-card">
+      <svg class="ic-lg stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M20 6 9 17l-5-5"/></svg>
+      <div class="stat-val">{{ sessions_done }}</div>
+      <div class="stat-lbl">Sessions done</div>
+    </div>
+    <div class="stat-card">
+      <svg class="ic-lg stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <div class="stat-val"><span id="masteryStatVal">—</span></div>
+      <div class="stat-lbl">Average mastery</div>
+    </div>
+  </div>
+
+  <p class="section-label">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
+    Your courses — {{ profile.level }}L · Semester {{ profile.semester }}
+  </p>
+  <div class="search-wrapper">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+    <input type="text" id="courseSearchInput" placeholder="Search courses" class="search-input" autocomplete="off">
+  </div>
+  <div class="course-list" id="courseList">
+    {% for course in courses %}
+    <a href="{% url 'session' course.code %}" class="course-pill" data-course-search="{{ course.title|lower }} {{ course.code|lower }}">
+      <div>
+        <div class="course-name">{{ course.title }}</div>
+        <div class="course-code">{{ course.code }} · {{ course.units }} units</div>
+      </div>
+      <div class="progress-circle-container">
+        <div class="progress-circle-outer" style="--progress-val: {{ course.progress_pct }};">
+          <div class="progress-circle-inner">
+            <span class="progress-circle-text">{{ course.progress_pct }}%</span>
+          </div>
+        </div>
+      </div>
+    </a>
+    {% empty %}
+    <div class="course-empty">No courses added yet. <a href="{% url 'manage_courses' %}" style="color:var(--amber);font-weight:600;">Add your first course →</a></div>
+    {% endfor %}
+  </div>
+  <p id="courseSearchEmpty" class="course-empty" style="display:none;">No courses match that search.</p>
+
+  <p class="section-label">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h8l-1 8 10-12h-8l1-8Z"/></svg>
+    Session history
+  </p>
+  <div class="side-widget-card">
+    {% if recent_sessions %}
+      {% for s in recent_sessions %}
+      <div class="session-row">
+        <div>
+          <div class="session-course">{{ s.course_code }}</div>
+          <div class="session-date">Wk {{ s.week_number }} · {{ s.started_at|date:"d M" }}</div>
+        </div>
+        <span class="badge {% if s.is_complete %}badge-green{% else %}badge-amber{% endif %}">+{{ s.xp_earned }}</span>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div style="text-align:center;color:var(--ink-faint);font-size:.85rem;padding:1rem 0;">No sessions tracked yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  (function(){
+    const root = document.getElementById('progressRoot');
+    if(!root) return;
+    function syncTheme(){ root.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') || 'dark'); }
+    syncTheme();
+    new MutationObserver(syncTheme).observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] });
+  })();
+
+  (function(){
+    const rings = document.querySelectorAll('#progressRoot .progress-circle-outer');
+    const out = document.getElementById('masteryStatVal');
+    if (!out || !rings.length) { if (out) out.textContent = '0%'; return; }
+    let total = 0;
+    rings.forEach(r => { total += parseFloat(r.style.getPropertyValue('--progress-val')) || 0; });
+    out.textContent = Math.round(total / rings.length) + '%';
+  })();
+
+  (function(){
+    const input = document.getElementById('courseSearchInput');
+    const list = document.getElementById('courseList');
+    const empty = document.getElementById('courseSearchEmpty');
+    if (!input || !list) return;
+    const pills = Array.from(list.querySelectorAll('.course-pill'));
+    input.addEventListener('input', function(){
+      const q = input.value.trim().toLowerCase();
+      let anyVisible = false;
+      pills.forEach(p => {
+        const match = !q || (p.dataset.courseSearch || '').indexOf(q) !== -1;
+        p.style.display = match ? '' : 'none';
+        if (match) anyVisible = true;
+      });
+      empty.style.display = (q && !anyVisible) ? 'block' : 'none';
+    });
+  })();
+  (function() {
+    const dateObj = new Date();
+    let currentYear = dateObj.getFullYear();
+    let currentMonth = dateObj.getMonth();
+
+    const monthNames = ["January","February","March","April","May","June",
+      "July","August","September","October","November","December"];
+
+    const monthTitle = document.getElementById("calendarMonthTitle");
+    const daysGrid = document.getElementById("calendarDaysGrid");
+    const prevBtn = document.getElementById("calPrevBtn");
+    const nextBtn = document.getElementById("calNextBtn");
+    if (!monthTitle || !daysGrid) return;
+
+    const sessionDates = [{% for s in recent_sessions %}"{{ s.started_at|date:'Y-m-d' }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+
+    function renderCalendarGrid(year, month) {
+      daysGrid.innerHTML = "";
+      monthTitle.textContent = `${monthNames[month]}, ${year}`;
+
+      const initialDayIndex = new Date(year, month, 1).getDay();
+      const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+      const totalDaysInPrevMonth = new Date(year, month, 0).getDate();
+
+      for (let i = initialDayIndex - 1; i >= 0; i--) {
+        const padCell = document.createElement("div");
+        padCell.classList.add("calendar-day-cell", "empty-pad");
+        padCell.textContent = totalDaysInPrevMonth - i;
+        daysGrid.appendChild(padCell);
+      }
+
+      const today = new Date();
+      for (let day = 1; day <= totalDaysInMonth; day++) {
+        const dayCell = document.createElement("div");
+        dayCell.classList.add("calendar-day-cell");
+        dayCell.textContent = day;
+        if (day === today.getDate() && month === today.getMonth() && year === today.getFullYear()) {
+          dayCell.classList.add("is-today");
+        }
+        const iso = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        if (sessionDates.indexOf(iso) !== -1) {
+          dayCell.classList.add("has-session");
+        }
+        daysGrid.appendChild(dayCell);
+      }
+
+      const totalGridCellsUsed = initialDayIndex + totalDaysInMonth;
+      const remainingSlots = 42 - totalGridCellsUsed;
+      for (let nextDay = 1; nextDay <= remainingSlots; nextDay++) {
+        const nextPadCell = document.createElement("div");
+        nextPadCell.classList.add("calendar-day-cell", "empty-pad");
+        nextPadCell.textContent = nextDay;
+        daysGrid.appendChild(nextPadCell);
+      }
+    }
+
+    prevBtn.addEventListener("click", () => {
+      currentMonth--;
+      if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+      renderCalendarGrid(currentYear, currentMonth);
+    });
+
+    nextBtn.addEventListener("click", () => {
+      currentMonth++;
+      if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+      renderCalendarGrid(currentYear, currentMonth);
+    });
+
+    renderCalendarGrid(currentYear, currentMonth);
+  })();
+</script>
+{% endblock %}

@@ -69,10 +69,17 @@
     opacity:0;transform:translateY(10px);animation:lRise .6s var(--ease) forwards;animation-delay:.1s;
   }
 
-  #leaderboardRoot .section-label{
+    #leaderboardRoot .section-label{
     display:flex;align-items:center;gap:8px;font-size:.82rem;font-weight:600;
     color:var(--ink-soft);letter-spacing:.02em;margin:0 0 12px;
   }
+  #leaderboardRoot .lb-tabs{display:flex;gap:8px;margin-bottom:14px;}
+  #leaderboardRoot .lb-tab{
+    padding:8px 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);
+    color:var(--ink-soft);font-size:.82rem;font-weight:600;cursor:pointer;font-family:var(--font-body);
+    transition:border-color .2s var(--ease),color .2s var(--ease),background .2s var(--ease);
+  }
+  #leaderboardRoot .lb-tab.active{border-color:var(--amber);color:var(--amber);background:rgba(226,166,59,.1);}
 
   /* ---------- generic card ---------- */
   #leaderboardRoot .side-widget-card{
@@ -189,13 +196,16 @@
       {% endfor %}
     </div>
 
-    <!-- 2. CENTRAL COLUMN: Main Rankings List -->
+        <!-- 2. CENTRAL COLUMN: Main Rankings List -->
     <div class="lb-main-col">
       <p class="section-label">Current Standings</p>
-      <div class="lb-list">
+      <div class="lb-tabs">
+        <button type="button" class="lb-tab active" data-filter="all">🌍 Global</button>
+        <button type="button" class="lb-tab" data-filter="mylevel">🎓 My Level</button>
+      </div>
+      <div class="lb-list" id="lbList">
         {% for student in top_students %}
-        <div class="lb-row {% if student.user == user %}lb-me{% endif %}">
-
+        <div class="lb-row {% if student.user == user %}lb-me{% endif %}" data-level="{{ student.level }}">
           <div class="lb-rank">
             {% if forloop.counter == 1 %}🥇
             {% elif forloop.counter == 2 %}🥈
@@ -226,6 +236,9 @@
         </div>
         {% endfor %}
       </div>
+      <p id="lbEmptyLevel" class="side-widget-card lb-empty" style="display:none;">
+        No one at your level on the board yet — be the first! 🚀
+      </p>
     </div>
 
     <!-- 3. RIGHT SIDEBAR: Your Dynamic Profile Performance -->
@@ -275,6 +288,31 @@
     }
     syncTheme();
     new MutationObserver(syncTheme).observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] });
+  })();
+</script>
+<script>
+  (function(){
+    const myLevel = "{{ my_level|default:''|escapejs }}";
+    const tabs = document.querySelectorAll('.lb-tab');
+    const rows = document.querySelectorAll('#lbList .lb-row');
+    const emptyLevel = document.getElementById('lbEmptyLevel');
+
+    tabs.forEach(function(tab){
+      tab.addEventListener('click', function(){
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const filter = tab.getAttribute('data-filter');
+        let visibleCount = 0;
+        rows.forEach(function(row){
+          const match = filter === 'all' || row.getAttribute('data-level') === myLevel;
+          row.style.display = match ? '' : 'none';
+          if (match) visibleCount++;
+        });
+        if (emptyLevel) {
+          emptyLevel.style.display = (filter === 'mylevel' && visibleCount === 0) ? 'block' : 'none';
+        }
+      });
+    });
   })();
 </script>
 {% endblock %}

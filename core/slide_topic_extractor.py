@@ -165,15 +165,9 @@ def _call_gemini_with_retry(client, model, contents, config, course_code, chunk_
     retries fail with 429/503), automatically moves to the next model in
     model_fallback_chain and resumes retrying there — instead of giving
     up entirely. Cycles through the whole chain once; only returns None
-    if EVERY model in the chain fails.
-
-    `model` is treated as the starting point in the chain if it appears
-    there; otherwise it's tried first, then the full chain is attempted.
-    Returns response.text on success, or None if every model failed."""
+    if EVERY model in the chain fails."""
     chain = model_fallback_chain or DEFAULT_MODEL_FALLBACK_CHAIN
 
-    # Build the actual order to try: start at `model` if it's in the
-    # chain, otherwise try `model` first then the whole chain.
     if model in chain:
         start_idx = chain.index(model)
         models_to_try = chain[start_idx:] + chain[:start_idx]
@@ -207,9 +201,8 @@ def _call_gemini_with_retry(client, model, contents, config, course_code, chunk_
                     if attempt < max_retries - 1:
                         time.sleep(3)
                         continue
-                    break  # non-rate-limit error, exhausted retries on this model
+                    break
 
-        # This model is exhausted (all retries failed) — move to next model.
         if not is_last_model:
             print(f"[{course_code}] {chunk_label}: {current_model} exhausted — falling back to next model.")
         else:
@@ -735,21 +728,21 @@ def _ask_page_map(client, slide, pages, topic_names, label):
             model="gemini-3.6-flash",
             contents=(
                 f"Course: {slide.course_code} — {slide.course_title}\n\n"
-                f"Topics:\n{topics_list_str}\n\n"
+                f"Topics for this week:\n{topics_list_str}\n\n"
                 f"Slide excerpt:\n{rendered}"
             ),
             config=types.GenerateContentConfig(
                 system_instruction=TOPIC_PAGE_MAP_INSTRUCTION,
-                max_output_tokens=8000,
+                max_output_tokens=3000,
             ),
             course_code=slide.course_code,
-            chunk_label=f"{label} (attempt {attempt + 1})",
+            chunk_label=label,
         )
         page_map = parse_page_map(raw, topic_names, valid)
         if page_map is not None:
             return page_map
         time.sleep(3)
-    return None
+    return None 
 
 
 def _get_or_create_topic_split_chunks(slide, pages):

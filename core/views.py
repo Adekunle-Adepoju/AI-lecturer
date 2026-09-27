@@ -440,6 +440,7 @@ def dashboard_view(request):
             "code": t.course_code,
             "title": t.course_title,
             "units": course_defs[t.course_code].units if t.course_code in course_defs else 3,
+            "progress_pct": _get_course_progress_pct(profile, t.course_code),
         }
         for t in timetable
     ]
@@ -558,6 +559,20 @@ def _get_total_topics_for_course(course_code, level):
         return flat
 
     return ["Core Concepts", "Key Applications", "Problem Solving"]
+
+def _get_course_progress_pct(profile, course_code):
+    """Percent of the course's total topic list the student has completed,
+    based on real TopicSession completion — not session count or week
+    number, so it reflects actual topics finished vs the full syllabus."""
+    total_topics = len(_get_total_topics_for_course(course_code, profile.level))
+    if not total_topics:
+        return 0
+    completed = TopicSession.objects.filter(
+        session__student=profile,
+        session__course_code=course_code,
+        is_complete=True,
+    ).count()
+    return min(100, round((completed / total_topics) * 100))
 
 
 def _topic_round_sizes(total_topics, total_weeks=TOTAL_TEACHING_WEEKS):
@@ -1336,7 +1351,8 @@ def next_topic_view(request):
 @login_required
 def leaderboard_view(request):
     top_students = StudentProfile.objects.select_related("user").order_by("-xp")[:20]
-    return render(request, "core/leaderboard.html", {"top_students": top_students})
+    my_level = request.user.profile.level if hasattr(request.user, "profile") else None
+    return render(request, "core/leaderboard.html", {"top_students": top_students, "my_level": my_level})
 
 
 # ─── Timetable ─────────────────────────────────────────────────────────────────
@@ -1365,6 +1381,8 @@ def reschedule_session(request, entry_id):
     entry.is_missed = True
     entry.rescheduled_to = date.today() + timedelta(days=1)
     entry.save()
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JsonResponse({"ok": True, "course_code": entry.course_code})
     messages.success(request, f"{entry.course_code} rescheduled to tomorrow.")
     return redirect("dashboard")
 
@@ -3395,6 +3413,40 @@ def quiz_result_view(request, topic_session_id):
         "is_last_topic": is_last_topic,
         "total_topics": total_topics,
         "topic_number": topic_session.topic_index + 1,
+    })
+
+@login_required
+def progress_view(request):
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
+
+    profile = request.user.profile
+    timetable = profile.timetable.all()
+
+    course_defs = {
+        c.course_code: c
+        for c in CourseDefinition.objects.filter(
+            course_code__in=timetable.values_list("course_code", flat=True)
+        )
+    }
+    courses = [
+        {
+            "code": t.course_code,
+            "title": t.course_title,
+            "units": course_defs[t.course_code].units if t.course_code in course_defs else 3,
+            "progress_pct": _get_course_progress_pct(profile, t.course_code),
+        }
+        for t in timetable
+    ]
+
+    recent_sessions = profile.sessions.all()[:5]
+    sessions_done = profile.sessions.count()
+
+    return render(request, "core/progress.html", {
+        "profile": profile,
+        "courses": courses,
+        "recent_sessions": recent_sessions,
+        "sessions_done": sessions_done,
     })
 
 @staff_required
