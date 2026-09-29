@@ -1,7 +1,16 @@
 from django.urls import path, include
 from core import views
+from django.views.generic import TemplateView
+from django.db import connection
+from django.http import HttpResponse
+
+def healthz(request):
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT 1")
+    return HttpResponse("ok")
 
 urlpatterns = [
+    path("healthz/", healthz, name="healthz"),
     path("", views.login_view, name="login"),
     path("signup/", views.signup_view, name="signup"),
     path("logout/", views.logout_view, name="logout"),
@@ -66,4 +75,5 @@ urlpatterns = [
     path("staff/lessons/bulk-unpublish/", views.staff_bulk_unpublish_lessons_view, name="staff_bulk_unpublish_lessons"),
     path("staff/slides/<int:slide_id>/retry-cleanup/", views.retry_slide_cleanup_view, name="retry_slide_cleanup"),
     path("progress/", views.progress_view, name="progress"),
+    path("privacy/", TemplateView.as_view(template_name="core/privacy.html"), name="privacy"),
 ]

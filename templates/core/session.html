@@ -17,6 +17,7 @@
   /* Colors, radii and fonts below are aliased straight from Rovea's
      own site-wide tokens (main.css :root / [data-theme]) so this page
      is never out of sync with the rest of the app's navy/amber identity. */
+  html, body{overflow-x:hidden;width:100%;}
   #sessionRoot{
     --bg:var(--navy); --bg-alt:var(--navy-mid); --surface:var(--navy-card); --surface-2:var(--navy-raised);
     --ink:var(--text); --ink-soft:var(--text-secondary); --ink-faint:var(--text-muted);
@@ -32,6 +33,7 @@
     --content-max:760px;
     color-scheme: dark;
     max-width:none; margin:0; position:relative; overflow-x:clip;
+    
     background:var(--bg); color:var(--ink); font-family:var(--font-body);
     line-height:1.55; padding:28px clamp(16px,4vw,32px) 60px;
     transition:background .25s var(--ease),color .25s var(--ease);
@@ -129,7 +131,7 @@
   }
   #sessionRoot #chat-window::-webkit-scrollbar{display:none;}
 
-  #sessionRoot .msg-row{display:flex;gap:8px;max-width:min(88%,600px);animation:sFade .2s var(--ease) both;}
+  #sessionRoot .msg-row{display:flex;gap:8px;max-width:min(88%,600px);min-width:0;animation:sFade .2s var(--ease) both;}
   #sessionRoot .msg-row.ai{align-self:flex-start;}
   #sessionRoot .msg-row.user{align-self:flex-end;flex-direction:row-reverse;}
   #sessionRoot .msg-row.system{align-self:center;max-width:95%;}
@@ -159,6 +161,16 @@
   #sessionRoot .msg-bubble .msg-table th,#sessionRoot .msg-bubble .msg-table td{border:1px solid var(--line);padding:6px 9px;text-align:left;}
   #sessionRoot .msg-bubble .msg-table th{background:var(--bg-alt);font-weight:600;color:var(--heading);}
   #sessionRoot .msg-bubble .msg-code{background:var(--bg-alt);border:1px solid var(--line);border-radius:8px;padding:10px 13px;overflow-x:auto;font-size:.83rem;margin:8px 0;}
+  #sessionRoot .msg-bubble{min-width:0;}
+  #sessionRoot .msg-bubble .katex-display{
+    display:block;
+    overflow-x:auto;
+    overflow-y:hidden;
+    max-width:100%;
+    padding:4px 2px 8px;
+    -webkit-overflow-scrolling:touch;
+  }
+  #sessionRoot .msg-bubble .katex{max-width:100%;}
 
   #sessionRoot .typing-row .typing-dots{display:flex;gap:5px;align-items:center;background:var(--bubble-ai);border:1px solid var(--line);padding:12px 15px;border-radius:var(--radius-md);}
   #sessionRoot .typing-dots span{width:5px;height:5px;border-radius:50%;background:var(--ink-faint);animation:typingBounce 1.2s ease-in-out infinite;}
@@ -243,9 +255,37 @@
     background:var(--accent);color:var(--accent-ink);
     padding:2px 5px;border-radius:5px;font-weight:600;
   }
+  #sessionRoot .lecture-img{cursor:zoom-in;transition:opacity .15s var(--ease);}
+#sessionRoot .lecture-img:active{opacity:.85;}
+
+#img-lightbox{
+  display:none;position:fixed;inset:0;z-index:9999;
+  background:rgba(0,0,0,.92);
+  align-items:center;justify-content:center;
+  padding:20px;cursor:zoom-out;
+  animation:sFade .15s var(--ease);
+}
+#img-lightbox.open{display:flex;}
+#img-lightbox img{
+  max-width:100%;max-height:100%;
+  border-radius:8px;
+  object-fit:contain;
+}
+#img-lightbox .lightbox-close{
+  position:fixed;top:16px;right:16px;
+  width:38px;height:38px;border-radius:50%;
+  background:rgba(255,255,255,.12);border:none;
+  color:#fff;font-size:20px;line-height:1;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+}
 </style>
 
 <div class="page-container" id="sessionRoot" data-theme="dark">
+  <div id="img-lightbox">
+  <button type="button" class="lightbox-close" aria-label="Close">&times;</button>
+  <img id="img-lightbox-img" src="" alt="Full-size illustration">
+</div> 
 
   <div class="session-header">
     <div class="ai-avatar">
@@ -286,7 +326,16 @@
       <button type="submit" class="btn btn-primary btn-full">Start session</button>
     </form>
 
-  {% else %}
+    {% else %}
+    {% if no_lecture_available %}
+      <!-- ─── NO LECTURE YET ─────────────────────────────────────────── -->
+      <div class="brief-card">
+        <h3>No lecture available yet</h3>
+        <p class="brief-note" style="border-top:none;padding-top:0;margin-top:0;">
+          This topic hasn't been prepared yet — check back soon. 🙏
+        </p>
+      </div>
+    {% else %}
     <!-- ─── LIVE CHAT PAGE ─────────────────────────────────────────────── -->
     <div class="prog-bar">
       <div class="prog-fill" style="width: {% widthratio topic_number total_topics 100 %}%"></div>
@@ -314,6 +363,7 @@
         </button>
       </div>
     </div>
+    {% endif %}
   {% endif %}
 
   {% if chat_mode %}
@@ -357,7 +407,7 @@
 })();
 </script>
 
-{% if chat_mode %}
+{% if chat_mode and not no_lecture_available %}
 <script>
   speechSynthesis.getVoices();
   speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
@@ -510,6 +560,30 @@
 
   function scrollChatToBottom() {
     chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+    // ── Lightbox for lecture images ──────────────────────────────────────────
+  const lightbox = document.getElementById("img-lightbox");
+  const lightboxImg = document.getElementById("img-lightbox-img");
+
+  function openLightbox(src) {
+    lightboxImg.src = src;
+    lightbox.classList.add("open");
+  }
+  function closeLightbox() {
+    lightbox.classList.remove("open");
+    lightboxImg.src = "";
+  }
+  lightbox.addEventListener("click", closeLightbox);
+
+  function createLectureImage(url) {
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = "Lecture illustration";
+    img.className = "lecture-img";
+    img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
+    img.addEventListener("click", () => openLightbox(url));
+    return img;
   }
 
   function aiAvatarHtml() {
@@ -854,10 +928,7 @@ function fillAiBubble(bubble, rawText) {
       fillAiBubble(bubble, stripImageMarker(chunkText));
 
     if (imageUrl) {
-      const img = document.createElement("img");
-      img.src = imageUrl;
-      img.alt = "Lecture illustration";
-      img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
+      const img = createLectureImage(imageUrl);
       bubble.appendChild(img);
     }
 
@@ -983,11 +1054,7 @@ function fillAiBubble(bubble, rawText) {
         if (payload.done) {
           fillAiBubble(aiBubble, stripImageMarker(rawText.replace("TOPIC_COMPLETE", "")));
           if (payload.image_url) {
-            const img = document.createElement("img");
-            img.src = payload.image_url;
-            img.alt = "Lecture illustration";
-            img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
-            aiBubble.appendChild(img);
+            aiBubble.appendChild(createLectureImage(payload.image_url));
           }
           if (payload.remaining_messages !== undefined) {
             let counter = document.getElementById("message-counter");
@@ -1062,11 +1129,7 @@ function fillAiBubble(bubble, rawText) {
             const bubble = createAiBubble();
             fillAiBubble(bubble, stripImageMarker(msg.content));
             if (msg.image_url) {
-              const img = document.createElement("img");
-              img.src = msg.image_url;
-              img.alt = "Lecture illustration";
-              img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
-              bubble.appendChild(img);
+              bubble.appendChild(createLectureImage(msg.image_url));
             }
           }
         });
@@ -1091,11 +1154,7 @@ function fillAiBubble(bubble, rawText) {
           const bubble = createAiBubble();
           fillAiBubble(bubble, stripImageMarker(msg.content.replace("TOPIC_COMPLETE", "")));
           if (msg.image_url) {
-            const img = document.createElement("img");
-            img.src = msg.image_url;
-            img.alt = "Lecture illustration";
-            img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
-            bubble.appendChild(img);
+            bubble.appendChild(createLectureImage(msg.image_url));
           }
         }
       });

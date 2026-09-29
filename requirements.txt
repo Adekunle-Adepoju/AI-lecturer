@@ -1,0 +1,10 @@
+django
+daphne
+channels
+channels-redis
+psycopg[binary]
+dj-database-url
+whitenoise
+python-dotenv
+django-allauth
+django-cleanup

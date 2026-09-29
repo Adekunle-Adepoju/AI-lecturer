@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load static %}
 {% block title %}Review — {{ topic_session.topic_name }}{% endblock %}
 
 {% block content %}
@@ -62,8 +63,77 @@
   <div style="margin-top:24px">
     <p class="section-label">Full Lecture</p>
     <div class="chat-box">
-      <div class="msg ai">{{ lecture_html|safe }}</div>
-    </div>
+  <div class="msg ai" id="lectureContainer"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+  window.mermaid = mermaid;
+  mermaid.initialize({ startOnLoad: false, theme: "dark" });
+</script>
+<script src="{% static 'core/js/rovea-visual-renderer.js' %}"></script>
+{{ lecture_raw|json_script:"lectureRawData" }}
+<script>
+(function(){
+  "use strict";
+
+  function renderMarkdown(text) {
+    const mathSpans = [];
+    const protectedText = text.replace(
+      /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\n]+?\$)/g,
+      (m) => { mathSpans.push(m); return "\u0000MATH-" + (mathSpans.length - 1) + "-\u0000"; }
+    );
+    let html = protectedText
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+      .replace(/([A-Za-z])(\d+)/g, "$1<sub>$2</sub>")
+      .replace(/\^(\d+)/g, "<sup>$1</sup>")
+      .replace(/\n/g, "<br>");
+    html = html.replace(/\u0000MATH-(\d+)-\u0000/g, (_, i) => mathSpans[Number(i)]);
+    return html;
+  }
+
+  function renderMathIn(el) {
+    if (!el || typeof window.renderMathInElement !== "function") return;
+    try {
+      window.renderMathInElement(el, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "\\[", right: "\\]", display: true },
+          { left: "\\(", right: "\\)", display: false },
+          { left: "$", right: "$", display: false }
+        ],
+        throwOnError: false
+      });
+    } catch (e) {}
+  }
+
+  const rawText = JSON.parse(document.getElementById("lectureRawData").textContent);
+  const container = document.getElementById("lectureContainer");
+  if (!container) return;
+
+  const segments = window.RoveaVisualRenderer
+    ? window.RoveaVisualRenderer._internal.splitIntoSegments(rawText)
+    : [{ type: "text", content: rawText }];
+
+  segments.forEach(seg => {
+    if (seg.type === "text") {
+      if (!seg.content.trim()) return;
+      const wrap = document.createElement("div");
+      wrap.innerHTML = renderMarkdown(seg.content);
+      renderMathIn(wrap);
+      container.appendChild(wrap);
+    } else if (window.RoveaVisualRenderer) {
+      const { renderJsonChart, renderMermaid, renderSvg } = window.RoveaVisualRenderer._internal;
+      let node = null;
+      if (seg.type === "json_chart") node = renderJsonChart(seg.raw);
+      else if (seg.type === "mermaid") node = renderMermaid(seg.raw);
+      else if (seg.type === "svg") node = renderSvg(seg.raw);
+      if (node) container.appendChild(node);
+    }
+  });
+})();
+</script>
   </div>
 
 </div>

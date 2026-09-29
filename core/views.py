@@ -142,63 +142,11 @@ def chat_message_view(request):
         resp["X-Accel-Buffering"] = "no"
         return resp
 
-    # ── Normal live Gemini path ───────────────────────────────────────────────
+        # ── Live chat has been retired — every lecture must be pregenerated ───────
+    def no_lecture_stream():
+        yield f"data: {json.dumps({'error': 'no_lecture', 'message': 'No lecture is available for this course yet. Please check back soon.'})}\n\n"
 
-    slide_context = _find_slide_content_for_topic(
-        topic_session.session.course_code,
-        topic_session.session.student.level,
-        topic_session.topic_name,
-    )   
-
-    system_instruction = CHAT_SYSTEM_PROMPT.format(
-        student_name=topic_session.session.student.user.first_name or topic_session.session.student.user.username,
-        topic_name=topic_session.topic_name,
-        course_code=topic_session.session.course_code,
-        slide_context=slide_context,
-    )
-
-    history = [] if is_start_trigger else _build_history(topic_session)
-
-    message_to_send = (
-        "Begin the session now — greet the student and introduce the topic."
-        if is_start_trigger else user_message
-    )
-
-    messages_to_send = history + [{"role": "user", "parts": [{"text": message_to_send}]}]
-
-    def event_stream():
-        full_reply = ""
-        try:
-            stream = client.models.generate_content_stream(
-                model="gemini-3.6-flash",
-                contents=messages_to_send,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    max_output_tokens=2048,
-                ),
-            )
-            for chunk in stream:
-                if chunk.text:
-                    full_reply += chunk.text
-                    yield f"data: {json.dumps({'chunk': chunk.text})}\n\n"
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-            return
-
-        image_url = None
-        is_complete = "TOPIC_COMPLETE" in full_reply
-        clean_reply = full_reply.replace("TOPIC_COMPLETE", "").strip()
-        ChatMessage.objects.create(
-            topic_session=topic_session,
-            role="ai",
-            content=clean_reply,
-            image_url=image_url,
-        )
-        yield f"data: {json.dumps({'done': True, 'topic_complete': is_complete, 'image_url': image_url, 'remaining_messages': remaining})}\n\n"
-
-    resp = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
+    resp = StreamingHttpResponse(no_lecture_stream(), content_type="text/event-stream")
     resp["Cache-Control"] = "no-cache"
     resp["X-Accel-Buffering"] = "no"
     return resp
@@ -240,45 +188,50 @@ def elective_selection_view(request):
 
     profile = request.user.profile
 
-    # Check if there are any electives available for this level/semester
-    available_electives = CourseDefinition.objects.filter(
-        level=profile.level,
-        semester=profile.semester,
+    # Show ALL courses in the student's department/school, across every
+    # level — carry-over students may need to pick up a course from an
+    # earlier level alongside their current ones.
+    available_courses = CourseDefinition.objects.filter(
         school=profile.school,
         department=profile.department,
-        is_elective=True,
-    )
+    ).order_by("level", "semester", "course_code")
 
-    # If no electives defined yet, skip straight to dashboard
-    if not available_electives.exists():
+    if not available_courses.exists():
         _generate_timetable(profile)
         return redirect("dashboard")
 
+    # Pre-check the student's own compulsory courses at their level/semester
+    # so a normal (non-carryover) student just hits Continue.
+    default_checked_codes = set(
+        available_courses.filter(
+            level=profile.level, semester=profile.semester, is_elective=False,
+        ).values_list("course_code", flat=True)
+    )
+
     if request.method == "POST":
-        form = ElectiveSelectionForm(
-            request.POST,
-            level=profile.level,
-            semester=profile.semester,
-            school=profile.school,
-            department=profile.department,
-        )
-        if form.is_valid():
-            profile.elective_courses.set(form.cleaned_data["electives"])
-            profile.save()
-            _generate_timetable(profile)
-            return redirect("dashboard")
-    else:
-        form = ElectiveSelectionForm(
-            level=profile.level,
-            semester=profile.semester,
-            school=profile.school,
-            department=profile.department,
-            initial={"electives": profile.elective_courses.all()},
-        )
+        selected_codes = set(request.POST.getlist("selected_courses"))
+        entries = []
+        for course in available_courses.filter(course_code__in=selected_codes):
+            entries.append(TimetableEntry(
+                student=profile,
+                course_code=course.course_code,
+                course_title=course.course_title,
+                day="Wed",
+                time="12:00",
+                week_number=1,
+                total_weeks=10,
+            ))
+        TimetableEntry.objects.bulk_create(entries)
+        return redirect("dashboard")
+
+    courses_by_level = {}
+    for course in available_courses:
+        courses_by_level.setdefault(course.level, []).append(course)
 
     return render(request, "core/elective_selection.html", {
-        "form": form,
         "profile": profile,
+        "courses_by_level": courses_by_level,
+        "default_checked_codes": default_checked_codes,
     })
 
 
@@ -1122,7 +1075,7 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
         quiz_explanation=parsed["explanation"],
     )
 
-    intro_html = markdown.markdown(parsed["intro"], extensions=["extra"])
+    intro_html = render_lecture_markdown(parsed["intro"])
 
     return render(request, "core/session.html", {
         "entry": entry,
@@ -1149,69 +1102,71 @@ def _render_chat_session(request, entry, profile, session):
             topic_index=current_index,
         )
 
-    # ── Check for pre-generated content ──────────────────────────────────────
-    is_pregenerated = False
-
+        # ── Check for pre-generated content ──────────────────────────────────────
     try:
-            lesson = PreGeneratedLesson.objects.get(
-                course__course_code=session.course_code,
-                week_number=session.week_number,
-                topic_title=topic_name,
-                is_published=True,
-            )
-            is_pregenerated = True
-
-            if not topic_session.lecture_content:
-                topic_session.lecture_content = lesson.content_chunk
-                pages = _split_into_pages(lesson.content_chunk, target_chars=1800)
-
-                student_name = profile.user.first_name or profile.user.username
-                greeting = (
-                    f"Hey {student_name}! 👋 How are you doing today? "
-                    f"Ready to tackle some engineering concepts together? "
-                    f"Let's dive into **{topic_name}**.\n\n"
-                )
-                if pages:
-                    pages[0] = greeting + pages[0]
-                else:
-                    pages = [greeting]
-
-                topic_session.chunks = pages
-                topic_session.save(update_fields=["lecture_content", "chunks"])
-            elif not topic_session.chunks:
-                topic_session.chunks = _split_into_pages(topic_session.lecture_content, target_chars=700)
-                topic_session.save(update_fields=["chunks"])
-
-            # ── Source of truth for progress is the actual saved ChatMessage
-            #    rows, NOT a separately-tracked integer. This makes position
-            #    immune to ever drifting out of sync — even if
-            #    current_chunk_index was wrong for any reason, this recomputes
-            #    it fresh from what's actually been delivered and persisted. ──
-            saved_chunk_count = topic_session.chatmessage_set.filter(
-                role="ai", is_pregenerated=True
-            ).count()
-
-            if saved_chunk_count == 0 and topic_session.chunks:
-                ChatMessage.objects.create(
-                    topic_session=topic_session,
-                    role="ai",
-                    content=topic_session.chunks[0],
-                    image_url=None,
-                    is_pregenerated=True,
-                )
-                saved_chunk_count = 1
-
-            if topic_session.chunks:
-                correct_index = min(saved_chunk_count - 1, len(topic_session.chunks) - 1)
-            else:
-                correct_index = 0
-
-            if topic_session.current_chunk_index != correct_index:
-                topic_session.current_chunk_index = correct_index
-                topic_session.save(update_fields=["current_chunk_index"])
-
+        lesson = PreGeneratedLesson.objects.get(
+            course__course_code=session.course_code,
+            week_number=session.week_number,
+            topic_title=topic_name,
+            is_published=True,
+        )
     except PreGeneratedLesson.DoesNotExist:
-            pass
+        return render(request, "core/session.html", {
+            "entry": entry,
+            "session": session,
+            "topic_session": topic_session,
+            "topic_number": topic_session.topic_index + 1,
+            "total_topics": len(session.topics),
+            "topic_name": topic_name,
+            "chat_mode": True,
+            "no_lecture_available": True,
+        })
+
+    is_pregenerated = True
+
+    if not topic_session.lecture_content:
+        topic_session.lecture_content = lesson.content_chunk
+        pages = _split_into_pages(lesson.content_chunk, target_chars=1800)
+
+        student_name = profile.user.first_name or profile.user.username
+        greeting = (
+            f"Hey {student_name}! 👋 How are you doing today? "
+            f"Ready to tackle some engineering concepts together? "
+            f"Let's dive into **{topic_name}**.\n\n"
+        )
+        if pages:
+            pages[0] = greeting + pages[0]
+        else:
+            pages = [greeting]
+
+        topic_session.chunks = pages
+        topic_session.save(update_fields=["lecture_content", "chunks"])
+    elif not topic_session.chunks:
+        topic_session.chunks = _split_into_pages(topic_session.lecture_content, target_chars=700)
+        topic_session.save(update_fields=["chunks"])
+
+    saved_chunk_count = topic_session.chatmessage_set.filter(
+        role="ai", is_pregenerated=True
+    ).count()
+
+    if saved_chunk_count == 0 and topic_session.chunks:
+        ChatMessage.objects.create(
+            topic_session=topic_session,
+            role="ai",
+            content=topic_session.chunks[0],
+            image_url=None,
+            is_pregenerated=True,
+        )
+        saved_chunk_count = 1
+
+    if topic_session.chunks:
+        correct_index = min(saved_chunk_count - 1, len(topic_session.chunks) - 1)
+    else:
+        correct_index = 0
+
+    if topic_session.current_chunk_index != correct_index:
+        topic_session.current_chunk_index = correct_index
+        topic_session.save(update_fields=["current_chunk_index"])
 
     has_started_chat = topic_session.chatmessage_set.filter(role="ai").exists()
     existing_messages = list(
@@ -1433,11 +1388,11 @@ def review_view(request, topic_session_id):
         return redirect("onboarding")
 
     topic_session = get_object_or_404(TopicSession, id=topic_session_id, session__student=request.user.profile)
-    lecture_html = markdown.markdown(topic_session.lecture_content, extensions=["extra"])
+    lecture_html = render_lecture_markdown(topic_session.lecture_content)
 
     return render(request, "core/review.html", {
         "topic_session": topic_session,
-        "lecture_html": lecture_html,
+        "lecture_raw": topic_session.lecture_content,
         "correct": topic_session.student_answer_index == topic_session.correct_answer_index,
     })
 
@@ -3272,7 +3227,7 @@ def run_topic_split_view(request, slide_id):
 @staff_required
 def staff_preview_lesson_view(request, lesson_id):
     lesson = get_object_or_404(PreGeneratedLesson, id=lesson_id)
-    lecture_html = markdown.markdown(lesson.content_chunk, extensions=["extra"])
+    lecture_html = render_lecture_markdown(lesson.content_chunk)
     return render(request, "core/staff/preview_lesson.html", {
         "lesson": lesson,
         "lecture_html": lecture_html,
@@ -3369,7 +3324,7 @@ def topic_lecture_view(request, topic_session_id):
     topic_session = get_object_or_404(TopicSession, id=topic_session_id, session__student=profile)
     session = topic_session.session
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=session.course_code)
-    lecture_html = markdown.markdown(topic_session.lecture_content, extensions=["extra"])
+    lecture_html = render_lecture_markdown(topic_session.lecture_content)
     return render(request, "core/session.html", {
         "entry": entry,
         "session": session,
@@ -3515,3 +3470,40 @@ def staff_review_battle_questions_view(request):
         "pending_count": len(flagged) + len(normal),
         "approved_count": approved_questions.count(),
     })
+
+# ── Math-safe markdown rendering ────────────────────────────────────────────
+# Lecture text contains raw LaTeX ($...$, $$...$$, \(...\), \[...\]) with
+# underscores for subscripts (P_i, r_w, \bar{P}_i). Python-Markdown treats
+# _..._ as italics and mangles those underscores — and sometimes the
+# delimiters around them — before KaTeX ever sees the text. So math spans
+# are pulled out into inert placeholders, run through Markdown untouched,
+# then restored verbatim afterward, right before KaTeX renders the page.
+_MATH_BLOCK_RE = re.compile(r"\$\$.*?\$\$", re.DOTALL)
+_MATH_BRACKET_RE = re.compile(r"\\\[.*?\\\]", re.DOTALL)
+_MATH_PAREN_RE = re.compile(r"\\\(.*?\\\)", re.DOTALL)
+_MATH_INLINE_RE = re.compile(r"\$[^\$\n]+?\$")
+
+
+def render_lecture_markdown(text):
+    """Markdown -> HTML for lecture/intro content, with LaTeX math spans
+    protected from Markdown's underscore-as-italics parsing."""
+    if not text:
+        return ""
+
+    placeholders = {}
+
+    def _stash(m):
+        key = f"ZZMATHPLACEHOLDERZZ{len(placeholders)}ZZ"
+        placeholders[key] = m.group(0)
+        return key
+
+    protected = text
+    for pattern in (_MATH_BLOCK_RE, _MATH_BRACKET_RE, _MATH_PAREN_RE, _MATH_INLINE_RE):
+        protected = pattern.sub(_stash, protected)
+
+    html = markdown.markdown(protected, extensions=["extra"])
+
+    for key, val in placeholders.items():
+        html = html.replace(key, val)
+
+    return html

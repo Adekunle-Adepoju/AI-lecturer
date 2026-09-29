@@ -13,14 +13,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-u%rlvs18-#6_#hgxc^p#_)jref4!c9)kktoqxib^ce9kf30@4#')
+# No hardcoded fallback in production: missing key -> Django refuses to start
+DEBUG = os.environ.get("DEBUG", "0") == "1"
+SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-insecure-key" if DEBUG else None)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 
-ALLOWED_HOSTS = ["10.251.19.165", "localhost", "127.0.0.1"]
 
+ALLOWED_HOSTS = ["10.251.19.165", "localhost", "127.0.0.1", "planner-cornball-casino.ngrok-free.dev"]
+CSRF_TRUSTED_ORIGINS = ["https://planner-cornball-casino.ngrok-free.dev"]
+
+
+RENDER_HOST = os.environ.get("RENDER_EXTERNAL_HOSTNAME")  # set automatically by Render
+if RENDER_HOST:
+    ALLOWED_HOSTS.append(RENDER_HOST)
+    CSRF_TRUSTED_ORIGINS.append(f"https://{RENDER_HOST}")
 
 # Application definition
 
@@ -67,6 +74,7 @@ SOCIALACCOUNT_PROVIDERS = {
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -113,17 +121,25 @@ CHANNEL_LAYERS = {
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-        # Django 5.1+. Lets chat-stream writes and pulse writes coexist.
-        "OPTIONS": {
-            "transaction_mode": "IMMEDIATE",
-            "timeout": 20,
-            "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
-        },
-    }
+    "default": dj_database_url.config(
+        default=os.environ.get("DATABASE_URL"),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
+
+# --- Old SQLite config, kept for quick rollback if needed ---
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#         "OPTIONS": {
+#             "transaction_mode": "IMMEDIATE",
+#             "timeout": 20,
+#             "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
+#         },
+#     }
+# }
 
 
 # Password validation
@@ -167,6 +183,18 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 STATICFILES_DIRS = []
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
+
+MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT", BASE_DIR / "media"))
+
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 
 GEMINI_API_KEY_CHAT = os.environ.get("GEMINI_API_KEY_CHAT")
