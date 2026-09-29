@@ -10,16 +10,25 @@ from .models import (
 class SignupForm(UserCreationForm):
     first_name = forms.CharField(max_length=50, required=True, label="First Name")
     last_name = forms.CharField(max_length=50, required=True, label="Last Name")
+    email = forms.EmailField(required=True, label="Email")
     matric_number = forms.CharField(max_length=20, required=True, label="Matric Number")
     school = forms.ChoiceField(choices=SCHOOL_CHOICES, label="School")
     department = forms.ChoiceField(choices=DEPARTMENT_CHOICES, label="Department")
     level = forms.ChoiceField(choices=LEVEL_CHOICES, label="Level")
     semester = forms.ChoiceField(choices=SEMESTER_CHOICES, label="Semester")
 
+    def clean_email(self):
+        email = self.cleaned_data.get("email", "").strip()
+        if User.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError(
+                "An account with this email already exists. Log in, or use Continue with Google."
+            )
+        return email
+
     class Meta:
         model = User
         fields = [
-            "first_name", "last_name", "username", "matric_number",
+            "first_name", "last_name", "email", "username", "matric_number",
             "school", "department", "level", "semester",
             "password1", "password2"
         ]
