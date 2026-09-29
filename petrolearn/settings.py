@@ -123,10 +123,10 @@ CHANNEL_LAYERS = {
 DATABASES = {
     "default": dj_database_url.config(
         default=os.environ.get("DATABASE_URL"),
-        conn_max_age=600,
-        conn_health_checks=True,
+        conn_max_age=0,
     )
 }
+DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 
 # --- Old SQLite config, kept for quick rollback if needed ---
 # DATABASES = {
