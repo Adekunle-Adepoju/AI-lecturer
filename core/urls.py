@@ -24,6 +24,7 @@ urlpatterns = [
     path("timetable/", views.timetable_view, name="timetable"),
     path("reschedule/<int:entry_id>/", views.reschedule_session, name="reschedule"),
     path("profile/edit/", views.profile_edit_view, name="profile_edit"),
+    path("account/", views.account_settings_view, name="account_settings"),
     path("review/<int:topic_session_id>/", views.review_view, name="review"),
     path("history/", views.history_view, name="history"),
     path("session/<str:course_code>/restart/<int:week_number>/", views.restart_session_view, name="restart_session"),

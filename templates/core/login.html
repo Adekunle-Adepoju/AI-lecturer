@@ -242,7 +242,7 @@
           {% csrf_token %}
 
           <div class="form-group {% if form.username.errors %}has-error{% endif %}">
-            <label for="id_username">Username</label>
+            <label for="id_username">Username or email</label>
             {{ form.username }}
             {% if form.username.errors %}<div class="field-error">{{ form.username.errors.0 }}</div>{% endif %}
           </div>
@@ -260,7 +260,7 @@
           </div>
 
           {% if form.errors %}
-          <p class="form-error">❌ Incorrect username or password. Try again.</p>
+          <p class="form-error">❌ Incorrect username/email or password. Signed up with Google? Use the Continue with Google button.</p>
           {% endif %}
 
           <button type="submit" class="btn-submit-pill" id="submitBtn">

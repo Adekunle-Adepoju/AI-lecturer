@@ -1,0 +1,52 @@
+{% extends "core/base.html" %}
+{% block title %}Account Settings — Rovea{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:500px; margin:40px auto">
+  <h2 style="margin-bottom:24px">Account Settings</h2>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div style="color:green; margin-bottom:16px">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <h3 style="margin-bottom:12px">Your details</h3>
+  <form method="POST">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="details">
+    {% for field in details_form %}
+    <div style="margin-bottom:16px">
+      <label style="display:block; margin-bottom:6px; font-weight:600">{{ field.label }}</label>
+      {{ field }}
+      {% for error in field.errors %}<div style="color:red; font-size:13px">{{ error }}</div>{% endfor %}
+    </div>
+    {% endfor %}
+    <button type="submit" class="btn btn-primary" style="width:100%">Save details</button>
+  </form>
+
+  <hr style="margin:32px 0; opacity:.3">
+
+  <h3 style="margin-bottom:12px">{% if has_password %}Change password{% else %}Set a password{% endif %}</h3>
+  {% if not has_password %}
+  <p style="font-size:13px; margin-bottom:16px">
+    You signed in with Google, so you don't have a password yet. Set one to also log in with your email and password.
+  </p>
+  {% endif %}
+  <form method="POST">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="password">
+    {% for field in password_form %}
+    <div style="margin-bottom:16px">
+      <label style="display:block; margin-bottom:6px; font-weight:600">{{ field.label }}</label>
+      {{ field }}
+      {% if field.help_text %}<div style="font-size:12px; opacity:.7">{{ field.help_text|safe }}</div>{% endif %}
+      {% for error in field.errors %}<div style="color:red; font-size:13px">{{ error }}</div>{% endfor %}
+    </div>
+    {% endfor %}
+    <button type="submit" class="btn btn-primary" style="width:100%">
+      {% if has_password %}Change password{% else %}Set password{% endif %}
+    </button>
+  </form>
+</div>
+{% endblock %}

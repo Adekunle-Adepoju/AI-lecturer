@@ -10,9 +10,10 @@ import math
 import time
 
 from django.contrib import messages
-from django.contrib.auth import login, logout
+from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm, SetPasswordForm
+from .account_forms import EmailOrUsernameAuthenticationForm, AccountDetailsForm
 from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
@@ -239,13 +240,13 @@ def login_view(request):
     if request.user.is_authenticated:
         return redirect("dashboard")
     if request.method == "POST":
-        form = AuthenticationForm(data=request.POST)
+        form = EmailOrUsernameAuthenticationForm(data=request.POST)
         if form.is_valid():
             user = form.get_user()
             login(request, user, backend="django.contrib.auth.backends.ModelBackend")
             return redirect("dashboard")
     else:
-        form = AuthenticationForm()
+        form = EmailOrUsernameAuthenticationForm()
     return render(request, "core/login.html", {"form": form})
 
 
@@ -1378,6 +1379,37 @@ def profile_edit_view(request):
         form = ProfileEditForm(instance=profile, user=request.user)
 
     return render(request, "core/profile_edit.html", {"form": form, "profile": profile})
+
+@login_required
+def account_settings_view(request):
+    user = request.user
+    has_password = user.has_usable_password()   # False for Google-only accounts
+    PasswordForm = PasswordChangeForm if has_password else SetPasswordForm
+
+    details_form = AccountDetailsForm(instance=user)
+    password_form = PasswordForm(user)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "details":
+            details_form = AccountDetailsForm(request.POST, instance=user)
+            if details_form.is_valid():
+                details_form.save()
+                messages.success(request, "Your details have been updated.")
+                return redirect("account_settings")
+        elif action == "password":
+            password_form = PasswordForm(user, request.POST)
+            if password_form.is_valid():
+                password_form.save()
+                update_session_auth_hash(request, user)  # keeps you logged in
+                messages.success(request, "Your password has been saved.")
+                return redirect("account_settings")
+
+    return render(request, "core/account_settings.html", {
+        "details_form": details_form,
+        "password_form": password_form,
+        "has_password": has_password,
+    })
 
 
 # ─── Review ────────────────────────────────────────────────────────────────────
