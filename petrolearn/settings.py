@@ -23,6 +23,8 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-insecure-key" if DEBUG else 
 ALLOWED_HOSTS = ["10.251.19.165", "localhost", "127.0.0.1", "planner-cornball-casino.ngrok-free.dev"]
 CSRF_TRUSTED_ORIGINS = ["https://planner-cornball-casino.ngrok-free.dev"]
 
+ADMIN_URL = os.environ.get("ADMIN_URL", "admin/")
+
 
 RENDER_HOST = os.environ.get("RENDER_EXTERNAL_HOSTNAME")  # set automatically by Render
 if RENDER_HOST:
