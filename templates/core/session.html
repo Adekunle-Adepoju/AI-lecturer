@@ -624,6 +624,15 @@
     scrollChatToBottom();
   }
 
+  const FRIENDLY_ERROR = "Rovea is a bit busy right now. Please try again in a few seconds.";
+
+  function showFriendlyError(typingRow) {
+    if (typingRow) typingRow.remove();
+    appendSystemBubble("⚠️ " + FRIENDLY_ERROR);
+    understandingControls.style.display = "flex";  // let the student try again
+    scrollChatToBottom();
+  }
+
   function renderMarkdown(text) {
   const mathSpans = [];
   const protectedText = text.replace(
@@ -791,7 +800,13 @@ function fillAiBubble(bubble, rawText) {
     const targetDelay = minMs + Math.random() * (maxMs - minMs);
     const start = Date.now();
 
-    const result = await action();
+    let result;
+    try {
+      result = await action();
+    } catch (err) {
+      typingRow.remove();
+      throw err;
+    }
 
     const elapsed = Date.now() - start;
     const remaining = Math.max(0, targetDelay - elapsed);
@@ -849,62 +864,70 @@ function fillAiBubble(bubble, rawText) {
   }
 
   // ── Send clarification to Gemini via SSE ─────────────────────────────────
-  async function sendClarifyMessage(message) {
+    async function sendClarifyMessage(message) {
     appendUserBubble(message);
     const typingRow = showTypingIndicator();
 
-    const response = await fetch("/chat/chunk-clarify/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "X-CSRFToken": getCookie("csrftoken"),
-      },
-      body: `topic_session_id=${topicSessionId}&message=${encodeURIComponent(message)}`,
-    });
+    try {
+      const response = await fetch("/chat/chunk-clarify/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-CSRFToken": getCookie("csrftoken"),
+        },
+        body: `topic_session_id=${topicSessionId}&message=${encodeURIComponent(message)}`,
+      });
 
-    if (response.status === 429) {
-      typingRow.remove();
-      const data = await response.json();
-      appendSystemBubble("⏳ " + data.message);
-      return;
-    }
+      if (response.status === 429) {
+        typingRow.remove();
+        const data = await response.json();
+        appendSystemBubble("⏳ " + data.message);
+        return;
+      }
+      if (!response.ok) {
+        showFriendlyError(typingRow);
+        return;
+      }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let aiBubble = null;
-    let buffer = "";
-    let rawText = "";
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let aiBubble = null;
+      let buffer = "";
+      let rawText = "";
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n\n");
-      buffer = lines.pop();
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop();
 
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const payload = JSON.parse(line.slice(6));
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = JSON.parse(line.slice(6));
 
-        if (payload.error) {
-          typingRow.remove();
-          appendSystemBubble("Error: " + payload.error);
-          return;
-        }
+          if (payload.error) {
+            showFriendlyError(typingRow);
+            return;
+          }
 
-        if (payload.chunk) {
-          if (!aiBubble) { typingRow.remove(); aiBubble = createAiBubble(); }
-          rawText += payload.chunk;
-          aiBubble.textContent = rawText;
-          scrollChatToBottom();
-        }
+          if (payload.chunk) {
+            if (!aiBubble) { typingRow.remove(); aiBubble = createAiBubble(); }
+            rawText += payload.chunk;
+            aiBubble.textContent = rawText;
+            scrollChatToBottom();
+          }
 
-        if (payload.done) {
-          fillAiBubble(aiBubble, rawText);
-          understandingControls.style.display = "flex";
-          scrollChatToBottom();
+          if (payload.done) {
+            if (aiBubble) fillAiBubble(aiBubble, rawText);
+            understandingControls.style.display = "flex";
+            scrollChatToBottom();
+          }
         }
       }
+    } catch (err) {
+      console.error(err);
+      showFriendlyError(typingRow);
     }
   }
 
@@ -947,21 +970,29 @@ function fillAiBubble(bubble, rawText) {
   }
 
     // ── Got it button ─────────────────────────────────────────────────────────
-    async function handleGotIt() {
+      async function handleGotIt() {
     understandingControls.style.display = "none";
     if (clarifyBoxEl) { clarifyBoxEl.remove(); clarifyBoxEl = null; }
 
-    const data = await withTypingDelay(async () => {
-      const response = await fetch("/chat/chunk-next/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "X-CSRFToken": getCookie("csrftoken"),
-        },
-        body: `topic_session_id=${topicSessionId}`,
+    let data;
+    try {
+      data = await withTypingDelay(async () => {
+        const response = await fetch("/chat/chunk-next/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-CSRFToken": getCookie("csrftoken"),
+          },
+          body: `topic_session_id=${topicSessionId}`,
+        });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
       });
-      return response.json();
-    });
+    } catch (err) {
+      console.error(err);
+      showFriendlyError(null);
+      return;
+    }
 
     if (data.action === "quiz_time") {
       triggerQuizGeneration();
@@ -975,7 +1006,6 @@ function fillAiBubble(bubble, rawText) {
     }
   }
 
-  // ── Quiz trigger ──────────────────────────────────────────────────────────
   function triggerQuizGeneration() {
     appendSystemBubble("Nice work! Generating your quiz...");
     fetch("/chat/next-topic/", {
@@ -985,9 +1015,14 @@ function fillAiBubble(bubble, rawText) {
         "X-CSRFToken": getCookie("csrftoken"),
       },
       body: `topic_session_id=${topicSessionId}&action=quiz`,
-    }).then(r => r.json()).then(data => {
-      if (data.redirect) window.location.href = data.redirect;
-    });
+    })
+      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(data => { if (data.redirect) window.location.href = data.redirect; })
+      .catch(err => {
+        console.error(err);
+        appendSystemBubble("⚠️ Couldn't generate your quiz just now. Please press the button again.");
+        understandingControls.style.display = "flex";
+      });
   }
 
   // ── Live Gemini path (non-pregenerated) ──────────────────────────────────
