@@ -3136,8 +3136,8 @@ def chunk_clarify_view(request):
             "message": "You've reached your 10 message limit for today. Come back tomorrow — your progress is saved. 🙏"
         }, status=429)
 
-    # Save the student's message
-    ChatMessage.objects.create(
+    # Save the student's message (kept so we can remove it if Gemini fails)
+    user_msg = ChatMessage.objects.create(
         topic_session=topic_session,
         role="user",
         content=user_message,
@@ -3173,26 +3173,53 @@ The student has a question or needs clarification. Your job:
 - If they asked a question: answer it directly and clearly using the chunk as your reference. Then ask "Ready to continue?"
 
 Use {student_name}'s name occasionally in your reply — not every message, that gets robotic.
-Keep it conversational. Max 5-6 paragraphs. Never re-teach the whole chunk unless they said "everything".
+Keep it conversational. Use very simple words and short sentences, like a patient coursemate. Explain any technical term in plain words before you use it. Use at most 3 short paragraphs and, where it helps, one everyday analogy. Never re-teach the whole chunk unless they said "everything".
 Never say "As an AI". Stay in character as Rovea."""
+
+    FRIENDLY_ERROR = (
+        "Rovea is a bit busy right now. Please try again in a few seconds — "
+        "your question wasn't counted."
+    )
+    TRANSIENT_MARKERS = (
+        "503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED",
+        "timeout", "Timeout", "ConnectionError", "RemoteDisconnected",
+    )
 
     def event_stream():
         full_reply = ""
-        try:
-            stream = client.models.generate_content_stream(
-                model="gemini-3.6-flash",
-                contents=[{"role": "user", "parts": [{"text": user_message}]}],
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    max_output_tokens=2048,
-                ),
-            )
-            for chunk in stream:
-                if chunk.text:
-                    full_reply += chunk.text
-                    yield f"data: {json.dumps({'chunk': chunk.text})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        last_error = None
+
+        for attempt in range(3):
+            try:
+                stream = client.models.generate_content_stream(
+                    model="gemini-3.6-flash",
+                    contents=[{"role": "user", "parts": [{"text": user_message}]}],
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        max_output_tokens=2048,
+                    ),
+                )
+                for chunk in stream:
+                    if chunk.text:
+                        full_reply += chunk.text
+                        yield f"data: {json.dumps({'chunk': chunk.text})}\n\n"
+                last_error = None
+                break
+            except Exception as e:
+                last_error = e
+                print(f"Clarify stream error (attempt {attempt + 1}/3): {e}")
+                if full_reply:
+                    break  # text already reached the student — don't retry mid-answer
+                transient = any(m in str(e) for m in TRANSIENT_MARKERS)
+                if transient and attempt < 2:
+                    time.sleep(2 * (attempt + 1))
+                    continue
+                break
+
+        # Nothing came back at all: hand the message back and show a friendly note
+        if last_error is not None and not full_reply:
+            user_msg.delete()
+            yield f"data: {json.dumps({'error': FRIENDLY_ERROR})}\n\n"
             return
 
         ChatMessage.objects.create(
