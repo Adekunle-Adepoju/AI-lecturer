@@ -2114,7 +2114,7 @@ def _call_generation_model(contents, system_instruction, max_output_tokens, temp
 
 
 def _generate_pregenerated_lecture(course_code, course_title, topic_name, chunk_text,
-                                   fix_notes="", is_course_opening=False):
+                                   fix_notes="", is_course_opening=False, course_context=""):
     opening = ""
     if is_course_opening:
         opening = (
@@ -2136,6 +2136,7 @@ def _generate_pregenerated_lecture(course_code, course_title, topic_name, chunk_
     contents = (
         opening +
         f"Course: {course_code} — {course_title}\n"
+        f"{course_context}"
         f"Topic to teach: {topic_name}\n\n"
         f"LECTURER SLIDES:\n{chunk_text}"
         f"{fix_block}"
@@ -2150,10 +2151,12 @@ def _generate_pregenerated_lecture(course_code, course_title, topic_name, chunk_
     )
 
 
-def _generate_verified_lecture(course_code, course_title, topic_name, chunk_text, is_course_opening=False):
+def _generate_verified_lecture(course_code, course_title, topic_name, chunk_text,
+                               is_course_opening=False, course_context=""):
     """Returns (lecture_text, review_note, hit_limit)."""
     text, hit_limit = _generate_pregenerated_lecture(
-        course_code, course_title, topic_name, chunk_text, is_course_opening=is_course_opening
+        course_code, course_title, topic_name, chunk_text,
+        is_course_opening=is_course_opening, course_context=course_context,
     )
     if hit_limit:
         return text, "the model hit its output limit, so the lecture is cut off", True
@@ -2169,6 +2172,7 @@ def _generate_verified_lecture(course_code, course_title, topic_name, chunk_text
     text2, hit_limit2 = _generate_pregenerated_lecture(
         course_code, course_title, topic_name, chunk_text,
         fix_notes="\n".join(issues), is_course_opening=is_course_opening,
+        course_context=course_context,
     )
     if hit_limit2:
         return text, "checker flagged: " + " ".join(issues[:5]), False
@@ -2343,9 +2347,13 @@ def staff_pregeneerate_lessons_view(request):
 
             try:
                 full_text, review_note, hit_limit = _generate_verified_lecture(
-                course.course_code, course.course_title, topic, chunk_text,
-                is_course_opening=(week_number == 1 and i == 0),
-            )
+                    course.course_code, course.course_title, topic, chunk_text,
+                    is_course_opening=(week_number == 1 and i == 0),
+                    course_context=(
+                        f"Level: {course.get_level_display()}\n"
+                        f"Department: {course.get_department_display()}\n"
+                    ),
+                )
 
                 if hit_limit:
                     errors.append(f"{topic}: hit the output limit — not saved. Run again to regenerate.")
@@ -3158,7 +3166,7 @@ def chunk_clarify_view(request):
         current_chunk = topic_session.chunks[topic_session.current_chunk_index]
 
     student_name = topic_session.session.student.user.first_name or topic_session.session.student.user.username
-    system_instruction = f"""You are Rovea, a brilliant AI lecturer for Petroleum and Gas Engineering students at UNILAG.
+    system_instruction = f"""You are Rovea, a friendly AI lecturer helping university students understand their course slides.
 
 You are helping {student_name}, who is studying the topic: "{topic_session.topic_name}" ({topic_session.session.course_code}).
 
