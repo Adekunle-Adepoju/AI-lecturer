@@ -1,6 +1,7 @@
 import asyncio
 import random
 import time
+import logging
 
 from channels.db import database_sync_to_async
 from django.utils import timezone
@@ -10,6 +11,8 @@ from .match_state import MatchState
 from .question_selection import select_match_questions
 from .models import BattleRoom, BattleParticipant, BattleMatch, BattleMatchQuestion, StudentQuestionExposure
 
+
+logger = logging.getLogger(__name__)
 
 # Room-code -> asyncio.Task, shared across every consumer instance in this
 # process. Single-process only.
@@ -158,8 +161,16 @@ class MatchLoop:
         if existing and existing is not asyncio.current_task():
             existing.cancel()
         _timer_tasks[self.room_code] = asyncio.create_task(
-            self._timeout_after(expected_index, seconds, expected_phase)
+            self._guarded_timeout(expected_index, seconds, expected_phase)
         )
+
+    async def _guarded_timeout(self, expected_index, seconds, expected_phase):
+        try:
+            await self._timeout_after(expected_index, seconds, expected_phase)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Battle timer failed in room %s (phase %s)", self.room_code, expected_phase)
 
     async def _timeout_after(self, expected_index, seconds, expected_phase):
         await asyncio.sleep(seconds)

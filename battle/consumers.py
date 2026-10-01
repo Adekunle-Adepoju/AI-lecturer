@@ -1,6 +1,7 @@
 import json
 import random
 import string
+import logging
 
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -9,6 +10,7 @@ from core.models import StudentProfile
 from .models import BattleRoom, BattleParticipant
 from .match_loop import MatchLoop
 
+logger = logging.getLogger(__name__)
 MAX_PLAYERS_PER_TEAM = 5
 MAX_SPECTATORS = 10
 
@@ -75,19 +77,22 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
 
     async def receive_json(self, content, **kwargs):
         event_type = content.get("type")
-
-        if event_type == "assign_team":
-            await self._handle_assign_team(content)
-        elif event_type == "set_mode":
-            await self._handle_set_mode(content)
-        elif event_type == "start_match":
-            await self._handle_start_match(content)
-        elif event_type == "buzz":
-            await self._handle_buzz(content)
-        elif event_type == "submit_answer":
-            await self._handle_submit_answer(content)
-        else:
-            await self.send_json({"type": "error", "message": f"Unknown event type: {event_type}"})
+        try:
+            if event_type == "assign_team":
+                await self._handle_assign_team(content)
+            elif event_type == "set_mode":
+                await self._handle_set_mode(content)
+            elif event_type == "start_match":
+                await self._handle_start_match(content)
+            elif event_type == "buzz":
+                await self._handle_buzz(content)
+            elif event_type == "submit_answer":
+                await self._handle_submit_answer(content)
+            else:
+                await self.send_json({"type": "error", "message": f"Unknown event type: {event_type}"})
+        except Exception:
+            logger.exception("Battle event %r failed in room %s", event_type, self.room_code)
+            await self.send_json({"type": "error", "message": "Server error. Tell the host and check the logs."})
 
     # ── Event handlers ──────────────────────────────────────────────
 
@@ -150,12 +155,12 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
         match_loop = MatchLoop(self, self.room_code)
         await match_loop.handle_buzz(profile.id)
 
-        async def _handle_submit_answer(self, content):
-            profile = await self._get_profile()
-            match_loop = MatchLoop(self, self.room_code)
-            await match_loop.handle_submit_answer(
-                profile.id, content.get("option_index"), content.get("question_index"),
-            )
+    async def _handle_submit_answer(self, content):
+        profile = await self._get_profile()
+        match_loop = MatchLoop(self, self.room_code)
+        await match_loop.handle_submit_answer(
+            profile.id, content.get("option_index"), content.get("question_index"),
+        )
         
 
     # ── Broadcast relay (called by group_send) ─────────────────────

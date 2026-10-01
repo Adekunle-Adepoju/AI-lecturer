@@ -211,7 +211,10 @@ let answerLocked = true;
 let clockInterval = null;
 
 ws.onopen = () => { const s = document.getElementById("status"); s.textContent = "Live"; s.classList.remove("disconnected"); };
-ws.onclose = () => { const s = document.getElementById("status"); s.textContent = "Disconnected"; s.classList.add("disconnected"); };
+ws.onclose = (e) => {
+  console.log("WS closed", e.code, e.reason);
+  const s = document.getElementById("status"); s.textContent = "Disconnected"; s.classList.add("disconnected");
+};
 ws.onerror = () => { const s = document.getElementById("status"); s.textContent = "Connection error"; s.classList.add("disconnected"); };
 ws.onmessage = (e) => handleEvent(JSON.parse(e.data));
 
