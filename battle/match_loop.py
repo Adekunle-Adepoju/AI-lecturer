@@ -23,6 +23,7 @@ _timer_tasks = {}
 _room_locks = {}
 
 
+
 QUESTIONS_PER_TEAM_MODE1 = 5
 TOTAL_QUESTIONS_MODE2 = 10
 
@@ -58,13 +59,16 @@ def _rules_for(mode, total):
             "Tied at the end? One sudden-death question decides it.",
         ]
     return [
-        f"{total} questions. Alpha answers first, then Bravo takes over after question {QUESTIONS_PER_TEAM_MODE1}.",
+        f"{total} questions. The teams take turns: Alpha gets question 1, Bravo gets question 2, and so on.",
         "One player answers each question, rotating through the team.",
         f"You have {TURN_TIMER_SECONDS} seconds to answer. Correct: +5 points.",
         f"Wrong or out of time: 0 points, and the other team gets a free bonus attempt ({BONUS_ANSWER_SECONDS} seconds, any player can answer) worth +2 points.",
         "Tied at the end? One sudden-death question decides it.",
     ]
 
+def _team_for_index(idx):
+    """Even-numbered questions (1st, 3rd, 5th...) go to Alpha, odd ones to Bravo."""
+    return "A" if idx % 2 == 0 else "B"
 
 class MatchLoop:
     """Owns one room's live match. A fresh instance is created per incoming
@@ -128,7 +132,7 @@ class MatchLoop:
         q = state["questions"][idx]
 
         if state["mode"] == "alternating":
-            team = "A" if idx < QUESTIONS_PER_TEAM_MODE1 else "B"
+            team = _team_for_index(idx)
             roster = state["team_a_players"] if team == "A" else state["team_b_players"]
             turn_key = "team_a_turn_index" if team == "A" else "team_b_turn_index"
             answerer_id = roster[state[turn_key] % len(roster)] if roster else None
@@ -268,7 +272,7 @@ class MatchLoop:
 
     async def _resolve_alternating(self, state, correct, timed_out, option_index=None):
         idx = state["current_index"]
-        team = "A" if idx < QUESTIONS_PER_TEAM_MODE1 else "B"
+        team = _team_for_index(idx)
         other_team = "B" if team == "A" else "A"
 
         if correct:
