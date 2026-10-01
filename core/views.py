@@ -2458,6 +2458,56 @@ def staff_bulk_unpublish_lessons_view(request):
     messages.success(request, f"Unpublished {updated} lesson(s) for {course.course_code}.")
     return redirect(f"{reverse('staff_pregenerate_lessons')}?filter_course={course_id}")
 
+def _refresh_lesson_for_students(lesson):
+    """Reset every in-progress student session on this lesson's topic so the
+    next page load pulls the current lesson. Completed sessions keep their
+    quiz result, but their review text is updated to the new lecture."""
+    base = TopicSession.objects.filter(
+        session__course_code=lesson.course.course_code,
+        session__week_number=lesson.week_number,
+        topic_name=lesson.topic_title,
+    )
+    in_progress = base.filter(is_complete=False)
+    ids = list(in_progress.values_list("id", flat=True))
+
+    ChatMessage.objects.filter(topic_session_id__in=ids).delete()
+    reset = in_progress.update(
+        lecture_content="", chunks=[], current_chunk_index=0,
+        quiz_question="", quiz_options=[], correct_answer_index=0, quiz_explanation="",
+    )
+    updated = base.filter(is_complete=True).update(lecture_content=lesson.content_chunk)
+    return reset, updated
+
+
+@staff_required
+@require_POST
+def staff_refresh_lesson_view(request, lesson_id):
+    lesson = get_object_or_404(PreGeneratedLesson, id=lesson_id)
+    reset, updated = _refresh_lesson_for_students(lesson)
+    messages.success(
+        request,
+        f"'{lesson.topic_title}': {reset} in-progress student session(s) reset to the current "
+        f"lecture, {updated} completed session(s) updated for review."
+    )
+    return redirect(f"{reverse('staff_pregenerate_lessons')}?filter_course={lesson.course_id}")
+
+
+@staff_required
+@require_POST
+def staff_refresh_course_lessons_view(request):
+    course = get_object_or_404(CourseDefinition, id=request.POST.get("course_id"))
+    total_reset = total_updated = 0
+    for lesson in PreGeneratedLesson.objects.filter(course=course, is_published=True):
+        reset, updated = _refresh_lesson_for_students(lesson)
+        total_reset += reset
+        total_updated += updated
+    messages.success(
+        request,
+        f"{course.course_code}: {total_reset} in-progress session(s) reset to the current "
+        f"lectures, {total_updated} completed session(s) updated for review."
+    )
+    return redirect(f"{reverse('staff_pregenerate_lessons')}?filter_course={course.id}")
+
 # ─── Simulator ─────────────────────────────────────────────────────────────────
 
 def _get_xp_and_grade(percentage):
@@ -3092,6 +3142,8 @@ def chunk_next_view(request):
     topic_session = get_object_or_404(TopicSession, id=topic_session_id)
 
     total_chunks = len(topic_session.chunks)
+    if total_chunks == 0:
+        return JsonResponse({"action": "reload"})
     saved_chunk_count = topic_session.chatmessage_set.filter(
         role="ai", is_pregenerated=True
     ).count()

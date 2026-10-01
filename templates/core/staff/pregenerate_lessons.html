@@ -176,6 +176,12 @@
       <input type="hidden" name="course_id" value="{{ filter_course_id }}">
       <button type="submit" class="btn btn-sm">Unpublish all</button>
     </form>
+        <form method="POST" action="{% url 'staff_refresh_course_lessons' %}" style="margin:0"
+          onsubmit="return confirm('Refresh ALL published lessons of this course for every student? Anyone mid-topic restarts that topic from Part 1.')">
+      {% csrf_token %}
+      <input type="hidden" name="course_id" value="{{ filter_course_id }}">
+      <button type="submit" class="btn btn-sm">Refresh course for students</button>
+    </form>
     <form method="POST" action="{% url 'staff_bulk_delete_lessons' %}" style="margin:0"
           onsubmit="return confirm('Delete ALL lessons for this course? This cannot be undone.')">
       {% csrf_token %}
@@ -212,6 +218,13 @@
         <form method="POST" action="{% url 'staff_publish_lesson' lesson.id %}" style="margin:0">
           {% csrf_token %}
           <button type="submit" class="btn btn-sm">{% if lesson.is_published %}Unpublish{% else %}Publish{% endif %}</button>
+        {% if lesson.is_published %}
+        <form method="POST" action="{% url 'staff_refresh_lesson' lesson.id %}" style="margin:0"
+              onsubmit="return confirm('Send every student back to the start of this topic, using the current lecture?')">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm">Refresh for students</button>
+        </form>
+        {% endif %}
         </form>
         <form method="POST" action="{% url 'staff_delete_lesson' lesson.id %}" style="margin:0">
           {% csrf_token %}

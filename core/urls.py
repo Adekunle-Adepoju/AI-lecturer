@@ -77,4 +77,6 @@ urlpatterns = [
     path("staff/slides/<int:slide_id>/retry-cleanup/", views.retry_slide_cleanup_view, name="retry_slide_cleanup"),
     path("progress/", views.progress_view, name="progress"),
     path("privacy/", TemplateView.as_view(template_name="core/privacy.html"), name="privacy"),
+    path("staff/lessons/refresh/<int:lesson_id>/", views.staff_refresh_lesson_view, name="staff_refresh_lesson"),
+    path("staff/lessons/bulk-refresh/", views.staff_refresh_course_lessons_view, name="staff_refresh_course_lessons"),
 ]

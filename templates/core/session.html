@@ -994,6 +994,10 @@ function fillAiBubble(bubble, rawText) {
       return;
     }
 
+    if (data.action === "reload") {
+      window.location.reload();
+      return;
+    }
     if (data.action === "quiz_time") {
       triggerQuizGeneration();
       return;
