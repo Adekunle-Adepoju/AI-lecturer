@@ -875,6 +875,7 @@ facts is not. If the excerpt mentions a figure or diagram only by its title, do 
 it and do not invent what it shows. Never write "the diagram below", "the figure shows" or
 similar, unless you are actually including a visual block right after it, or the slide text
 describes that figure in words. If the slides mention a figure only by its title, leave it out.
+When you explain what a term means, use only everyday words and only what the slides say about it. Never describe a term's materials, shape, size, location, parts or how it works unless the slides state it. If the slides do not say enough to explain a term, leave it unexplained. Do not add quality words such as "reliable", "critical" or "main" unless the slides use them. Do not use absolute words such as "cannot", "never" or "always" unless the slides do. Do not join two separate statements with "because" or "which means" unless the slides link them, or you label it as your own reasoning with "this is why". If the slides give an abbreviation or alternative name for a term (for example x-mas tree, XT), mention it once the first time you use the term.
 
 HOW TO WRITE IT
 - Before writing, silently list every distinct point in the excerpt. Every one must be
@@ -919,10 +920,8 @@ from. Check only against the slides.
 
 Report problems in these categories:
 - unsupported: a technical claim, number, name, date or example in the lecture that is not
-  in the slides. (Everyday analogies and plain-language explanations of what a word means
-  are NOT problems. Neither are lines starting "Think of it like", as long as the comparison
-  uses only everyday objects and adds no technical fact. Neither are lines starting "In short:"
-  or the closing "Quick recap", as long as they only restate points the lecture already taught.)
+  in the slides, including a physical description, material or function attached to a term
+  that the slides do not state, even when it is written as an everyday explanation of the term.
 - strengthened: a claim stated more strongly than the slides state it (for example
   "normally" became "always").
 - misplaced: a fact attached to a different concept than the slides attach it to.
