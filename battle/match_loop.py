@@ -1,5 +1,6 @@
 import asyncio
 import random
+import time
 
 from channels.db import database_sync_to_async
 from django.utils import timezone
@@ -11,26 +12,41 @@ from .models import BattleRoom, BattleParticipant, BattleMatch, BattleMatchQuest
 
 
 # Room-code -> asyncio.Task, shared across every consumer instance in this
-# process, so whichever consumer actually receives an event (buzz, answer,
-# start) can safely schedule/cancel the match's one timer, regardless of
-# which consumer happens to be handling that particular event. Single-
-# process only — see note in match_loop's module docstring if this ever
-# needs to survive multiple worker processes.
-
+# process. Single-process only.
 _timer_tasks = {}
+
+# Room-code -> asyncio.Lock. Every action that changes match state (buzz,
+# answer, timeout) takes this lock, so two events can never interleave.
+_room_locks = {}
 
 
 QUESTIONS_PER_TEAM_MODE1 = 5
 TOTAL_QUESTIONS_MODE2 = 10
-TURN_TIMER_SECONDS = 30
-BUZZ_WINDOW_SECONDS = 60
-BUZZ_ANSWER_SECONDS = 10
-BONUS_ANSWER_SECONDS = 15
+
+# ── Timer lengths (seconds): change these to tune the game ──
+TURN_TIMER_SECONDS = 30      # alternating: time to answer
+BUZZ_WINDOW_SECONDS = 20     # buzzer: time for someone to buzz
+BUZZ_ANSWER_SECONDS = 10     # buzzer: time to answer after buzzing
+BONUS_ANSWER_SECONDS = 15    # the other team's bonus attempt
+REVEAL_PAUSE_SECONDS = 3     # pause to show the result before the next question
+
+
+def _timer_fields(seconds):
+    """Absolute server deadline, so every screen counts down to the same moment."""
+    now = time.time()
+    return {"timer_seconds": seconds, "deadline": now + seconds, "server_now": now}
+
+
+def _lock_for(room_code):
+    lock = _room_locks.get(room_code)
+    if lock is None:
+        lock = _room_locks[room_code] = asyncio.Lock()
+    return lock
 
 
 class MatchLoop:
-    """Owns one room's live match. Only instantiated on the room leader's
-    consumer — see the concurrency note above. Broadcasts through the
+    """Owns one room's live match. A fresh instance is created per incoming
+    event; the real state lives in MatchState. Broadcasts through the
     consumer's channel layer so every connected participant (players and
     spectators) sees the same state."""
 
@@ -75,6 +91,9 @@ class MatchLoop:
         )
         return team_a, team_b
 
+    def _correct_index(self, state):
+        return state["questions"][state["current_index"]]["correct_index"]
+
     async def _serve_question(self, state):
         idx = state["current_index"]
         q = state["questions"][idx]
@@ -91,7 +110,7 @@ class MatchLoop:
             await self._broadcast({
                 "type": "question_served", "index": idx, "stem": q["stem"], "options": q["options"],
                 "mode": "alternating", "team_on_turn": team, "answering_student_id": answerer_id,
-                "timer_seconds": timer_seconds,
+                **_timer_fields(timer_seconds),
             })
         else:
             state["phase"] = "question_open"
@@ -100,7 +119,7 @@ class MatchLoop:
             timer_seconds = BUZZ_WINDOW_SECONDS
             await self._broadcast({
                 "type": "question_served", "index": idx, "stem": q["stem"], "options": q["options"],
-                "mode": "buzzer", "timer_seconds": timer_seconds,
+                "mode": "buzzer", **_timer_fields(timer_seconds),
             })
 
         await self.state.save(state)
@@ -108,7 +127,9 @@ class MatchLoop:
 
     def _schedule_timeout(self, expected_index, seconds, expected_phase):
         existing = _timer_tasks.get(self.room_code)
-        if existing:
+        # Never cancel ourselves: a timeout task that is resolving a question
+        # also schedules the next timer.
+        if existing and existing is not asyncio.current_task():
             existing.cancel()
         _timer_tasks[self.room_code] = asyncio.create_task(
             self._timeout_after(expected_index, seconds, expected_phase)
@@ -116,117 +137,159 @@ class MatchLoop:
 
     async def _timeout_after(self, expected_index, seconds, expected_phase):
         await asyncio.sleep(seconds)
-        state = await self.state.get()
-        if state is None:
-            return
-        # Only act if nothing has already resolved this question — guards
-        # against the timer firing after a real answer already landed.
-        if state["current_index"] != expected_index or state["phase"] != expected_phase:
-            return
+        async with _lock_for(self.room_code):
+            state = await self.state.get()
+            if state is None:
+                return
+            # Only act if nothing has already resolved this question.
+            if state["current_index"] != expected_index or state["phase"] != expected_phase:
+                return
 
-        if state["mode"] == "alternating" and expected_phase == "awaiting_answer":
-            await self._resolve_alternating(state, correct=False, timed_out=True)
-        elif state["mode"] == "alternating" and expected_phase == "awaiting_bonus":
-            await self._resolve_bonus(state, correct=False, timed_out=True)
-        elif state["mode"] == "buzzer" and expected_phase == "question_open":
-            # Nobody buzzed in time — both teams take -5, per the agreed rule.
-            state["team_a_score"] -= 5
-            state["team_b_score"] -= 5
-            await self._broadcast({"type": "no_buzz_penalty", "team_a_score": state["team_a_score"], "team_b_score": state["team_b_score"]})
-            await self._advance(state)
-        elif state["mode"] == "buzzer" and expected_phase == "awaiting_answer":
-            await self._resolve_buzzer(state, correct=False, timed_out=True)
-        elif state["mode"] == "buzzer" and expected_phase == "awaiting_bonus":
-            await self._resolve_bonus(state, correct=False, timed_out=True)
+            if expected_phase == "revealing":
+                await self._advance_now(state)
+            elif state["mode"] == "alternating" and expected_phase == "awaiting_answer":
+                await self._resolve_alternating(state, correct=False, timed_out=True)
+            elif expected_phase == "awaiting_bonus":
+                await self._resolve_bonus(state, correct=False, timed_out=True)
+            elif state["mode"] == "buzzer" and expected_phase == "question_open":
+                # Nobody buzzed in time: both teams take -5.
+                state["team_a_score"] -= 5
+                state["team_b_score"] -= 5
+                await self._broadcast({
+                    "type": "no_buzz_penalty",
+                    "team_a_score": state["team_a_score"], "team_b_score": state["team_b_score"],
+                    "correct_index": self._correct_index(state),
+                })
+                await self._advance(state)
+            elif state["mode"] == "buzzer" and expected_phase == "awaiting_answer":
+                await self._resolve_buzzer(state, correct=False, timed_out=True)
 
     # ── Buzzer-mode events ──────────────────────────────────────────
 
     async def handle_buzz(self, student_id):
-        state = await self.state.get()
-        if state is None or state["mode"] != "buzzer" or state["phase"] != "question_open":
-            return  # too late, already buzzed, or wrong mode — silently ignored
+        async with _lock_for(self.room_code):
+            state = await self.state.get()
+            if state is None or state["mode"] != "buzzer" or state["phase"] != "question_open":
+                return  # too late, already buzzed, or wrong mode: silently ignored
 
-        team = "A" if student_id in state["team_a_players"] else (
-            "B" if student_id in state["team_b_players"] else None
-        )
-        if team is None:
-            return  # spectator tried to buzz
+            team = "A" if student_id in state["team_a_players"] else (
+                "B" if student_id in state["team_b_players"] else None
+            )
+            if team is None:
+                return  # spectator tried to buzz
 
-        state["phase"] = "awaiting_answer"
-        state["buzzed_team"] = team
-        state["answering_student_id"] = student_id
-        await self.state.save(state)
+            state["phase"] = "awaiting_answer"
+            state["buzzed_team"] = team
+            state["answering_student_id"] = student_id
+            await self.state.save(state)
 
-        await self._broadcast({"type": "buzzed", "team": team, "student_id": student_id})
-        self._schedule_timeout(state["current_index"], BUZZ_ANSWER_SECONDS, "awaiting_answer")
+            await self._broadcast({
+                "type": "buzzed", "team": team, "student_id": student_id,
+                **_timer_fields(BUZZ_ANSWER_SECONDS),
+            })
+            self._schedule_timeout(state["current_index"], BUZZ_ANSWER_SECONDS, "awaiting_answer")
 
     # ── Answer submission (both modes) ──────────────────────────────
 
-    async def handle_submit_answer(self, student_id, option_index):
-        state = await self.state.get()
-        if state is None:
-            return
-        if state["answering_student_id"] != student_id:
-            return  # not this student's turn/buzz to answer
+    async def handle_submit_answer(self, student_id, option_index, question_index=None):
+        async with _lock_for(self.room_code):
+            state = await self.state.get()
+            if state is None:
+                return
+            if question_index != state["current_index"]:
+                return  # stale click from a previous question
 
-        q = state["questions"][state["current_index"]]
-        correct = (option_index == q["correct_index"])
+            phase = state["phase"]
+            if phase == "awaiting_bonus":
+                roster = state["team_a_players"] if state["bonus_team"] == "A" else state["team_b_players"]
+                if student_id not in roster:
+                    return  # only the bonus team may answer
+            elif phase == "awaiting_answer":
+                if state["answering_student_id"] != student_id:
+                    return  # not this student's turn/buzz to answer
+            else:
+                return
 
-        if state["phase"] == "awaiting_bonus":
-            await self._resolve_bonus(state, correct=correct, timed_out=False)
-        elif state["mode"] == "alternating":
-            await self._resolve_alternating(state, correct=correct, timed_out=False)
-        else:
-            await self._resolve_buzzer(state, correct=correct, timed_out=False)
+            q = state["questions"][state["current_index"]]
+            if (not isinstance(option_index, int) or isinstance(option_index, bool)
+                    or not 0 <= option_index < len(q["options"])):
+                return
+            correct = (option_index == q["correct_index"])
+
+            if phase == "awaiting_bonus":
+                await self._resolve_bonus(state, correct=correct, timed_out=False, option_index=option_index)
+            elif state["mode"] == "alternating":
+                await self._resolve_alternating(state, correct=correct, timed_out=False, option_index=option_index)
+            else:
+                await self._resolve_buzzer(state, correct=correct, timed_out=False, option_index=option_index)
 
     # ── Resolution ────────────────────────────────────────────────
 
-    async def _resolve_alternating(self, state, correct, timed_out):
+    async def _resolve_alternating(self, state, correct, timed_out, option_index=None):
         idx = state["current_index"]
         team = "A" if idx < QUESTIONS_PER_TEAM_MODE1 else "B"
         other_team = "B" if team == "A" else "A"
 
         if correct:
             state[f"team_{team.lower()}_score"] += 5
-            await self._broadcast({"type": "question_resolved", "correct": True, "team": team, "points": 5, "timed_out": timed_out})
+            await self._broadcast({
+                "type": "question_resolved", "correct": True, "team": team, "points": 5,
+                "timed_out": timed_out, "answer_index": option_index,
+                "correct_index": self._correct_index(state),
+            })
             await self._log_question(state, answering_team=team, correct=True, points=5)
             await self._advance(state)
         else:
-            await self._broadcast({"type": "question_resolved", "correct": False, "team": team, "points": 0, "timed_out": timed_out})
+            await self._broadcast({
+                "type": "question_resolved", "correct": False, "team": team, "points": 0,
+                "timed_out": timed_out, "answer_index": option_index,
+            })
             await self._log_question(state, answering_team=team, correct=False, points=0)
-            state["phase"] = "awaiting_bonus"
-            state["bonus_team"] = other_team
-            state["answering_student_id"] = None  # any player on the bonus team may answer
-            await self.state.save(state)
-            await self._broadcast({"type": "bonus_open", "team": other_team, "timer_seconds": BONUS_ANSWER_SECONDS})
-            self._schedule_timeout(idx, BONUS_ANSWER_SECONDS, "awaiting_bonus")
+            await self._open_bonus(state, other_team)
 
-    async def _resolve_buzzer(self, state, correct, timed_out):
-        idx = state["current_index"]
+    async def _resolve_buzzer(self, state, correct, timed_out, option_index=None):
         team = state["buzzed_team"]
         other_team = "B" if team == "A" else "A"
 
         if correct:
             state[f"team_{team.lower()}_score"] += 5
-            await self._broadcast({"type": "question_resolved", "correct": True, "team": team, "points": 5, "timed_out": timed_out})
+            await self._broadcast({
+                "type": "question_resolved", "correct": True, "team": team, "points": 5,
+                "timed_out": timed_out, "answer_index": option_index,
+                "correct_index": self._correct_index(state),
+            })
             await self._log_question(state, answering_team=team, correct=True, points=5)
             await self._advance(state)
         else:
             state[f"team_{team.lower()}_score"] -= 5
-            await self._broadcast({"type": "question_resolved", "correct": False, "team": team, "points": -5, "timed_out": timed_out})
+            await self._broadcast({
+                "type": "question_resolved", "correct": False, "team": team, "points": -5,
+                "timed_out": timed_out, "answer_index": option_index,
+            })
             await self._log_question(state, answering_team=team, correct=False, points=-5)
-            state["phase"] = "awaiting_bonus"
-            state["bonus_team"] = other_team
-            state["answering_student_id"] = None
-            await self.state.save(state)
-            await self._broadcast({"type": "bonus_open", "team": other_team, "timer_seconds": BONUS_ANSWER_SECONDS})
-            self._schedule_timeout(idx, BONUS_ANSWER_SECONDS, "awaiting_bonus")
+            await self._open_bonus(state, other_team)
 
-    async def _resolve_bonus(self, state, correct, timed_out):
+    async def _open_bonus(self, state, other_team):
+        """The other team gets a free attempt, no buzz needed. Any of its
+        players may answer."""
+        state["phase"] = "awaiting_bonus"
+        state["bonus_team"] = other_team
+        state["answering_student_id"] = None
+        await self.state.save(state)
+        await self._broadcast({
+            "type": "bonus_open", "team": other_team, **_timer_fields(BONUS_ANSWER_SECONDS),
+        })
+        self._schedule_timeout(state["current_index"], BONUS_ANSWER_SECONDS, "awaiting_bonus")
+
+    async def _resolve_bonus(self, state, correct, timed_out, option_index=None):
         team = state["bonus_team"]
         if correct:
             state[f"team_{team.lower()}_score"] += 2
-        await self._broadcast({"type": "bonus_resolved", "correct": correct, "team": team, "points": 2 if correct else 0, "timed_out": timed_out})
+        await self._broadcast({
+            "type": "bonus_resolved", "correct": correct, "team": team,
+            "points": 2 if correct else 0, "timed_out": timed_out,
+            "answer_index": option_index, "correct_index": self._correct_index(state),
+        })
         await self._advance(state)
 
     async def _log_question(self, state, answering_team, correct, points):
@@ -239,6 +302,14 @@ class MatchLoop:
         })
 
     async def _advance(self, state):
+        """The question is over. Pause so everyone can see the result, then
+        move on (see _advance_now)."""
+        state["phase"] = "revealing"
+        await self.state.save(state)
+        await self._broadcast({"type": "next_question_in", **_timer_fields(REVEAL_PAUSE_SECONDS)})
+        self._schedule_timeout(state["current_index"], REVEAL_PAUSE_SECONDS, "revealing")
+
+    async def _advance_now(self, state):
         state["current_index"] += 1
         total = len(state["questions"])
 
@@ -278,6 +349,7 @@ class MatchLoop:
         })
         await self.state.clear()
         _timer_tasks.pop(self.room_code, None)
+        _room_locks.pop(self.room_code, None)
 
     async def _persist_match(self, state, winner):
         await database_sync_to_async(self._persist_match_sync)(state, winner)

@@ -58,6 +58,7 @@
   .hud-timer-fill {
     position: absolute; inset: 0; background: #ffb300; transform-origin: left center;
     transform: scaleX(1);
+    transition: transform 0.1s linear;
   }
   .hud-timer-fill.urgent { background: #ff3b30; }
 
@@ -83,6 +84,15 @@
   .loadout-option.locked { pointer-events: none; opacity: 0.4; }
   .loadout-option.correct-answer { border-color: #4ade80; background: rgba(74,222,128,0.1); }
   .loadout-option.wrong-answer { border-color: #ff3b30; background: rgba(255,59,48,0.1); }
+
+  .timer-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  #timer-label { font-size: 13px; letter-spacing: 0.15em; text-transform: uppercase; color: #bbb; }
+  #timer-num { font-size: 36px; font-weight: 700; line-height: 1; color: #ffb300; font-variant-numeric: tabular-nums; }
+  #timer-num.urgent { color: #ff3b30; }
+  .loadout-option.picked { border-color: #ffb300; background: rgba(255,179,0,0.12); }
+  .loadout-option.locked.picked,
+  .loadout-option.locked.correct-answer,
+  .loadout-option.locked.wrong-answer { opacity: 1; }
 
   /* ── Engage (buzz) trigger ── */
   #buzz-btn {
@@ -152,6 +162,7 @@
         </div>
       </div>
 
+      <div class="timer-row"><span id="timer-label">—</span><span id="timer-num">–</span></div>
       <div class="hud-timer"><div class="hud-timer-fill" id="timer-fill"></div></div>
 
       <div class="briefing-panel" id="question-box">
@@ -173,8 +184,13 @@ const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
 const ws = new WebSocket(`${wsScheme}://${window.location.host}/ws/battle/${roomCode}/`);
 
 let teamAScore = 0, teamBScore = 0;
+let participants = [];
+let myTeam = null, myRole = "spectator";
+let currentIndex = null;
 let currentCorrectIndex = null;
-let answerLocked = false;
+let wrongIndexes = [];
+let answerLocked = true;
+let clockInterval = null;
 
 ws.onopen = () => { const s = document.getElementById("status"); s.textContent = "Live"; s.classList.remove("disconnected"); };
 ws.onclose = () => { const s = document.getElementById("status"); s.textContent = "Disconnected"; s.classList.add("disconnected"); };
@@ -185,20 +201,51 @@ function send(payload) { ws.send(JSON.stringify(payload)); }
 function assignTeam(team) { send({type: "assign_team", team: team}); }
 function onModeChange() {
   const val = document.getElementById("mode-select").value;
-  if (val) {
-    send({type: "set_mode", mode: val});
-  }
+  if (val) send({type: "set_mode", mode: val});
 }
 function startMatch() { send({type: "start_match"}); }
+
+function canPlay() { return myRole === "player" && myTeam !== null; }
+function teamName(t) { return t === "A" ? "Alpha" : "Bravo"; }
+function usernameOf(id) {
+  const p = participants.find(p => p.student_id === id);
+  return p ? p.username : "A player";
+}
+
 function buzz() {
   document.getElementById("buzz-btn").classList.add("locked");
   send({type: "buzz"});
 }
+
 function submitAnswer(index) {
   if (answerLocked) return;
   answerLocked = true;
-  document.querySelectorAll(".loadout-option").forEach(b => b.classList.add("locked"));
-  send({type: "submit_answer", option_index: index});
+  const buttons = document.querySelectorAll(".loadout-option");
+  buttons.forEach(b => b.classList.add("locked"));
+  if (buttons[index]) buttons[index].classList.add("picked");
+  send({type: "submit_answer", option_index: index, question_index: currentIndex});
+}
+
+// Options are only clickable when the server says it's your turn.
+function setOptionsEnabled(enabled) {
+  answerLocked = !enabled;
+  document.querySelectorAll(".loadout-option").forEach((b, i) => {
+    b.classList.toggle("locked", !enabled || wrongIndexes.includes(i));
+  });
+}
+
+function markOption(index, correct) {
+  const btn = document.querySelectorAll(".loadout-option")[index];
+  if (!btn) return;
+  btn.classList.remove("picked");
+  btn.classList.add(correct ? "correct-answer" : "wrong-answer");
+  if (!correct && !wrongIndexes.includes(index)) wrongIndexes.push(index);
+}
+
+function showAnswerReveal() {
+  if (currentCorrectIndex === null) return;
+  const btn = document.querySelectorAll(".loadout-option")[currentCorrectIndex];
+  if (btn) { btn.classList.remove("picked"); btn.classList.add("correct-answer"); }
 }
 
 function flash(kind) {
@@ -230,69 +277,139 @@ function logEvent(text) {
   while (ticker.children.length > 5) ticker.removeChild(ticker.lastChild);
 }
 
-function startTimer(seconds) {
+// ── The one visible timer. The server sends an absolute deadline plus its
+// own clock; we count down to the same moment on every screen. ──
+function startPhaseTimer(data, label) {
+  const numEl = document.getElementById("timer-num");
   const fill = document.getElementById("timer-fill");
-  fill.classList.remove("urgent");
-  fill.style.transition = "none";
-  fill.style.transform = "scaleX(1)";
-  void fill.offsetWidth;
-  fill.style.transition = `transform ${seconds}s linear`;
-  fill.style.transform = "scaleX(0)";
-  clearTimeout(window._timerUrgentFlag);
-  window._timerUrgentFlag = setTimeout(() => fill.classList.add("urgent"), Math.max(0, (seconds - 5) * 1000));
+  document.getElementById("timer-label").textContent = label;
+
+  const offset = data.server_now * 1000 - Date.now();   // server clock minus ours
+  const endAt = data.deadline * 1000 - offset;           // deadline on our clock
+  const total = data.timer_seconds * 1000;
+
+  clearInterval(clockInterval);
+  const tick = () => {
+    const left = Math.max(0, endAt - Date.now());
+    numEl.textContent = Math.ceil(left / 1000);
+    fill.style.transform = `scaleX(${Math.min(1, left / total)})`;
+    const urgent = left <= 5000;
+    numEl.classList.toggle("urgent", urgent);
+    fill.classList.toggle("urgent", urgent);
+    if (left <= 0) clearInterval(clockInterval);
+  };
+  tick();
+  clockInterval = setInterval(tick, 100);
+}
+
+function stopTimer(label) {
+  clearInterval(clockInterval);
+  document.getElementById("timer-label").textContent = label || "—";
+  document.getElementById("timer-num").textContent = "–";
+  document.getElementById("timer-num").classList.remove("urgent");
+  document.getElementById("timer-fill").style.transform = "scaleX(0)";
 }
 
 function handleEvent(data) {
   console.log("EVENT:", data);
 
-  if (data.type === "room_state") {
-    renderLobby(data);
-  } else if (data.type === "question_served") {
-    renderQuestion(data);
-  } else if (data.type === "buzzed") {
-    logEvent(`Team ${data.team === "A" ? "Alpha" : "Bravo"} engaged first`);
-    document.getElementById("buzz-btn").classList.add("locked", "pulse" in [] ? "" : "");
-    document.getElementById("buzz-btn").classList.remove("pulse");
-  } else if (data.type === "question_resolved" || data.type === "bonus_resolved") {
-    showAnswerReveal();
-    flash(data.correct ? "correct" : "wrong");
-    const base = data.team === "A" ? teamAScore : teamBScore;
-    const newScore = base + data.points;
-    if (data.team === "A") updateScoreboard(newScore, undefined); else updateScoreboard(undefined, newScore);
-    const teamName = data.team === "A" ? "Alpha" : "Bravo";
-    logEvent(`${teamName} ${data.correct ? "hit" : "missed"} — ${data.points >= 0 ? "+" : ""}${data.points}`);
-  } else if (data.type === "bonus_open") {
-    document.querySelectorAll(".loadout-option").forEach(b => b.classList.remove("locked"));
-    answerLocked = false;
-    logEvent(`Bonus chance — Team ${data.team === "A" ? "Alpha" : "Bravo"}`);
-    startTimer(data.timer_seconds);
-  } else if (data.type === "no_buzz_penalty") {
-    flash("wrong");
-    updateScoreboard(data.team_a_score, data.team_b_score);
-    logEvent("No engage — both squads -5");
-  } else if (data.type === "sudden_death") {
-    logEvent("SUDDEN DEATH");
-  } else if (data.type === "match_finished") {
-    updateScoreboard(data.team_a_score, data.team_b_score);
-    logEvent(`MATCH OVER — Winner: ${data.winner ? (data.winner === "A" ? "Alpha" : "Bravo") : "Tie"}`);
-    document.getElementById("buzz-btn").style.display = "none";
-    document.getElementById("options-list").innerHTML = "";
-    document.getElementById("question-stem").textContent = "";
-    document.getElementById("timer-fill").style.transform = "scaleX(0)";
-  } else if (data.type === "error") {
-    alert(data.message);
-  } else if (data.type === "match_warning" || data.type === "match_aborted") {
-    logEvent(data.message || data.reason);
+  switch (data.type) {
+    case "room_state":
+      renderLobby(data);
+      break;
+
+    case "question_served":
+      renderQuestion(data);
+      break;
+
+    case "buzzed": {
+      const mine = data.student_id === studentId;
+      logEvent(`${usernameOf(data.student_id)} (${teamName(data.team)}) buzzed first`);
+      const buzzBtn = document.getElementById("buzz-btn");
+      buzzBtn.classList.add("locked");
+      buzzBtn.classList.remove("pulse");
+      setOptionsEnabled(mine);   // only the buzzer can answer
+      startPhaseTimer(data, mine ? "You buzzed — answer now" : `${usernameOf(data.student_id)} is answering`);
+      break;
+    }
+
+    case "question_resolved":
+    case "bonus_resolved": {
+      const isBonus = data.type === "bonus_resolved";
+      flash(data.correct ? "correct" : "wrong");
+
+      const base = data.team === "A" ? teamAScore : teamBScore;
+      if (data.team === "A") updateScoreboard(base + data.points, undefined);
+      else updateScoreboard(undefined, base + data.points);
+
+      if (data.answer_index !== null && data.answer_index !== undefined) {
+        markOption(data.answer_index, data.correct);
+      }
+      if (data.correct_index !== undefined) {   // question fully finished: safe to reveal
+        currentCorrectIndex = data.correct_index;
+        showAnswerReveal();
+      }
+      setOptionsEnabled(false);
+
+      const who = `${teamName(data.team)}${isBonus ? " (bonus)" : ""}`;
+      const result = data.timed_out ? "ran out of time" : (data.correct ? "hit" : "missed");
+      logEvent(`${who} ${result} — ${data.points >= 0 ? "+" : ""}${data.points}`);
+      break;
+    }
+
+    case "bonus_open": {
+      const canBonus = canPlay() && myTeam === data.team;
+      document.getElementById("panel-a").classList.toggle("active-turn", data.team === "A");
+      document.getElementById("panel-b").classList.toggle("active-turn", data.team === "B");
+      setOptionsEnabled(canBonus);
+      logEvent(`Bonus chance — Team ${teamName(data.team)}`);
+      startPhaseTimer(data, canBonus ? "Bonus — your team can answer" : `Bonus: Team ${teamName(data.team)}`);
+      break;
+    }
+
+    case "no_buzz_penalty":
+      flash("wrong");
+      updateScoreboard(data.team_a_score, data.team_b_score);
+      currentCorrectIndex = data.correct_index;
+      showAnswerReveal();
+      setOptionsEnabled(false);
+      logEvent("Nobody buzzed — both squads -5");
+      break;
+
+    case "next_question_in":
+      startPhaseTimer(data, "Get ready");
+      break;
+
+    case "sudden_death":
+      logEvent("SUDDEN DEATH");
+      break;
+
+    case "match_finished":
+      updateScoreboard(data.team_a_score, data.team_b_score);
+      logEvent(`MATCH OVER — Winner: ${data.winner ? teamName(data.winner) : "Tie"}`);
+      document.getElementById("buzz-btn").style.display = "none";
+      document.getElementById("options-list").innerHTML = "";
+      document.getElementById("question-stem").textContent = "";
+      stopTimer("Match over");
+      break;
+
+    case "error":
+      alert(data.message);
+      break;
+
+    case "match_warning":
+    case "match_aborted":
+      logEvent(data.message || data.reason);
+      break;
   }
 }
 
-function showAnswerReveal() {
-  document.querySelectorAll(".loadout-option").forEach((btn, i) => {
-    if (i === currentCorrectIndex) btn.classList.add("correct-answer");
-  });
-}
-
 function renderLobby(data) {
+  participants = data.participants;
+  const me = participants.find(p => p.student_id === studentId);
+  myTeam = me ? me.team : null;
+  myRole = me ? me.role : "spectator";
+
   document.getElementById("lobby-panel").style.display = data.status === "waiting" ? "block" : "none";
   document.getElementById("leader-controls").style.display = data.leader_id === studentId ? "block" : "none";
 
@@ -321,28 +438,41 @@ function renderQuestion(data) {
   document.getElementById("lobby-panel").style.display = "none";
   document.getElementById("match-panel").style.display = "block";
   document.getElementById("question-stem").textContent = data.stem;
-  answerLocked = false;
 
-  document.getElementById("panel-a").classList.toggle("active-turn", data.team_on_turn === "A");
-  document.getElementById("panel-b").classList.toggle("active-turn", data.team_on_turn === "B");
+  currentIndex = data.index;
+  currentCorrectIndex = null;
+  wrongIndexes = [];
 
   const optionsList = document.getElementById("options-list");
   optionsList.innerHTML = "";
   data.options.forEach((opt, i) => {
     const btn = document.createElement("button");
-    btn.className = "loadout-option";
+    btn.className = "loadout-option locked";   // always start locked
     btn.innerHTML = `<span class="slot-num">0${i + 1}</span>${opt}`;
     btn.onclick = () => submitAnswer(i);
     optionsList.appendChild(btn);
   });
+  answerLocked = true;
 
   const buzzBtn = document.getElementById("buzz-btn");
   const isBuzzer = data.mode === "buzzer";
-  buzzBtn.style.display = isBuzzer ? "block" : "none";
-  buzzBtn.classList.remove("locked");
-  buzzBtn.classList.toggle("pulse", isBuzzer);
 
-  startTimer(data.timer_seconds);
+  if (isBuzzer) {
+    document.getElementById("panel-a").classList.remove("active-turn");
+    document.getElementById("panel-b").classList.remove("active-turn");
+    const show = canPlay();
+    buzzBtn.style.display = show ? "block" : "none";
+    buzzBtn.classList.remove("locked");
+    buzzBtn.classList.toggle("pulse", show);
+    startPhaseTimer(data, show ? "Buzz in!" : "Waiting for a buzz");
+  } else {
+    buzzBtn.style.display = "none";
+    document.getElementById("panel-a").classList.toggle("active-turn", data.team_on_turn === "A");
+    document.getElementById("panel-b").classList.toggle("active-turn", data.team_on_turn === "B");
+    const mine = data.answering_student_id === studentId;
+    setOptionsEnabled(mine);
+    startPhaseTimer(data, mine ? "Your turn — answer" : `${usernameOf(data.answering_student_id)} is answering`);
+  }
 }
 </script>
 {% endblock %}

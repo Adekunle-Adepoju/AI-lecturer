@@ -147,10 +147,12 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
         match_loop = MatchLoop(self, self.room_code)
         await match_loop.handle_buzz(profile.id)
 
-    async def _handle_submit_answer(self, content):
-        profile = await self._get_profile()
-        match_loop = MatchLoop(self, self.room_code)
-        await match_loop.handle_submit_answer(profile.id, content.get("option_index"))
+        async def _handle_submit_answer(self, content):
+            profile = await self._get_profile()
+            match_loop = MatchLoop(self, self.room_code)
+            await match_loop.handle_submit_answer(
+                profile.id, content.get("option_index"), content.get("question_index"),
+            )
         
 
     # ── Broadcast relay (called by group_send) ─────────────────────
