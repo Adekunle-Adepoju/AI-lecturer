@@ -22,14 +22,18 @@ from google import genai
 from google.genai import types
 from django.http import StreamingHttpResponse
 from django.http import JsonResponse
-from django.db.models import F
+from django.db.models import F, Count
+from django.db import transaction
+from .simulator_draw import draw_test, NotEnoughQuestions, TEST_MODES
+from .simulator_bank import get_topic_availability, process_topic
+from .simulator_bank_prompts import SIMULATOR_STRICT_GRADING_PROMPT
 
 
 from .forms import SignupForm, OnboardingForm, ProfileEditForm, ElectiveSelectionForm
 from .models import (
     StudentProfile, TimetableEntry, Session, TopicSession, ChatMessage,
     SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES, CourseDefinition,
-    PastQuestion, SimulatorTest, PreGeneratedLesson, SlideTopicChunk,
+    PastQuestion, SimulatorTest, PreGeneratedLesson, SlideTopicChunk, SimulatorQuestion, SimulatorBankTopic,
 )
 from .prompt import (
     SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, QUIZ_GENERATION_PROMPT,
@@ -2525,133 +2529,6 @@ def _get_xp_and_grade(percentage):
         return "F", 10
 
 
-def _detect_question_format(course_code, level):
-    """Detect question format from past questions — fall back to theory"""
-    from .models import PastQuestion
-    pqs = PastQuestion.objects.filter(course_code=course_code, level=level, parsed=True).first()
-    if not pqs or not pqs.parsed_questions:
-        return "theory"
-    sample = pqs.parsed_questions[0]
-    if "options" in sample and sample["options"]:
-        return "mcq"
-    if "model_answer" in sample:
-        answer = sample["model_answer"].lower()
-        has_calc = any(word in answer for word in ["=", "calculate", "formula", "equation", "kg", "m/s", "pa", "kpa", "mpa"])
-        has_theory = any(word in answer for word in ["define", "explain", "describe", "state", "discuss"])
-        if has_calc and has_theory:
-            return "mixed"
-        if has_calc:
-            return "theory"
-    return "theory"
-
-
-def _get_past_q_reference(course_code, level, topic, limit=3):
-    """Pull sample past questions to use as style reference for generation"""
-    from .models import PastQuestion
-    relevant = []
-    pqs = PastQuestion.objects.filter(course_code=course_code, level=level, parsed=True)
-    for pq in pqs:
-        for q in (pq.parsed_questions or []):
-            hint = (q.get("topic_hint") or "").lower()
-            if any(word.lower() in hint for word in topic.split()):
-                relevant.append(q)
-    if not relevant:
-        all_q = []
-        for pq in pqs:
-            all_q.extend(pq.parsed_questions or [])
-        relevant = all_q
-    random.shuffle(relevant)
-    sample = relevant[:limit]
-    if not sample:
-        return "No past questions available — generate at appropriate university level difficulty."
-    lines = []
-    for q in sample:
-        lines.append(f"- {q.get('question', '')}")
-    return "\n".join(lines)
-
-
-def _generate_test_questions(course_code, course_title, topic, level, weeks_covered, question_format):
-    num_questions = random.randint(15, 20) if question_format == "mcq" else random.randint(2, 3)
-    past_ref = _get_past_q_reference(course_code, level, topic)
-    slide_context = _find_slide_content_for_topic(course_code, level, topic)  # ← was missing
-
-    prompt = SIMULATOR_QUESTION_PROMPT.format(
-        course_code=course_code,
-        course_title=course_title,
-        topic=topic,
-        question_format=question_format,
-        weeks_covered=weeks_covered,
-        num_questions=num_questions,
-        past_q_reference=past_ref,
-        coverage_manifest="(none extracted — rely on slide content below)",
-        slide_context=slide_context or "(no slide content found for this topic)",
-    )
-
-    response = _call_simulator_model(prompt, max_output_tokens=4000)
-
-    clean = response.text.replace("```json", "").replace("```", "").strip()
-    start = clean.find("[")
-    end = clean.rfind("]")
-    if start != -1 and end != -1:
-        clean = clean[start:end + 1]
-    return json.loads(clean)
-
-def _generate_multi_topic_test_questions(selections, level, question_format):
-    """
-    selections: list of dicts, each {course_code, course_title, topic, weeks_covered}
-    Max 4 for question_format in ("theory", "mixed"); MCQ can take more since
-    there's no lettered-part mixing to manage.
-    """
-    if question_format == "mcq":
-        num_questions = random.randint(15, 20)
-        per_topic = max(1, num_questions // len(selections))
-    else:
-        num_questions = random.randint(2, 3)
-        per_topic = None  # mixing happens inside the prompt, not by pre-splitting
-
-    topic_blocks = []
-    for i, sel in enumerate(selections, start=1):
-        slide_context = _find_slide_content_for_topic(
-            sel["course_code"], level, sel["topic"]
-        )
-        past_ref = _get_past_q_reference(sel["course_code"], level, sel["topic"])
-        topic_blocks.append(
-            TOPIC_BLOCK_TEMPLATE.format(
-                index=i,
-                topic=sel["topic"],
-                course_code=sel["course_code"],
-                course_title=sel["course_title"],
-                coverage_manifest="(none extracted — rely on slide content below)",
-                slide_context=slide_context or "(no slide content found for this topic)",
-                past_q_reference=past_ref,
-            )
-        )
-
-    if question_format == "mcq":
-        prompt = SIMULATOR_QUESTION_PROMPT_MULTI_TOPIC_MCQ.format(
-            num_topics=len(selections),
-            topic_blocks="\n".join(topic_blocks),
-            num_questions=num_questions,
-            per_topic=per_topic,
-        )
-    else:
-        prompt = SIMULATOR_QUESTION_PROMPT_MULTI_TOPIC.format(
-            num_topics=len(selections),
-            topic_blocks="\n".join(topic_blocks),
-            question_format=question_format,
-            num_questions=num_questions,
-        )
-
-    response = _call_simulator_model(prompt, max_output_tokens=4000)
-
-    clean = response.text.replace("```json", "").replace("```", "").strip()
-    start = clean.find("[")
-    end = clean.rfind("]")
-    if start != -1 and end != -1:
-        clean = clean[start:end + 1]
-    return json.loads(clean)
-
-
 @login_required
 def simulator_home_view(request):
     if not hasattr(request.user, "profile"):
@@ -2684,132 +2561,63 @@ def simulator_home_view(request):
 
 @login_required
 def simulator_setup_view(request, mode):
-    """Setup page — pick course and topic before starting"""
     if not hasattr(request.user, "profile"):
         return redirect("onboarding")
-
     profile = request.user.profile
-    MAX_TOPICS_FOR_TEST = 4          
+    MAX_TOPICS_FOR_TEST = 4
 
     if mode == "auto":
-        course_code = request.GET.get("course_code") or request.POST.get("course_code")
+        messages.info(request, "Test week isn't open yet — check back soon.")
+        return redirect("simulator_home")
+
+    timetable = profile.timetable.all()
+
+    if request.method == "POST":
+        course_code = request.POST.get("course_code", "").strip()
+        topics = list(dict.fromkeys(t.strip() for t in request.POST.getlist("topics") if t.strip()))
+        test_mode = request.POST.get("test_mode", "mixed")
+
+        if not course_code or not topics:
+            messages.error(request, "Please select a course and at least one topic.")
+            return redirect("simulator_setup", mode="voluntary")
+        if len(topics) > MAX_TOPICS_FOR_TEST:
+            messages.error(request, f"You can select up to {MAX_TOPICS_FOR_TEST} topics for a test.")
+            return redirect("simulator_setup", mode="voluntary")
+        if test_mode not in TEST_MODES:
+            test_mode = "mixed"
+
         entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
+        level = _course_level(course_code, profile)
 
-        already_done = SimulatorTest.objects.filter(
-            student=profile,
-            course_code=course_code,
-            mode="auto",
-            week_number=7,
-            status="complete",
-        ).exists()
-        if already_done:
-            messages.info(request, f"You have already completed the test week for {course_code}.")
-            return redirect("simulator_home")
+        ready = {a["topic"] for a in get_topic_availability(course_code, level) if a["ready"]}
+        not_ready = [t for t in topics if t not in ready]
+        if not_ready:
+            messages.error(request, "Coming soon, no questions yet: " + ", ".join(not_ready))
+            return redirect("simulator_setup", mode="voluntary")
 
-        if request.method == "POST":
-            selections = [{
-                "course_code": entry.course_code,
-                "course_title": entry.course_title,
-                "topic": "Weeks 1-6 Review",
-                "weeks_covered": min(entry.week_number - 1, 6),
-            }]
-            return _start_simulator_test(request, profile, selections, mode="auto")
+        try:
+            questions, fmt = draw_test(profile, course_code, level, topics, test_mode)
+        except NotEnoughQuestions as e:
+            messages.error(request, str(e))
+            return redirect("simulator_setup", mode="voluntary")
 
-        return render(request, "core/simulator/setup.html", {
-            "mode": "voluntary",
-            "timetable": timetable,
-            "max_topics": MAX_TOPICS_FOR_TEST,
-        })
+        test = SimulatorTest.objects.create(
+            student=profile, mode="voluntary", question_format=fmt,
+            week_number=entry.week_number,
+            course_code=entry.course_code, course_title=entry.course_title,
+            topic=", ".join(topics)[:200],
+            questions=questions,
+        )
+        return redirect("simulator_test", test_id=test.id)
 
-    else:
-        timetable = profile.timetable.all()
+    return render(request, "core/simulator/setup.html", {
+        "mode": "voluntary",
+        "timetable": timetable,
+        "selected_code": request.GET.get("course_code", ""),
+        "max_topics": MAX_TOPICS_FOR_TEST,
+    })
 
-        if request.method == "POST":
-            course_code = request.POST.get("course_code", "").strip()
-            topics = [t.strip() for t in request.POST.getlist("topics") if t.strip()]
-
-            if not course_code or not topics:
-                messages.error(request, "Please select a course and at least one topic.")
-                return redirect("simulator_setup", mode="voluntary")
-
-            if len(topics) > MAX_TOPICS_FOR_TEST:
-                messages.error(request, f"You can select up to {MAX_TOPICS_FOR_TEST} topics for a test.")
-                return redirect("simulator_setup", mode="voluntary")
-
-            entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
-
-            selections = [
-                {
-                    "course_code": entry.course_code,
-                    "course_title": entry.course_title,
-                    "topic": topic,
-                    "weeks_covered": entry.week_number - 1,
-                }
-                for topic in topics
-            ]
-
-            try:
-                return _start_simulator_test(request, profile, selections, mode="voluntary")
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                messages.error(
-                    request,
-                    "The test generator is under heavy load right now — please try again in a minute or two."
-                )
-                return redirect("simulator_setup", mode="voluntary")
-
-
-        selected_code = request.GET.get("course_code", "")
-        available_topics = []
-
-        if selected_code:
-            try:
-                outline = CourseOutline.objects.get(
-                    course_code=selected_code,
-                    level=profile.level,
-                    parsed=True
-                )
-                if outline.topics_json:
-                    for week_topics in outline.topics_json.values():
-                        if isinstance(week_topics, list):
-                            available_topics.extend(week_topics)
-            except CourseOutline.DoesNotExist:
-                pass
-
-            if not available_topics:
-                try:
-                    slide = SlideDocument.objects.get(
-                        course_code=selected_code,
-                        level=profile.level,
-                        parsed=True
-                    )
-                    if slide.extracted_topics:
-                        available_topics.extend(slide.extracted_topics)
-                except SlideDocument.DoesNotExist:
-                    pass
-
-            if not available_topics:
-                for week_topics in COURSE_OUTLINES.get(selected_code, {}).values():
-                    available_topics.extend(week_topics)
-
-            seen = set()
-            unique_topics = []
-            for t in available_topics:
-                if t not in seen:
-                    seen.add(t)
-                    unique_topics.append(t)
-            available_topics = unique_topics
-
-        # This return is at the else block level — NOT inside if selected_code
-        return render(request, "core/simulator/setup.html", {
-            "mode": "voluntary",
-            "timetable": timetable,
-            "selected_code": selected_code,
-            "available_topics": available_topics,
-        })
-
-def _call_simulator_model(prompt, max_output_tokens=4000, max_retries=3):
+def _call_simulator_model(prompt, max_output_tokens=4000, max_retries=3, temperature=None):
     """Call the simulator Gemini client with retry/backoff for transient
     errors (429 rate limit, 503 overloaded) — mirrors _generate_topic_lecture's
     retry behavior, which the simulator path was missing entirely."""
@@ -2819,7 +2627,9 @@ def _call_simulator_model(prompt, max_output_tokens=4000, max_retries=3):
             return simulator_client.models.generate_content(
                 model="gemini-3.6-flash",
                 contents=prompt,
-                config=types.GenerateContentConfig(max_output_tokens=max_output_tokens),
+                config=types.GenerateContentConfig(
+                    max_output_tokens=max_output_tokens, temperature=temperature,
+                ),
             )
         except Exception as e:
             last_error = e
@@ -2840,98 +2650,24 @@ def _call_simulator_model(prompt, max_output_tokens=4000, max_retries=3):
 
     raise RuntimeError(f"Simulator question generation failed after {max_retries} attempts: {last_error}")
 
-def _start_simulator_test(request, profile, selections, mode, auto_entry=None):
-    if mode == "auto":
-        entry = auto_entry
-        question_format = _detect_question_format(entry.course_code, profile.level)
-        weeks_covered = min(entry.week_number - 1, 6)
-        questions = _generate_test_questions(
-            entry.course_code, entry.course_title, "Weeks 1-6 Review",
-            profile.level, weeks_covered, question_format,
-        )
-        test_kwargs = dict(
-            course_code=entry.course_code, course_title=entry.course_title,
-            topic="Weeks 1-6 Review",
-        )
-    else:
-        # Detect format per selected course; if they disagree, fall back to "mixed"
-        # rather than silently picking one course's format for all of them.
-        formats = {_detect_question_format(s["course_code"], profile.level) for s in selections}
-        question_format = formats.pop() if len(formats) == 1 else "mixed"
-
-        if len(selections) == 1:
-            questions = _generate_test_questions(
-                selections[0]["course_code"], selections[0]["course_title"],
-                selections[0]["topic"], profile.level,
-                selections[0]["weeks_covered"], question_format,
-            )
-        else:
-            questions = _generate_multi_topic_test_questions(
-                selections, profile.level, question_format,
-            )
-
-        test_kwargs = dict(
-            course_code=selections[0]["course_code"] if len(selections) == 1 else "MIXED",
-            course_title=selections[0]["course_title"] if len(selections) == 1 else ", ".join(s["course_code"] for s in selections),
-            topic=selections[0]["topic"] if len(selections) == 1 else ", ".join(s["topic"] for s in selections),
-        )
-
-    test = SimulatorTest.objects.create(
-        student=profile,
-        mode=mode,
-        question_format=question_format,
-        week_number=selections[0].get("weeks_covered", 0) + 1 if selections else auto_entry.week_number,
-        questions=questions,
-        **test_kwargs,
-    )
-    return redirect("simulator_test", test_id=test.id)
+def _course_level(course_code, profile):
+    """A carry-over student's course can belong to an earlier level than
+    their own, and the bank/slides are keyed by the course's level."""
+    course = CourseDefinition.objects.filter(course_code=course_code).first()
+    return course.level if course else profile.level
 
 @login_required
 def topics_for_course_view(request):
-    """Returns available topics for a course, as JSON — used by the
-    voluntary setup page's per-row topic dropdowns."""
     if not hasattr(request.user, "profile"):
         return JsonResponse({"topics": []})
-
     profile = request.user.profile
     course_code = request.GET.get("course_code", "")
-    available_topics = []
-
-    if course_code:
-        try:
-            outline = CourseOutline.objects.get(
-                course_code=course_code, level=profile.level, parsed=True
-            )
-            if outline.topics_json:
-                for week_topics in outline.topics_json.values():
-                    if isinstance(week_topics, list):
-                        available_topics.extend(week_topics)
-        except CourseOutline.DoesNotExist:
-            pass
-
-        if not available_topics:
-            try:
-                slide = SlideDocument.objects.get(
-                    course_code=course_code, level=profile.level, parsed=True
-                )
-                if slide.extracted_topics:
-                    available_topics.extend(slide.extracted_topics)
-            except SlideDocument.DoesNotExist:
-                pass
-
-        if not available_topics:
-            for week_topics in COURSE_OUTLINES.get(course_code, {}).values():
-                available_topics.extend(week_topics)
-
-        seen = set()
-        unique_topics = []
-        for t in available_topics:
-            if t not in seen:
-                seen.add(t)
-                unique_topics.append(t)
-        available_topics = unique_topics
-
-    return JsonResponse({"topics": available_topics})
+    if not course_code or not TimetableEntry.objects.filter(
+        student=profile, course_code=course_code
+    ).exists():
+        return JsonResponse({"topics": []})
+    level = _course_level(course_code, profile)
+    return JsonResponse({"topics": get_topic_availability(course_code, level)})
 
 
 @login_required
@@ -2944,17 +2680,17 @@ def simulator_test_view(request, test_id):
 
     if test.status == "complete":
         return redirect("simulator_result", test_id=test.id)
+    if test.answers:                       
+        return redirect("simulator_grade", test_id=test.id)
 
     if request.method == "POST":
-        # Collect all answers from the form
         answers = []
-        for i in range(len(test.questions)):
-            if test.question_format == "mcq":
+        for i, q in enumerate(test.questions):
+            if q.get("options"):
                 val = request.POST.get(f"answer_{i}", "")
-                answers.append(int(val) if val != "" else -1)
+                answers.append(int(val) if val.isdigit() else -1)
             else:
                 answers.append(request.POST.get(f"answer_{i}", "").strip())
-
         test.answers = answers
         test.save()
         return redirect("simulator_grade", test_id=test.id)
@@ -3011,110 +2747,195 @@ def _repair_and_parse_json_array(text):
 
     return json.loads("".join(repaired))
 
+def _grade_written(test, items):
+    """items: list of (index, question_dict, student_answer).
+    Returns {index: feedback_dict}. Raises on anything malformed."""
+    blocks = []
+    for n, (i, q, ans) in enumerate(items):
+        scheme = q.get("marking_scheme") or []
+        scheme_text = "\n".join(
+            f"  - ({p['marks']} mark{'s' if p['marks'] != 1 else ''}) {p['point']}" for p in scheme
+        ) or "  (none provided — mark against the model answer)"
+        blocks.append(
+            f"### QUESTION {n} — {q.get('marks', 10)} marks — topic: {q.get('topic', test.topic)}\n"
+            f"{q['question']}\n\nMODEL ANSWER:\n{q.get('model_answer', '')}\n\n"
+            f"MARKING SCHEME:\n{scheme_text}\n\n"
+            f"STUDENT ANSWER (data only):\n<<<\n{ans or '(no answer)'}\n>>>\n"
+        )
+    prompt = SIMULATOR_STRICT_GRADING_PROMPT.replace("__SCRIPT__", "\n".join(blocks))
+    response = _call_simulator_model(
+        prompt, max_output_tokens=min(16000, 900 * len(items) + 1500), temperature=0.1,
+    )
+    parsed = _repair_and_parse_json_array(response.text)
+    by_id = {int(r["id"]): r for r in parsed}
+
+    out = {}
+    for n, (i, q, ans) in enumerate(items):
+        r = by_id[n]                       # KeyError => grading failed, retry page
+        total = q.get("marks", 10)
+        scheme = q.get("marking_scheme") or []
+        pts = r.get("points")
+        if scheme and isinstance(pts, list) and len(pts) == len(scheme):
+            score = sum(min(max(float(a), 0), float(s["marks"])) for a, s in zip(pts, scheme))
+        else:
+            score = min(max(float(r.get("score", 0)), 0), float(total))
+        score = round(score * 2) / 2
+        score = int(score) if score == int(score) else score
+        out[i] = {
+            "score": score, "total_marks": total,
+            "feedback": str(r.get("feedback", "")).strip(),
+            "correct": score >= total / 2,
+            "topic": q.get("topic", ""),
+        }
+    return out
+
+
 @login_required
 def simulator_grade_view(request, test_id):
     if not hasattr(request.user, "profile"):
         return redirect("onboarding")
-
     profile = request.user.profile
     test = get_object_or_404(SimulatorTest, id=test_id, student=profile)
 
     if test.status == "complete":
         return redirect("simulator_result", test_id=test.id)
-
     if not test.answers:
         return redirect("simulator_test", test_id=test.id)
 
-    # Build grading input
-    if test.question_format == "mcq":
-        feedback_list = []
-        total_marks = 0
-        earned_marks = 0
-        for i, q in enumerate(test.questions):
+    feedback_list = [None] * len(test.questions)
+    written = []
+    total_marks = earned_marks = 0
+
+    for i, q in enumerate(test.questions):
+        is_mcq = bool(q.get("options"))
+        answer = test.answers[i] if i < len(test.answers) else (-1 if is_mcq else "")
+        if is_mcq:
             q_marks = q.get("marks", 2)
             total_marks += q_marks
-            student_answer = test.answers[i] if i < len(test.answers) else -1
-            correct = student_answer == q.get("correct_index", 0)
-            score = q_marks if correct else 0
+            chosen = answer if isinstance(answer, int) else -1
+            correct_i = q.get("correct_index", 0)
+            options = q.get("options", [])
+            ok = chosen == correct_i
+            score = q_marks if ok else 0
             earned_marks += score
-            chosen_text = q["options"][student_answer] if 0 <= student_answer < len(q["options"]) else "No answer"
-            correct_text = q["options"][q.get("correct_index", 0)]
-            topic_tag = f"[{q.get('topic')}] " if q.get("topic") else ""
-            feedback_list.append({
-                "score": score,
-                "total_marks": q_marks,
-                "feedback": f"{topic_tag}You chose: {chosen_text}. Correct answer: {correct_text}. {q.get('explanation', '')}",
-                "correct": correct,
-            })
-    else:
-        # Theory/calc — use AI to grade
-        qa_text = ""
-        for i, q in enumerate(test.questions):
-            student_ans = test.answers[i] if i < len(test.answers) else "No answer provided"
-            qa_text += f"\nQuestion {i+1} ({q.get('marks', 10)} marks) — {q.get('course_code', test.course_code)} / {q.get('topic', test.topic)}:\n{q['question']}\n"
-            qa_text += f"Model Answer:\n{q.get('model_answer', '')}\n"
-            qa_text += f"Student Answer:\n{student_ans}\n"
-            qa_text += "---\n"
+            chosen_text = options[chosen] if 0 <= chosen < len(options) else "No answer"
+            tag = f"[{q.get('topic')}] " if q.get("topic") else ""
+            feedback_list[i] = {
+                "score": score, "total_marks": q_marks, "correct": ok,
+                "topic": q.get("topic", ""),
+                "feedback": f"{tag}You chose: {chosen_text}. Correct answer: "
+                            f"{options[correct_i]}. {q.get('explanation', '')}",
+            }
+        else:
+            total_marks += q.get("marks", 10)
+            written.append((i, q, answer))
 
-        grading_prompt = SIMULATOR_GRADING_PROMPT.format(questions_and_answers=qa_text,
-            course_code=test.course_code,
-            course_title=test.course_title,
-            topic=test.topic,
-        )
-
+    if written:
         try:
-            grade_response = _call_simulator_model(grading_prompt, max_output_tokens=2000)
-            feedback_list = _repair_and_parse_json_array(grade_response.text)
-        except Exception as e:
+            graded = _grade_written(test, written)
+        except Exception:
             import traceback
             traceback.print_exc()
-            messages.error(
-                request,
-                "Grading is taking longer than expected due to high AI demand — your answers are saved. Click below to retry."
-            )
-            return redirect("simulator_grade", test_id=test.id)
+            return render(request, "core/simulator/grading_failed.html", {"test": test})
+        for i, fb in graded.items():
+            feedback_list[i] = fb
+            earned_marks += fb["score"]
 
-        total_marks = sum(q.get("marks", 10) for q in test.questions)
-        earned_marks = sum(f.get("score", 0) for f in feedback_list)
-
-    # Calculate percentage and grade
     percentage = round((earned_marks / total_marks) * 100, 1) if total_marks > 0 else 0
     grade, xp = _get_xp_and_grade(percentage)
 
-    # Get overall feedback from AI
     student_name = profile.user.first_name or profile.user.username
     try:
-        overall_response = _call_simulator_model(
+        overall = _call_simulator_model(
             SIMULATOR_OVERALL_FEEDBACK_PROMPT.format(
-                student_name=student_name,
-                course_code=test.course_code,
-                course_title=test.course_title,
-                topic=test.topic,
-                percentage=percentage,
-                grade=grade,
+                student_name=student_name, course_code=test.course_code,
+                course_title=test.course_title, topic=test.topic,
+                percentage=percentage, grade=grade,
             ),
             max_output_tokens=300,
         )
-        overall_feedback = overall_response.text.strip()
+        overall_feedback = overall.text.strip()
     except Exception:
         overall_feedback = f"You scored {percentage}% — Grade {grade}. Keep studying and you'll improve!"
 
-    # Save everything
-    test.ai_feedback = feedback_list
-    test.overall_feedback = overall_feedback
-    test.percentage_score = percentage
-    test.grade = grade
-    test.xp_earned = xp
-    test.status = "complete"
-    test.completed_at = timezone.now()
-    test.save()
+    with transaction.atomic():
+        fresh = SimulatorTest.objects.get(id=test.id)
+        if fresh.status == "complete":
+            return redirect("simulator_result", test_id=test.id)
 
-    # Award XP
-    profile.xp += xp
-    profile.save()
+        test.ai_feedback = feedback_list
+        test.overall_feedback = overall_feedback
+        test.percentage_score = percentage
+        test.grade = grade
+        test.xp_earned = xp
+        test.status = "complete"
+        test.completed_at = timezone.now()
+        test.save()
+        StudentProfile.objects.filter(pk=profile.pk).update(xp=F("xp") + xp)
 
     return redirect("simulator_result", test_id=test.id)
 
+@staff_required
+def staff_sim_bank_view(request):
+    list_url = reverse("staff_sim_bank")
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        course_code = request.POST.get("course_code", "")
+        status = request.POST.get("status", "pending_review")
+
+        if action in ("approve", "unapprove", "retire"):
+            q = get_object_or_404(SimulatorQuestion, id=request.POST.get("question_id"))
+            q.status = {"approve": "approved", "unapprove": "pending_review", "retire": "retired"}[action]
+            q.save(update_fields=["status", "updated_at"])
+        elif action == "approve_all":
+            n = SimulatorQuestion.objects.filter(
+                course_code=course_code, status="pending_review", verified=True,
+            ).update(status="approved")
+            messages.success(request, f"Approved {n} question(s) for {course_code}.")
+        elif action == "generate_topic":
+            # One topic per request (~4 model calls). For a whole course use
+            # the generate_sim_bank management command instead.
+            course = get_object_or_404(CourseDefinition, course_code=course_code)
+            logs = []
+            outcome = process_topic(
+                course.course_code, course.course_title, course.level,
+                request.POST.get("topic", ""),
+                force=request.POST.get("force") == "1", log=logs.append,
+            )
+            messages.info(request, " ".join(l.strip() for l in logs) or outcome)
+        return redirect(f"{list_url}?course_code={course_code}&status={status}")
+
+    course_code = request.GET.get("course_code", "")
+    status = request.GET.get("status", "pending_review")
+    course_choices = list(
+        CourseDefinition.objects.order_by("level", "course_code").values_list("course_code", flat=True)
+    )
+
+    topic_rows, questions = [], []
+    if course_code:
+        course = CourseDefinition.objects.filter(course_code=course_code).first()
+        level = course.level if course else ""
+        counts = {
+            (r["topic_name"], r["status"]): r["n"]
+            for r in SimulatorQuestion.objects.filter(course_code=course_code)
+            .values("topic_name", "status").annotate(n=Count("id"))
+        }
+        states = {s.topic_name: s for s in SimulatorBankTopic.objects.filter(course_code=course_code)}
+        for t in _get_total_topics_for_course(course_code, level):
+            topic_rows.append({
+                "topic": t, "state": states.get(t),
+                "pending": counts.get((t, "pending_review"), 0),
+                "approved": counts.get((t, "approved"), 0),
+            })
+        questions = SimulatorQuestion.objects.filter(
+            course_code=course_code, status=status,
+        ).order_by("topic_name", "question_type", "id")
+
+    return render(request, "core/staff/review_sim_questions.html", {
+        "course_choices": course_choices, "course_code": course_code, "status": status,
+        "topic_rows": topic_rows, "questions": questions,
+    })
 
 @login_required
 def simulator_result_view(request, test_id):

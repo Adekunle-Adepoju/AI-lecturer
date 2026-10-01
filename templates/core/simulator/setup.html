@@ -102,6 +102,15 @@
     background:var(--amber-glow); border:1px solid var(--border-accent); color:var(--text);
     border-radius:var(--radius-md); padding:11px 15px; font-size:13.5px; margin-bottom:16px;
   }
+  #testSetupRoot .mode-grid{ display:grid; gap:10px; margin-bottom:24px; }
+#testSetupRoot .mode-card{
+  display:flex; align-items:center; gap:12px; padding:12px 14px; cursor:pointer;
+  background:var(--navy-raised); border:1px solid var(--border); border-radius:var(--radius-md);
+}
+#testSetupRoot .mode-card:has(input:checked){ border-color:var(--amber); box-shadow:0 0 0 3px var(--amber-glow); }
+#testSetupRoot .mode-card input{ accent-color:var(--amber); }
+#testSetupRoot .mode-card strong{ display:block; font-size:14px; color:var(--text); }
+#testSetupRoot .mode-card small{ font-size:12px; color:var(--text-muted); }
 </style>
 
 <div class="page-container" id="testSetupRoot">
@@ -174,6 +183,21 @@
         <p class="topics-hint">Up to {{ max_topics|default:4 }} topics per test.</p>
       </div>
 
+      <label class="field-label">Test type</label>
+<div class="mode-grid">
+  <label class="mode-card">
+    <input type="radio" name="test_mode" value="objective">
+    <span><strong>Objective</strong><small>20 multiple-choice questions</small></span>
+  </label>
+  <label class="mode-card">
+    <input type="radio" name="test_mode" value="theory">
+    <span><strong>Theory &amp; calculation</strong><small>3 written questions</small></span>
+  </label>
+  <label class="mode-card">
+    <input type="radio" name="test_mode" value="mixed" checked>
+    <span><strong>Mixed</strong><small>10 multiple-choice + 2 written</small></span>
+  </label>
+</div>
       <button type="submit" class="btn btn-primary btn-full">Generate Test →</button>
     </form>
   </div>
@@ -195,16 +219,25 @@
       });
     }
 
-    function buildTopicOptions(select, keepValue) {
-      if (currentTopics.length === 0) {
-        select.innerHTML = '<option value="">No topics found — complete a lecture session first</option>';
-        select.disabled = true;
-        return;
-      }
-      select.innerHTML = '<option value="">— Pick a topic —</option>' +
-        currentTopics.map(t => `<option value="${t}"${t === keepValue ? ' selected' : ''}>${t}</option>`).join('');
-      select.disabled = false;
-    }
+    function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+                  .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function buildTopicOptions(select, keepValue) {
+  if (currentTopics.length === 0) {
+    select.innerHTML = '<option value="">No topics available yet</option>';
+    select.disabled = true;
+    return;
+  }
+  select.innerHTML = '<option value="">— Pick a topic —</option>' +
+    currentTopics.map(t => {
+      const label = t.ready ? t.topic : `${t.topic} — coming soon`;
+      return `<option value="${esc(t.topic)}"${t.ready ? '' : ' disabled'}` +
+             `${t.topic === keepValue ? ' selected' : ''}>${esc(label)}</option>`;
+    }).join('');
+  select.disabled = false;
+}
 
     function resetToSingleRow() {
       topicRows.innerHTML = `
@@ -236,7 +269,7 @@
         .then(data => {
           currentTopics = data.topics || [];
           document.querySelectorAll('.row-topic').forEach(sel => buildTopicOptions(sel, ""));
-          addRowBtn.disabled = currentTopics.length === 0;
+          addRowBtn.disabled = !currentTopics.some(t => t.ready);
           addRowBtn.style.display = '';
         })
         .catch(() => {
@@ -279,7 +312,7 @@
       removeBtn.addEventListener('click', () => {
         newRow.remove();
         renumberRows();
-        addRowBtn.disabled = currentTopics.length === 0;
+        addRowBtn.disabled = !currentTopics.some(t => t.ready);
         addRowBtn.style.display = '';
       });
 

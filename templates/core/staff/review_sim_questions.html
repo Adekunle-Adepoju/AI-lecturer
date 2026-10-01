@@ -1,0 +1,115 @@
+{% extends "core/base.html" %}
+{% block title %}Question Bank — Staff{% endblock %}
+{% block content %}
+<div class="page-container">
+  <h2>Simulator question bank</h2>
+
+  {% for message in messages %}
+  <div style="background:var(--amber-glow); border:1px solid var(--border-accent); border-radius:var(--radius-md); padding:10px 14px; margin:10px 0; font-size:13px">{{ message }}</div>
+  {% endfor %}
+
+  <form method="GET" style="display:flex; gap:8px; flex-wrap:wrap; margin:14px 0">
+    <select name="course_code" onchange="this.form.submit()">
+      <option value="">— Course —</option>
+      {% for c in course_choices %}<option value="{{ c }}" {% if c == course_code %}selected{% endif %}>{{ c }}</option>{% endfor %}
+    </select>
+    <select name="status" onchange="this.form.submit()">
+      <option value="pending_review" {% if status == "pending_review" %}selected{% endif %}>Pending review</option>
+      <option value="approved" {% if status == "approved" %}selected{% endif %}>Approved</option>
+      <option value="retired" {% if status == "retired" %}selected{% endif %}>Retired</option>
+    </select>
+  </form>
+
+  {% if course_code %}
+  <h3>Topics</h3>
+  <div style="overflow-x:auto">
+  <table style="width:100%; font-size:13px; border-collapse:collapse">
+    <tr style="text-align:left; color:var(--text-muted)"><th>Topic</th><th>State</th><th>Pending</th><th>Approved</th><th>Note</th><th></th></tr>
+    {% for r in topic_rows %}
+    <tr style="border-top:1px solid var(--border)">
+      <td style="padding:8px 6px">{{ r.topic }}</td>
+      <td>{% if r.state %}{{ r.state.status }}{% else %}not generated{% endif %}</td>
+      <td>{{ r.pending }}</td>
+      <td>{{ r.approved }}</td>
+      <td style="max-width:260px; color:var(--text-muted)">{{ r.state.error_message|default:""|truncatechars:90 }}</td>
+      <td>
+        {% if not r.state or r.state.status != "NO_SOURCE" %}
+        <form method="POST" style="margin:0">{% csrf_token %}
+          <input type="hidden" name="action" value="generate_topic">
+          <input type="hidden" name="course_code" value="{{ course_code }}">
+          <input type="hidden" name="status" value="{{ status }}">
+          <input type="hidden" name="topic" value="{{ r.topic }}">
+          <button class="btn btn-white-outline" style="padding:4px 10px; font-size:12px"
+                  onclick="return confirm('Generate this topic? It takes about a minute.')">
+            {% if r.state and r.state.status == "COMPLETED" %}Regenerate{% else %}Generate{% endif %}
+          </button>
+          {% if r.state and r.state.status == "COMPLETED" %}<input type="hidden" name="force" value="1">{% endif %}
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+
+  {% if status == "pending_review" and questions %}
+  <form method="POST" style="margin:18px 0">{% csrf_token %}
+    <input type="hidden" name="action" value="approve_all">
+    <input type="hidden" name="course_code" value="{{ course_code }}">
+    <input type="hidden" name="status" value="{{ status }}">
+    <button class="btn btn-primary" onclick="return confirm('Approve every pending question for {{ course_code }}? Spot-check some first.')">Approve all pending ({{ questions|length }})</button>
+  </form>
+  {% endif %}
+
+  <h3 style="margin-top:24px">Questions — {{ status }} ({{ questions|length }})</h3>
+  {% for q in questions %}
+  <div style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-xl); padding:1.1rem 1.3rem; margin-bottom:12px">
+    <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px">
+      {{ q.topic_name }} · {{ q.question_type }} · {{ q.cognitive_level }} · {{ q.marks }} marks · from {{ q.source_type }}
+    </div>
+    <p style="font-weight:600; margin:0 0 10px">{{ q.content.question }}</p>
+
+    {% if q.question_type == "mcq" %}
+      {% for opt in q.content.options %}
+      <p style="margin:0 0 4px; font-size:13.5px; {% if forloop.counter0 == q.content.correct_index %}color:var(--green-text); font-weight:600{% endif %}">
+        {% if forloop.counter0 == q.content.correct_index %}✓{% else %}•{% endif %} {{ opt }}
+      </p>
+      {% endfor %}
+      <p style="font-size:12.5px; color:var(--text-secondary); margin:8px 0 0; white-space:pre-wrap">{{ q.content.explanation }}</p>
+    {% else %}
+      <p style="font-size:13px; color:var(--text-secondary); white-space:pre-wrap; margin:0 0 8px">{{ q.content.model_answer }}</p>
+      {% for p in q.content.marking_scheme %}
+      <p style="font-size:12.5px; color:var(--text-muted); margin:0 0 3px">({{ p.marks }}) {{ p.point }}</p>
+      {% endfor %}
+    {% endif %}
+
+    <div style="display:flex; gap:8px; margin-top:12px">
+      {% if q.status != "approved" %}
+      <form method="POST" style="margin:0">{% csrf_token %}
+        <input type="hidden" name="action" value="approve"><input type="hidden" name="question_id" value="{{ q.id }}">
+        <input type="hidden" name="course_code" value="{{ course_code }}"><input type="hidden" name="status" value="{{ status }}">
+        <button class="btn btn-primary" style="padding:5px 12px; font-size:12px">Approve</button>
+      </form>
+      {% endif %}
+      {% if q.status == "approved" %}
+      <form method="POST" style="margin:0">{% csrf_token %}
+        <input type="hidden" name="action" value="unapprove"><input type="hidden" name="question_id" value="{{ q.id }}">
+        <input type="hidden" name="course_code" value="{{ course_code }}"><input type="hidden" name="status" value="{{ status }}">
+        <button class="btn btn-white-outline" style="padding:5px 12px; font-size:12px">Move to pending</button>
+      </form>
+      {% endif %}
+      {% if q.status != "retired" %}
+      <form method="POST" style="margin:0">{% csrf_token %}
+        <input type="hidden" name="action" value="retire"><input type="hidden" name="question_id" value="{{ q.id }}">
+        <input type="hidden" name="course_code" value="{{ course_code }}"><input type="hidden" name="status" value="{{ status }}">
+        <button class="btn btn-white-outline" style="padding:5px 12px; font-size:12px">Retire</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% empty %}
+  <p style="color:var(--text-muted)">Nothing here.</p>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "core/base.html" %}
+{% block title %}Grading — Rovea{% endblock %}
+{% block content %}
+<div class="page-container">
+  <div class="done-card" style="background:var(--amber-glow); border-color:var(--border-accent)">
+    <span class="done-emoji">⏳</span>
+    <div class="done-title">Grading is taking longer than usual</div>
+    <div class="done-sub">Your answers are saved. The marker is busy, so try again in a minute.</div>
+    <a href="{% url 'simulator_grade' test_id=test.id %}" class="btn btn-primary" style="margin-top:16px">Retry grading</a>
+  </div>
+</div>
+{% endblock %}

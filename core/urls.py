@@ -79,4 +79,5 @@ urlpatterns = [
     path("privacy/", TemplateView.as_view(template_name="core/privacy.html"), name="privacy"),
     path("staff/lessons/refresh/<int:lesson_id>/", views.staff_refresh_lesson_view, name="staff_refresh_lesson"),
     path("staff/lessons/bulk-refresh/", views.staff_refresh_course_lessons_view, name="staff_refresh_course_lessons"),
+    path("staff/sim-bank/", views.staff_sim_bank_view, name="staff_sim_bank"),
 ]

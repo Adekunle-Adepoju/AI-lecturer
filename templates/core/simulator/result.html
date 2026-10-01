@@ -43,12 +43,18 @@
 
     <p style="font-size:14px; font-weight:600; color:var(--text); margin-bottom:10px">{{ q.question }}</p>
 
-    {% if test.question_format != "mcq" and q.model_answer %}
-    <div style="background:var(--navy); border-left:3px solid var(--amber); padding:10px 14px; border-radius:0 var(--radius-sm) var(--radius-sm) 0; margin-bottom:10px">
-      <div style="font-size:11px; font-weight:700; color:var(--amber); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em">Model Answer</div>
-      <p style="font-size:13px; color:var(--text-secondary); line-height:1.7; white-space:pre-wrap">{{ q.model_answer }}</p>
-    </div>
-    {% endif %}
+    {% if q.model_answer %}
+<div style="background:var(--navy); border-left:3px solid var(--amber); padding:10px 14px; border-radius:0 var(--radius-sm) var(--radius-sm) 0; margin-bottom:10px">
+  <div style="font-size:11px; font-weight:700; color:var(--amber); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em">Model Answer</div>
+  <p style="font-size:13px; color:var(--text-secondary); line-height:1.7; white-space:pre-wrap">{{ q.model_answer }}</p>
+  {% if q.marking_scheme %}
+  <div style="font-size:11px; font-weight:700; color:var(--amber); margin:10px 0 6px; text-transform:uppercase; letter-spacing:0.06em">Marking Scheme</div>
+  {% for p in q.marking_scheme %}
+  <p style="font-size:12.5px; color:var(--text-secondary); margin:0 0 4px">({{ p.marks }}) {{ p.point }}</p>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endif %}
 
     <div style="background:{% if feedback.correct %}var(--teal-glow){% else %}var(--red-glow){% endif %}; border-radius:var(--radius-sm); padding:10px 14px">
       <p style="font-size:13px; color:{% if feedback.correct %}var(--green-text){% else %}#F08080{% endif %}; line-height:1.65">

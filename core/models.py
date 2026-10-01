@@ -633,3 +633,85 @@ class SlideTopicSplitChunk(models.Model):
 
     def __str__(self):
         return f"{self.slide.course_code} — Topic Split Chunk {self.chunk_index} ({self.status})"
+
+class SimulatorQuestion(models.Model):
+    """One pre-generated, verified test question. Tests are assembled by
+    copying rows from here into SimulatorTest.questions, so editing or
+    retiring a question never changes a test someone is already taking."""
+
+    TYPE_CHOICES = [
+        ("mcq", "Multiple choice"),
+        ("theory", "Theory"),
+        ("calculation", "Calculation"),
+    ]
+    STATUS_CHOICES = [
+        ("pending_review", "Pending review"),
+        ("approved", "Approved"),
+        ("retired", "Retired"),
+    ]
+    SOURCE_CHOICES = [
+        ("lecture", "Published lecture"),
+        ("slide", "Slide topic chunk"),
+    ]
+
+    course_code = models.CharField(max_length=10, db_index=True)
+    level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
+    topic_name = models.CharField(max_length=200)
+
+    question_type = models.CharField(max_length=12, choices=TYPE_CHOICES)
+    cognitive_level = models.CharField(max_length=12, blank=True)  # recall / application / analysis
+    marks = models.PositiveSmallIntegerField(default=2)
+
+    # mcq:  {question, options[4], correct_index, explanation}
+    # theory/calculation: {question, model_answer, marking_scheme:[{point, marks}]}
+    content = models.JSONField(default=dict)
+
+    source_type = models.CharField(max_length=10, choices=SOURCE_CHOICES)
+    source_hash = models.CharField(max_length=64)  # sha256 of the source text used
+
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="pending_review")
+    verified = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["course_code", "level", "topic_name", "status"]),
+        ]
+        ordering = ["course_code", "topic_name", "question_type", "id"]
+
+    def __str__(self):
+        return f"{self.course_code} — {self.topic_name} [{self.question_type}] ({self.status})"
+
+
+class SimulatorBankTopic(models.Model):
+    """Generation state for one topic of one course. Makes bank generation
+    resumable and idempotent, and is what the setup page reads to label a
+    topic 'coming soon' (NO_SOURCE) or ready."""
+
+    STATUS_CHOICES = [
+        ("PENDING", "Pending"),
+        ("COMPLETED", "Completed"),
+        ("FAILED", "Failed"),
+        ("NO_SOURCE", "No lecture or slide content yet"),
+    ]
+
+    course_code = models.CharField(max_length=10)
+    level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
+    topic_name = models.CharField(max_length=200)
+
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="PENDING")
+    source_type = models.CharField(max_length=10, blank=True)
+    source_hash = models.CharField(max_length=64, blank=True)
+    mcq_saved = models.PositiveSmallIntegerField(default=0)
+    long_saved = models.PositiveSmallIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ["course_code", "level", "topic_name"]
+        ordering = ["course_code", "topic_name"]
+
+    def __str__(self):
+        return f"{self.course_code} — {self.topic_name} ({self.status})"
