@@ -29,6 +29,7 @@ BUZZ_WINDOW_SECONDS = 20     # buzzer: time for someone to buzz
 BUZZ_ANSWER_SECONDS = 10     # buzzer: time to answer after buzzing
 BONUS_ANSWER_SECONDS = 15    # the other team's bonus attempt
 REVEAL_PAUSE_SECONDS = 3     # pause to show the result before the next question
+INTRO_SECONDS = 5            # rules screen shown before the first question
 
 
 def _timer_fields(seconds):
@@ -42,6 +43,24 @@ def _lock_for(room_code):
     if lock is None:
         lock = _room_locks[room_code] = asyncio.Lock()
     return lock
+
+def _rules_for(mode, total):
+    if mode == "buzzer":
+        return [
+            f"{total} questions. The answer options stay locked until someone buzzes in.",
+            f"You have {BUZZ_WINDOW_SECONDS} seconds to buzz. The first buzz wins the question.",
+            f"The buzzer then has {BUZZ_ANSWER_SECONDS} seconds to answer. Correct: +5 points. Wrong or out of time: -5 points.",
+            f"After a miss, the other team gets a free attempt with no buzz needed ({BONUS_ANSWER_SECONDS} seconds, any player can answer) worth +2 points.",
+            "If nobody buzzes in time, both teams lose 5 points.",
+            "Tied at the end? One sudden-death question decides it.",
+        ]
+    return [
+        f"{total} questions. Alpha answers first, then Bravo takes over after question {QUESTIONS_PER_TEAM_MODE1}.",
+        "One player answers each question, rotating through the team.",
+        f"You have {TURN_TIMER_SECONDS} seconds to answer. Correct: +5 points.",
+        f"Wrong or out of time: 0 points, and the other team gets a free bonus attempt ({BONUS_ANSWER_SECONDS} seconds, any player can answer) worth +2 points.",
+        "Tied at the end? One sudden-death question decides it.",
+    ]
 
 
 class MatchLoop:
@@ -75,7 +94,14 @@ class MatchLoop:
                 return
 
         state = await self.state.initialize(mode, team_a_ids, team_b_ids, questions)
-        await self._serve_question(state)
+        state["phase"] = "intro"
+        await self.state.save(state)
+        await self._broadcast({
+            "type": "match_intro", "mode": mode,
+            "rules": _rules_for(mode, len(questions)),
+            **_timer_fields(INTRO_SECONDS),
+        })
+        self._schedule_timeout(state["current_index"], INTRO_SECONDS, "intro")
 
     async def _get_team_rosters(self, room):
         return await database_sync_to_async(self._get_team_rosters_sync)(room)
@@ -145,7 +171,11 @@ class MatchLoop:
             if state["current_index"] != expected_index or state["phase"] != expected_phase:
                 return
 
-            if expected_phase == "revealing":
+            if expected_phase == "intro":
+                await self._serve_question(state)
+            elif expected_phase == "revealing":
+                await self._advance_now(state)
+            elif state["mode"] == "alternating" and expected_phase == "awaiting_answer":
                 await self._advance_now(state)
             elif state["mode"] == "alternating" and expected_phase == "awaiting_answer":
                 await self._resolve_alternating(state, correct=False, timed_out=True)

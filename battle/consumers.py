@@ -129,6 +129,9 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
             await self.send_json({"type": "error", "message": "Only the room leader can start the match."})
             return
 
+        if room.status != "waiting":
+            return  # match already started: ignore double clicks
+
         if room.mode is None:
             await self.send_json({"type": "error", "message": "Pick a mode before starting."})
             return

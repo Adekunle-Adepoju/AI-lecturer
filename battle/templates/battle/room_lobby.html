@@ -116,6 +116,16 @@
   #flash-overlay.flash-correct { background: #4ade80; animation: flash-fade 0.35s ease; }
   #flash-overlay.flash-wrong { background: #ff3b30; animation: flash-fade 0.35s ease; }
   @keyframes flash-fade { 0% { opacity: 0.3; } 100% { opacity: 0; } }
+    .intro-panel { background: #131316; border: 1px solid rgba(255,255,255,0.08); padding: 28px 24px; text-align: center;
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%); }
+  .intro-eyebrow { font-size: 12px; letter-spacing: 0.25em; color: #888; text-transform: uppercase; }
+  .intro-title { font-size: 34px; font-weight: 700; letter-spacing: 0.06em; margin: 4px 0 18px; text-transform: uppercase; }
+  #intro-rules { list-style: none; padding: 0; margin: 0 auto 22px; max-width: 520px; text-align: left; counter-reset: rule; }
+  #intro-rules li { counter-increment: rule; position: relative; padding: 9px 0 9px 38px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 16px; color: #d8d8da; }
+  #intro-rules li::before { content: counter(rule); position: absolute; left: 0; top: 9px; width: 24px; height: 24px; line-height: 24px;
+    text-align: center; font-size: 12px; font-weight: 700; color: #ffb300; border: 1px solid rgba(255,179,0,0.4); }
+  .intro-count { font-size: 12px; letter-spacing: 0.2em; color: #888; text-transform: uppercase; margin-bottom: 8px; }
+  #intro-num { font-size: 28px; font-weight: 700; color: #ffb300; margin-left: 6px; }
 </style>
 
 <div class="page-container">
@@ -147,6 +157,14 @@
         </select>
         <button class="btn btn-primary" id="start-btn" onclick="startMatch()" disabled style="margin-top:8px">Deploy →</button>
       </div>
+    </div>
+
+    <div id="intro-panel" class="intro-panel" style="display:none">
+      <div class="intro-eyebrow">Rules of engagement</div>
+      <div class="intro-title" id="intro-title"></div>
+      <ol id="intro-rules"></ol>
+      <div class="intro-count">Starting in<span id="intro-num">5</span></div>
+      <div class="hud-timer"><div class="hud-timer-fill" id="intro-fill"></div></div>
     </div>
 
     <div id="match-panel" style="display:none">
@@ -318,6 +336,10 @@ function handleEvent(data) {
       renderLobby(data);
       break;
 
+    case "match_intro":
+      showIntro(data);
+      break;
+
     case "question_served":
       renderQuestion(data);
       break;
@@ -437,6 +459,8 @@ function renderLobby(data) {
 function renderQuestion(data) {
   document.getElementById("lobby-panel").style.display = "none";
   document.getElementById("match-panel").style.display = "block";
+  document.getElementById("intro-panel").style.display = "none";
+  clearInterval(introInterval);
   document.getElementById("question-stem").textContent = data.stem;
 
   currentIndex = data.index;
@@ -473,6 +497,38 @@ function renderQuestion(data) {
     setOptionsEnabled(mine);
     startPhaseTimer(data, mine ? "Your turn — answer" : `${usernameOf(data.answering_student_id)} is answering`);
   }
+}
+let introInterval = null;
+
+function showIntro(data) {
+  document.getElementById("lobby-panel").style.display = "none";
+  document.getElementById("match-panel").style.display = "none";
+  document.getElementById("intro-title").textContent = data.mode === "buzzer" ? "Buzzer Mode" : "Alternating Mode";
+
+  const list = document.getElementById("intro-rules");
+  list.innerHTML = "";
+  data.rules.forEach(rule => {
+    const li = document.createElement("li");
+    li.textContent = rule;
+    list.appendChild(li);
+  });
+  document.getElementById("intro-panel").style.display = "block";
+
+  const offset = data.server_now * 1000 - Date.now();
+  const endAt = data.deadline * 1000 - offset;
+  const total = data.timer_seconds * 1000;
+  const numEl = document.getElementById("intro-num");
+  const fill = document.getElementById("intro-fill");
+
+  clearInterval(introInterval);
+  const tick = () => {
+    const left = Math.max(0, endAt - Date.now());
+    numEl.textContent = Math.ceil(left / 1000);
+    fill.style.transform = `scaleX(${Math.min(1, left / total)})`;
+    if (left <= 0) clearInterval(introInterval);
+  };
+  tick();
+  introInterval = setInterval(tick, 100);
 }
 </script>
 {% endblock %}
