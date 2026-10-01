@@ -919,7 +919,10 @@ function fillAiBubble(bubble, rawText) {
           }
 
           if (payload.done) {
-            if (aiBubble) fillAiBubble(aiBubble, rawText);
+            if (aiBubble) {
+              aiBubble.innerHTML = "";   
+              fillAiBubble(aiBubble, rawText);
+            }
             understandingControls.style.display = "flex";
             scrollChatToBottom();
           }
@@ -1091,6 +1094,7 @@ function fillAiBubble(bubble, rawText) {
         }
 
         if (payload.done) {
+          aiBubble.innerHTML = "";   
           fillAiBubble(aiBubble, stripImageMarker(rawText.replace("TOPIC_COMPLETE", "")));
           if (payload.image_url) {
             aiBubble.appendChild(createLectureImage(payload.image_url));
