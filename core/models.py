@@ -259,6 +259,9 @@ class TimetableEntry(models.Model):
     is_completed = models.BooleanField(default=False)
     is_missed = models.BooleanField(default=False)
     rescheduled_to = models.DateField(null=True, blank=True)
+    # Weekdays this course is studied (Mon=0 … Sun=6).
+    # None = not generated yet, [] = student deliberately left it unscheduled.
+    study_days = models.JSONField(null=True, blank=True, default=None)
 
     class Meta:
         ordering = ["day", "time"]

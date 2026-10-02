@@ -4,7 +4,8 @@ import profile
 from urllib import request
 import markdown
 import random
-from datetime import date, timedelta
+from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
 import re
 import math
 import time
@@ -338,38 +339,15 @@ def _generate_timetable(profile):
         ))
     TimetableEntry.objects.bulk_create(entries)
 
-def _get_active_course_entry(profile):
-    """Today's course in the rolling queue — purely date-driven, so every
-    student with the same enrolled course list gets the same course on
-    the same calendar day."""
-    courses = list(profile.timetable.order_by("course_code"))
-    if not courses:
-        return None
-
-    idx = _teaching_day_index(date.today())
-    if idx is None:
-        return None  # Sunday — rest day
-
-    return courses[idx % len(courses)]
-
 def _generate_course_schedule_preview(profile, num_days=14):
-    """Project which course lands on each of the next `num_days` calendar
-    days, using the same pure date→course mapping as
-    _get_active_course_entry, so the preview always matches reality."""
-    courses = list(profile.timetable.order_by("course_code"))
-    if not courses:
-        return []
-
-    today = date.today()
-    schedule = []
+    entries = _ensure_study_days(profile)
+    today = _today_lagos()
+    out = []
     for i in range(num_days):
         d = today + timedelta(days=i)
-        idx = _teaching_day_index(d)
-        if idx is None:
-            schedule.append({"date": d, "course": None, "is_rest": True})
-        else:
-            schedule.append({"date": d, "course": courses[idx % len(courses)], "is_rest": False})
-    return schedule
+        courses = _courses_on(entries, d)
+        out.append({"date": d, "courses": courses, "is_rest": not courses})
+    return out
 
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────────
@@ -408,15 +386,16 @@ def dashboard_view(request):
     leaderboard = StudentProfile.objects.select_related("user").order_by("-xp")[:10]
     sessions_done = profile.sessions.count()
 
-    active_entry = _get_active_course_entry(profile)
-    if active_entry:
-        todays_courses = [active_entry] if not active_entry.is_completed else []
-        today = active_entry.course_code
-        is_rest_day = False
-    else:
-        todays_courses = []
-        today = None
-        is_rest_day = True
+    today = _today_lagos()
+    entries = _ensure_study_days(profile)
+    scheduled_today = _courses_on(entries, today)
+    done_today = _done_today_codes(profile, today)
+    todays_courses = [
+        e for e in scheduled_today
+        if not e.is_completed and e.course_code not in done_today
+    ]
+    other_courses = [e for e in entries if e not in todays_courses and not e.is_completed]
+    is_rest_day = not scheduled_today
 
     incomplete_sessions = {
         s.course_code: s
@@ -440,6 +419,7 @@ def dashboard_view(request):
         "incomplete_sessions": incomplete_sessions,
         "all_done": all_done,
         "is_rest_day": is_rest_day,
+        "other_courses": other_courses,
     })
 
 
@@ -448,18 +428,58 @@ def dashboard_view(request):
 # rotation is computed purely from today's date relative to this epoch —
 # never from individual login/signup history — so students with the same
 # course list always land on the same course on the same calendar day.
-TIMETABLE_EPOCH = date.fromisocalendar(2026, 1, 1)  # guaranteed Monday
+LAGOS = ZoneInfo("Africa/Lagos")
+TEST_WEEK = 7
+DEFAULT_STUDY_WEEKDAYS = [0, 1, 2, 3, 4, 5]   # Mon–Sat; Sunday stays free
 
 
-def _teaching_day_index(target_date):
-    """Zero-based teaching-day count (Mon–Sat) since TIMETABLE_EPOCH.
-    Sunday returns None (rest day). Pure function of the date — no
-    per-student state involved."""
-    if target_date.weekday() == 6:
-        return None
-    delta_days = (target_date - TIMETABLE_EPOCH).days
-    full_weeks, remainder = divmod(delta_days, 7)
-    return full_weeks * 6 + remainder
+def _today_lagos():
+    return datetime.now(LAGOS).date()
+
+
+def _ensure_study_days(profile):
+    """Gives every course with no schedule yet the lightest Mon–Sat day.
+    Courses the student already edited are never touched."""
+    entries = list(profile.timetable.order_by("course_code"))
+    pending = [e for e in entries if e.study_days is None]
+    if not pending:
+        return entries
+    load = {d: 0 for d in DEFAULT_STUDY_WEEKDAYS}
+    for e in entries:
+        for d in (e.study_days or []):
+            if d in load:
+                load[d] += 1
+    for e in pending:
+        d = min(DEFAULT_STUDY_WEEKDAYS, key=lambda x: (load[x], x))
+        e.study_days = [d]
+        load[d] += 1
+        e.save(update_fields=["study_days"])
+    return entries
+
+
+def _courses_on(entries, d):
+    return [e for e in entries if d.weekday() in (e.study_days or [])]
+
+
+def _done_today_codes(profile, today):
+    start = datetime.combine(today, datetime.min.time(), tzinfo=LAGOS)
+    return set(
+        Session.objects.filter(
+            student=profile, is_complete=True,
+            completed_at__gte=start, completed_at__lt=start + timedelta(days=1),
+        ).values_list("course_code", flat=True)
+    )
+
+
+def _streak_continues(profile, last, today):
+    """Streak survives a gap only if no course was scheduled on the skipped days."""
+    gap = (today - last).days
+    if gap <= 1:
+        return True
+    if gap > 14:
+        return False
+    entries = _ensure_study_days(profile)
+    return not any(_courses_on(entries, last + timedelta(days=i)) for i in range(1, gap))
 
 TOTAL_TEACHING_WEEKS = 15  # fixed course length in teaching rounds
 
@@ -535,29 +555,31 @@ def _get_course_progress_pct(profile, course_code):
     return min(100, round((completed / total_topics) * 100))
 
 
-def _topic_round_sizes(total_topics, total_weeks=TOTAL_TEACHING_WEEKS):
-    """How many topics land in each of the 15 rounds, preserving order.
-    total_topics <= 15 → 1 per round, course finishes early once topics
-    run out. total_topics > 15 → base = total_topics // 15 per round,
-    remainder distributed one-per-round from round 1 — so a multi-topic
-    round is always a CONTIGUOUS slice (Lecture 1 & 2, never Lecture 1 & 7)."""
+TEACHING_ROUNDS = TOTAL_TEACHING_WEEKS - 1   # week 7 is the test, not a lecture
+
+
+def _week_to_round_index(week):
+    """0-based teaching-round index, or None for the test week / out of range."""
+    if week == TEST_WEEK or week < 1 or week > TOTAL_TEACHING_WEEKS:
+        return None
+    return week - 1 if week < TEST_WEEK else week - 2
+
+
+def _topic_round_sizes(total_topics, total_rounds=TEACHING_ROUNDS):
     if total_topics <= 0:
-        return [0] * total_weeks
-    base, remainder = divmod(total_topics, total_weeks)
-    return [base + 1 if i < remainder else base for i in range(total_weeks)]
+        return [0] * total_rounds
+    base, remainder = divmod(total_topics, total_rounds)
+    return [base + 1 if i < remainder else base for i in range(total_rounds)]
 
 
 def _get_topics_for_week(course_code, level, week_number):
-    """Ordered, contiguous slice of topics for this teaching round.
-    Empty list means the course has finished all its topics."""
+    idx = _week_to_round_index(week_number)
+    if idx is None:
+        return []
     all_topics = _get_total_topics_for_course(course_code, level)
     sizes = _topic_round_sizes(len(all_topics))
-
-    if week_number < 1 or week_number > len(sizes):
-        return []
-
-    start = sum(sizes[:week_number - 1])
-    size = sizes[week_number - 1]
+    start = sum(sizes[:idx])
+    size = sizes[idx]
     return all_topics[start:start + size] if size else []
 
 
@@ -924,6 +946,8 @@ def session_view(request, course_code):
 
     profile = request.user.profile
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
+    if entry.week_number == TEST_WEEK:
+        return redirect(f"{reverse('simulator_setup', kwargs={'mode': 'auto'})}?course_code={course_code}")
 
     if request.method == "GET":
         existing_session = Session.objects.filter(
@@ -1253,12 +1277,12 @@ def answer_view(request):
     topic_session.completed_at = timezone.now()
     topic_session.save()
 
-    profile.xp += xp
-    today = date.today()
-    if profile.last_session_date == today - timedelta(days=1):
-        profile.streak += 1
-    elif profile.last_session_date != today:
-        profile.streak = 1
+    today = _today_lagos()
+    if profile.last_session_date != today:
+        if profile.last_session_date and _streak_continues(profile, profile.last_session_date, today):
+            profile.streak += 1
+        else:
+            profile.streak = 1
     profile.last_session_date = today
     profile.save()
 
@@ -1280,8 +1304,13 @@ def answer_view(request):
         session.current_topic_index = total_topics
         session.completed_at = timezone.now()
         session.save()
-        entry.is_completed = True
         entry.week_number += 1
+        level = _course_level(session.course_code, profile)
+        # Complete only when there is nothing left to teach (and it isn't test week)
+        entry.is_completed = (
+            entry.week_number != TEST_WEEK
+            and not _get_topics_for_week(session.course_code, level, entry.week_number)
+        )
         entry.save()
 
     return redirect("quiz_result", topic_session_id=topic_session.id)   # ← was: return render(request, "core/result.html", {...})
@@ -1324,13 +1353,28 @@ def timetable_view(request):
     if not hasattr(request.user, "profile"):
         return redirect("onboarding")
     profile = request.user.profile
-    timetable = profile.timetable.all()
-    schedule_preview = _generate_course_schedule_preview(profile, num_days=14)
+    entries = _ensure_study_days(profile)
+
+    if request.method == "POST":
+        if request.POST.get("action") == "reset":
+            profile.timetable.update(study_days=None)
+            _ensure_study_days(profile)
+            messages.success(request, "Timetable reset to the default.")
+        else:
+            for e in entries:
+                days = {int(x) for x in request.POST.getlist(f"days_{e.id}") if x.isdigit()}
+                e.study_days = sorted(d for d in days if 0 <= d <= 6)
+                e.save(update_fields=["study_days"])
+            messages.success(request, "Timetable saved.")
+        return redirect("timetable")
+
     return render(request, "core/timetable.html", {
-        "timetable": timetable,
+        "timetable": entries,
+        "entries": entries,
         "profile": profile,
-        "schedule_preview": schedule_preview,
-        "today": date.today(),
+        "weekdays": [(0, "Mon"), (1, "Tue"), (2, "Wed"), (3, "Thu"), (4, "Fri"), (5, "Sat"), (6, "Sun")],
+        "schedule_preview": _generate_course_schedule_preview(profile, num_days=14),
+        "today": _today_lagos(),
     })
 
 
@@ -2151,7 +2195,7 @@ def staff_pregeneerate_lessons_view(request):
     return render(request, "core/staff/pregenerate_lessons.html", {
         "courses": courses,
         "lessons": lessons,
-        "week_range": range(1, TOTAL_TEACHING_WEEKS + 1),
+        "week_range": [w for w in range(1, TOTAL_TEACHING_WEEKS + 1) if w != TEST_WEEK],
         "filter_course_id": filter_course_id,
     })
 
@@ -2285,12 +2329,12 @@ def simulator_home_view(request):
     # Check which courses have a pending auto test (week 7, not yet done)
     auto_test_courses = []
     for entry in timetable:
-        if entry.week_number == 7:
+        if entry.week_number == TEST_WEEK:
             already_done = SimulatorTest.objects.filter(
                 student=profile,
                 course_code=entry.course_code,
                 mode="auto",
-                week_number=7,
+                week_number=TEST_WEEK,
                 status="complete",
             ).exists()
             auto_test_courses.append({
@@ -2303,6 +2347,44 @@ def simulator_home_view(request):
         "auto_test_courses": auto_test_courses,
     })
 
+def _start_auto_test(request, profile):
+    course_code = request.GET.get("course_code", "")
+    entry = TimetableEntry.objects.filter(
+        student=profile, course_code=course_code, week_number=TEST_WEEK
+    ).first()
+    if entry is None:
+        messages.info(request, "That course isn't at its test week yet.")
+        return redirect("simulator_home")
+
+    existing = SimulatorTest.objects.filter(
+        student=profile, course_code=course_code, mode="auto",
+        week_number=TEST_WEEK, status="in_progress",
+    ).first()
+    if existing:
+        return redirect("simulator_test", test_id=existing.id)
+
+    level = _course_level(course_code, profile)
+    ready = {a["topic"] for a in get_topic_availability(course_code, level) if a["ready"]}
+    topics = [
+        t for r in range(1, TEST_WEEK)
+        for t in _get_topics_for_week(course_code, level, r) if t in ready
+    ]
+    try:
+        if not topics:
+            raise NotEnoughQuestions("No ready questions for weeks 1–6.")
+        questions, fmt = draw_test(profile, course_code, level, topics, "mixed")
+    except NotEnoughQuestions:
+        entry.week_number = TEST_WEEK + 1          # never trap a student on week 7
+        entry.save(update_fields=["week_number"])
+        messages.info(request, "The test for this course isn't ready yet, so you've moved on to week 8.")
+        return redirect("session", course_code=course_code)
+
+    test = SimulatorTest.objects.create(
+        student=profile, mode="auto", question_format=fmt, week_number=TEST_WEEK,
+        course_code=entry.course_code, course_title=entry.course_title,
+        topic="Weeks 1–6", questions=questions,
+    )
+    return redirect("simulator_test", test_id=test.id)
 
 @login_required
 def simulator_setup_view(request, mode):
@@ -2312,8 +2394,7 @@ def simulator_setup_view(request, mode):
     MAX_TOPICS_FOR_TEST = 4
 
     if mode == "auto":
-        messages.info(request, "Test week isn't open yet — check back soon.")
-        return redirect("simulator_home")
+        return _start_auto_test(request, profile)
 
     timetable = profile.timetable.all()
 
@@ -2617,6 +2698,10 @@ def simulator_grade_view(request, test_id):
         test.completed_at = timezone.now()
         test.save()
         StudentProfile.objects.filter(pk=profile.pk).update(xp=F("xp") + xp)
+        if test.mode == "auto":
+            TimetableEntry.objects.filter(
+                student=profile, course_code=test.course_code, week_number=TEST_WEEK,
+            ).update(week_number=TEST_WEEK + 1)
 
     return redirect("simulator_result", test_id=test.id)
 

@@ -132,7 +132,7 @@
 
     <p class="section-label">
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
-      Upcoming rotation
+      Next 14 days
     </p>
 
     <div class="day-strip">
@@ -147,18 +147,51 @@
           </div>
           <div class="day-block">
             {% if day.is_rest %}
-              <div class="rest-block">🌤️ Rest day — free, or practice in the Simulator</div>
+          <div class="rest-block">🌤️ Free day</div>
             {% else %}
-              <div class="course-block">
-                <div class="cb-code">{{ day.course.course_code }}</div>
-                <div class="cb-title">{{ day.course.course_title }}</div>
-                <div class="cb-week">Week {{ day.course.week_number }} of {{ day.course.total_weeks }}</div>
+              {% for c in day.courses %}
+              <div class="course-block" style="margin-bottom:8px;">
+                <div class="cb-code">{{ c.course_code }}</div>
+                <div class="cb-title">{{ c.course_title }}</div>
+                <div class="cb-week">{% if c.week_number == 7 %}Test week{% else %}Week {{ c.week_number }}{% endif %}</div>
               </div>
+              {% endfor %}
             {% endif %}
           </div>
         </div>
-      {% endfor %}
+            {% endfor %}
     </div>
+
+    {% if entries %}
+    <p class="section-label">Edit your weekly schedule</p>
+    <form method="post">
+      {% csrf_token %}
+      <div class="side-widget-card" style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:6px;">Course</th>
+              {% for n, label in weekdays %}<th style="padding:6px;">{{ label }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in entries %}
+            <tr style="border-top:1px solid var(--line);">
+              <td style="padding:8px 6px;"><strong>{{ e.course_code }}</strong><div style="color:var(--ink-faint);font-size:.74rem;">{{ e.course_title }}</div></td>
+              {% for n, label in weekdays %}
+              <td style="text-align:center;"><input type="checkbox" name="days_{{ e.id }}" value="{{ n }}" {% if n in e.study_days %}checked{% endif %}></td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button type="submit" name="action" value="save" class="btn" style="flex:1;justify-content:center;">Save timetable</button>
+        <button type="submit" name="action" value="reset" class="btn" style="flex:1;justify-content:center;">Reset to default</button>
+      </div>
+    </form>
+    {% endif %}
 
     {% if not timetable %}
     <div class="side-widget-card empty-state">
