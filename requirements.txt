@@ -73,4 +73,4 @@ websockets==16.1.1
 whitenoise==6.8.2
 xlsxwriter==3.2.9
 zope.interface==8.6
-django-q2==2.0.0
+django-q2==1.11.1
