@@ -2018,6 +2018,9 @@ def _generate_pregenerated_lecture(course_code, course_title, topic_name, chunk_
             "\n\nA PREVIOUS DRAFT OF THIS LECTURE HAD THE FOLLOWING FIDELITY ISSUES — DO NOT "
             "REPEAT THEM. Rewrite the lecture from scratch, fixing every one of these:\n"
             f"{fix_notes}\n"
+            "If the earlier draft contained a visual block (svg, mermaid or json_chart), keep it. "
+            "Change only the labels or connections listed above. Do not remove a visual just to "
+            "avoid a flag.\n"
         )
 
     contents = (

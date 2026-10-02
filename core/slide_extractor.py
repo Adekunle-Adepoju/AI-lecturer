@@ -1,7 +1,7 @@
 import os
 
 
-def extract_text_via_vision(file_path, course_code="", batch_size=40):
+def extract_text_via_vision(file_path, course_code="", batch_size=20):
     import fitz
     import tempfile
     import time
@@ -58,22 +58,32 @@ def extract_text_via_vision(file_path, course_code="", batch_size=40):
                     response = client.models.generate_content(
                         model=model,
                         contents=[
-                            gemini_file,
                             f"Transcribe all text and handwriting in this document exactly as written, "
                             f"page by page, including formulas, headings, and diagram labels. "
                             f"Preserve structure with line breaks. Mark each page as '--- Page N ---', "
                             f"using the ACTUAL page number in the full document (this batch starts at "
                             f"page {batch_start + 1}). For handwritten formulas, use plain text math "
-                            f"notation. Do not summarize or explain — transcribe only.",
+                            f"notation. For every diagram, figure, photo or chart, add one line directly "
+                            f"after its title in this form: [DIAGRAM: ...]. List only the labels that are "
+                            f"visible in it and how they are connected or positioned (for example: "
+                            f"'X sits above Y; an arrow runs from A to B'). For a chart, list the axis "
+                            f"labels and any plotted values you can read. Do not interpret, name things "
+                            f"that are not labelled, or add facts. Apart from these [DIAGRAM] lines, do "
+                            f"not summarize or explain, transcribe only.",
                         ],
-                        config=types.GenerateContentConfig(max_output_tokens=8000),
+                        config=types.GenerateContentConfig(max_output_tokens=32000),
                     )
                     batch_text = response.text.strip()
+                    try:
+                        if response.candidates and "MAX_TOKENS" in str(response.candidates[0].finish_reason):
+                            print(f"[{course_code}] WARNING: batch hit max output tokens, text may be cut off.")
+                    except Exception:
+                        pass
                     print(f"[{course_code}] Batch done using {model} ({len(batch_text)} chars).")
                     break
                 except Exception as e:
                     print(f"[{course_code}] Model {model} failed on batch: {e}. Trying next...")
-
+                    
             if not batch_text:
                 print(f"[{course_code}] WARNING: batch pages {batch_start + 1}-{batch_end + 1} produced no text.")
 

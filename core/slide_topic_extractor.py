@@ -5,6 +5,7 @@ from google import genai
 from google.genai import types
 from django.conf import settings
 import math
+
 from .models import SlideDocument, SlideExtractionChunk, SlideTopicChunk, CourseOutline
 from .models import SlideTopicSplitChunk
 from dataclasses import dataclass
@@ -436,19 +437,76 @@ def _extract_tables_as_markdown(page):
 
     return "\n\n".join(blocks)
 
+def _describe_page_diagrams(fitz_page, client, course_code, page_number):
+    """Return one '[DIAGRAM: ...]' line for pages with a large picture, else ''."""
+    try:
+        page_area = fitz_page.rect.width * fitz_page.rect.height
+        big = [
+            i for i in fitz_page.get_image_info()
+            if 0.08 * page_area
+               < (i["bbox"][2] - i["bbox"][0]) * (i["bbox"][3] - i["bbox"][1])
+               < 0.85 * page_area
+        ]
+    except Exception:
+        return ""
+    if not big:
+        return ""
+
+    pix = fitz_page.get_pixmap(dpi=90)
+    img_bytes = pix.tobytes("jpeg")
+    pix = None  # free the pixel buffer right away
+
+    prompt = (
+        "This is one lecture slide. If it contains a diagram, figure, photo or chart, "
+        "reply with ONE line that starts with [DIAGRAM: and ends with ]. Inside, list only "
+        "the labels visible in it and how they are connected or positioned (for example: "
+        "'X sits above Y; an arrow runs from A to B'). For a chart, list axis labels and "
+        "any values you can read. Do not name anything that is not labelled and do not add "
+        "facts. If the picture is only a logo or decoration, reply NONE."
+    )
+    reply = _call_gemini_with_retry(
+        client=client,
+        model="gemini-3.6-flash",
+        contents=[types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"), prompt],
+        config=types.GenerateContentConfig(max_output_tokens=400),
+        course_code=course_code,
+        chunk_label=f"Diagram page {page_number}",
+    )
+    reply = " ".join((reply or "").split())
+    if reply.startswith("[DIAGRAM:") and reply.endswith("]"):
+        return reply
+    return ""
+
 def _parse_slide_document(slide):
-    """Called after upload — extracts text and topics, saves to SlideDocument."""
+    import gc
     import pdfplumber
+    import fitz
 
     extracted_text = ""
+    fdoc = None
     try:
+        fdoc = fitz.open(slide.file.path)
+        vision_client = _get_batch_client()
         with pdfplumber.open(slide.file.path) as pdf:
+            total = len(pdf.pages)
             for page_number, page in enumerate(pdf.pages, start=1):
-                text = _extract_page_text_layout_aware(page)
-                if text and text.strip():
-                    extracted_text += f"--- Page {page_number} ---\n\n{text.strip()}\n\n"
+                print(f"[{slide.course_code}] Extracting page {page_number}/{total}", flush=True)
+                text = (_extract_page_text_layout_aware(page) or "").strip()
+                page.flush_cache()  # release pdfplumber's per-page cache
+                diagram = _describe_page_diagrams(
+                    fdoc[page_number - 1], vision_client, slide.course_code, page_number
+                )
+                if diagram:
+                    text = f"{text}\n\n{diagram}".strip()
+                if text:
+                    extracted_text += f"--- Page {page_number} ---\n\n{text}\n\n"
+                if page_number % 10 == 0:
+                    gc.collect()
     except Exception as e:
         print(f"PDF extraction failed for {slide.course_code}: {e}")
+    finally:
+        if fdoc:
+            fdoc.close()
 
     extracted_text = _cleanup_mangled_text_with_ai(slide.course_code, slide.course_title, extracted_text, slide=slide)
 
@@ -530,7 +588,9 @@ CLEANUP_SYSTEM_INSTRUCTION = (
     "5. Do NOT add commentary, headers like 'Cleaned text:', or explanations. "
     "Return ONLY the cleaned text itself, nothing else — no markdown code "
     "fences wrapping the whole response.\n\n"
-    "If the text has no structural problems at all, simply return it unchanged."
+    "If the text has no structural problems at all, simply return it unchanged.\n"
+    "Lines that start with '[DIAGRAM:' must be copied through exactly as they are. "
+    "Never rewrite, merge or remove them.\n"
     "6. Lines like '--- Page 12 ---' are page markers. Copy every one exactly, on "
     "its own line, in the same order. Never remove, renumber, merge, or move them.\n\n"
 )

@@ -468,6 +468,7 @@
 
   function cleanTextForSpeech(rawText) {
     let text = rawText;
+    text = text.replace(/```[\s\S]*?```/g, '');
     text = text.replace(/\[IMAGE:.*?\]/gi, '');
     text = text.replace(/\$\$(.*?)\$\$/gs, (_, eq) => latexToSpeech(eq));
     text = text.replace(/\$(.*?)\$/g, (_, eq) => latexToSpeech(eq));

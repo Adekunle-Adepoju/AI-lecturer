@@ -153,8 +153,8 @@ Q_CLUSTER = {
     "workers": 1,                # one process = one Gemini job at a time. Don't raise on 512 MB.
     "recycle": 5,                # restart the worker after 5 tasks to release leaked memory
     "max_rss": 180_000,          # KB (~175 MB): recycle the worker if it grows past this
-    "timeout": 600,              # hard-kill a task after 10 min (Gemini takes 30-60s)
-    "retry": 660,                # MUST be greater than timeout, or tasks run twice
+    "timeout": 1800,              # hard-kill a task after 10 min (Gemini takes 30-60s)
+    "retry": 2000,                # MUST be greater than timeout, or tasks run twice
     "max_attempts": 1,           # never auto-rerun: avoids double Gemini quota burn
     "ack_failures": True,        # failed tasks leave the queue instead of looping
     "queue_limit": 10,           # cap tasks held in memory by the cluster

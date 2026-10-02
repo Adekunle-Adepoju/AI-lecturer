@@ -44,7 +44,7 @@
 
   // ── Fence extraction ──────────────────────────────────────────────────
   // Matches ```json_chart|mermaid|svg ... ``` blocks, non-greedy, multiline.
-  const FENCE_RE = /```(json_chart|mermaid|svg)[ \t]*\r?\n([\s\S]*?)```/g;
+  const FENCE_RE = /```(json_chart|mermaid|svg)\b[^\n]*\r?\n([\s\S]*?)```/gi;
 
   /**
    * Splits raw markdown into an ordered list of segments:
@@ -65,7 +65,7 @@
       lastIndex = match.index + full.length;
     }
     if (lastIndex < markdown.length) {
-      segments.push({ type: "text", content: markdown.slice(lastIndex) });
+      segments.push({ type: blockType.toLowerCase(), raw: rawContent.trim() });
     }
     return segments;
   }
@@ -255,6 +255,8 @@
   }
 
   function renderSvg(raw) {
+  if (!/xmlns\s*=/.test(raw)) raw = raw.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+  raw = raw.replace(/&(?!(amp|lt|gt|quot|apos|#\d+);)/g, "&amp;");
     const wrapper = document.createElement("div");
     wrapper.className = "rovea-visual-block rovea-svg-block";
     wrapper.style.background = THEME.bgAlt;
