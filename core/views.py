@@ -24,9 +24,11 @@ from django.http import StreamingHttpResponse
 from django.http import JsonResponse
 from django.db.models import F, Count
 from django.db import transaction
+from django_q.tasks import async_task
 from .simulator_draw import draw_test, NotEnoughQuestions, TEST_MODES
 from .simulator_bank import get_topic_availability, process_topic
 from .simulator_bank_prompts import SIMULATOR_STRICT_GRADING_PROMPT
+from django_q.models import Task, OrmQ
 
 
 from .forms import SignupForm, OnboardingForm, ProfileEditForm, ElectiveSelectionForm
@@ -1584,7 +1586,10 @@ def _bypasses_restrictions(request):
     profile = getattr(request.user, "profile", None)
     return bool(profile and profile.is_staff_member)
 
-
+def _queue(request, func_name, *args, label):
+    """Put a job in the queue and tell staff it was queued."""
+    async_task(f"core.tasks.{func_name}", *args, task_name=label)
+    messages.success(request, f"Queued: {label}. See progress on the Background Jobs page.")
 
 @staff_required
 def staff_portal_view(request):
@@ -1619,72 +1624,28 @@ def staff_portal_view(request):
 @staff_required
 def staff_upload_slide_view(request):
     if request.method == "POST":
-        print("POST received")
         form = SlideUploadForm(request.POST, request.FILES)
-        print(f"Form valid: {form.is_valid()}")
-        print(f"Form errors: {form.errors}")
-        
         if form.is_valid():
-            course_code = form.cleaned_data.get('course_code')
-            level = form.cleaned_data.get('level')
-            
-            # Check if a document already exists for this course
+            course_code = form.cleaned_data.get("course_code")
+            level = form.cleaned_data.get("level")
             existing_slide = SlideDocument.objects.filter(course_code=course_code, level=level).first()
-            
+
             if existing_slide:
-                # We have an existing slide deck. Let's process the new file temporarily.
-                new_slide_temp = form.save(commit=False)
-                
-                # THE TRICK: Change the level to a dummy value so the database doesn't block the temporary save
-                new_slide_temp.level = "999"
-                new_slide_temp.save() 
-                
-                # Keep track of the old text before we extract the new stuff
-                old_text = existing_slide.extracted_text
-                
-                try:
-                    from .slide_topic_extractor import _parse_slide_document
-                    _parse_slide_document(new_slide_temp)
-                    
-                    # Append the newly extracted text to the existing text
-                    existing_slide.extracted_text = f"{old_text}\n\n--- [Slide Continuation] ---\n\n{new_slide_temp.extracted_text}"
-                    
-                    # Merge topics without duplicates
-                    existing_topics = set(existing_slide.extracted_topics)
-                    new_topics = [t for t in new_slide_temp.extracted_topics if t not in existing_topics]
-                    existing_slide.extracted_topics.extend(new_topics)
-                    
-                    existing_slide.append_count += 1
-                    existing_slide.save()
-                    
-                    messages.success(request, f"Slide appended to existing {course_code} deck. {len(new_topics)} new topics added.")
-                
-                except Exception as e:
-                    messages.warning(request, f"Failed to append slide: {str(e)}")
-                    
-                finally:
-                    # ALWAYS clean up the temporary record and file, even if parsing succeeds or crashes
-                    if new_slide_temp.file and os.path.isfile(new_slide_temp.file.path):
-                        try:
-                            os.remove(new_slide_temp.file.path)
-                        except OSError:
-                            pass
-                    new_slide_temp.delete()
-                        
+                # Same trick as before: save the new file under a dummy level,
+                # and let the worker merge it into the existing deck.
+                temp = form.save(commit=False)
+                temp.level = "999"
+                temp.save()
+                _queue(request, "parse_slide_upload", temp.id, existing_slide.id,
+                       label=f"Append slide to {course_code}")
             else:
-                # No existing slide, just save normally
                 slide = form.save()
-                try:
-                    from .slide_topic_extractor import _parse_slide_document
-                    _parse_slide_document(slide)
-                    messages.success(request, f"First slide for {course_code} uploaded and {len(slide.extracted_topics)} topics extracted.")
-                except Exception as e:
-                    messages.warning(request, f"Slide saved but topic extraction failed: {str(e)}")
-            
+                _queue(request, "parse_slide_upload", slide.id,
+                       label=f"Parse slide {course_code}")
             return redirect("staff_portal")
     else:
         form = SlideUploadForm()
-        
+
     return render(request, "core/staff/upload_form.html", {
         "form": form,
         "title": "Upload Course Slide",
@@ -1697,12 +1658,8 @@ def staff_upload_outline_view(request):
         form = CourseOutlineUploadForm(request.POST, request.FILES)
         if form.is_valid():
             outline = form.save()
-            try:
-                from .outline_parser import _parse_course_outline
-                _parse_course_outline(outline)
-                messages.success(request, "Course outline uploaded and parsed successfully.")
-            except Exception as e:
-                messages.warning(request, f"Outline saved but parsing failed: {str(e)}")
+            _queue(request, "parse_outline", outline.id,
+                   label=f"Parse outline {outline.course_code}")
             return redirect("staff_portal")
     else:
         form = CourseOutlineUploadForm()
@@ -1719,12 +1676,8 @@ def staff_upload_past_questions_view(request):
         form = PastQuestionUploadForm(request.POST, request.FILES)
         if form.is_valid():
             pq = form.save()
-            try:
-                from .past_question_parser import _parse_past_question_file
-                _parse_past_question_file(pq)
-                messages.success(request, f"Past questions uploaded. {len(pq.parsed_questions)} questions extracted.")
-            except Exception as e:
-                messages.warning(request, f"File saved but parsing failed: {str(e)}")
+            _queue(request, "parse_past_questions", pq.id,
+                   label=f"Parse past questions {pq.course_code}")
             return redirect("staff_portal")
     else:
         form = PastQuestionUploadForm()
@@ -1840,28 +1793,26 @@ def delete_course_definition(request, course_id):
 @staff_required
 @require_POST
 def retry_slide_topics_view(request, slide_id):
-    """Retry AI topic extraction for a slide — only reprocesses chunks that
-    previously failed or are still pending; already-completed chunks are
-    skipped, and their topics are preserved rather than overwritten."""
     slide = get_object_or_404(SlideDocument, id=slide_id)
-
     if not slide.extracted_text:
         messages.warning(request, "Can't retry — no extracted text saved for this slide.")
         return redirect("staff_portal")
-
-    try:
-        from .slide_topic_extractor import extract_topics_for_slide_resumable
-        topics, incomplete = extract_topics_for_slide_resumable(slide)
-        if incomplete:
-            messages.warning(request, f"Retried — {len(topics)} topics found so far, but some chunks still failed. You may need to retry again.")
-        else:
-            messages.success(request, f"Topics extracted successfully — {len(topics)} topics found.")
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        messages.warning(request, f"Retry failed: {str(e)}")
-
+    _queue(request, "retry_topic_extraction", slide.id,
+           label=f"Retry topics {slide.course_code}")
     return redirect("staff_portal")
+
+
+@staff_required
+@require_POST
+def retry_slide_cleanup_view(request, slide_id):
+    slide = get_object_or_404(SlideDocument, id=slide_id)
+    if not slide.extracted_text:
+        messages.warning(request, "Can't retry — no extracted text saved for this slide.")
+        return redirect("staff_portal")
+    _queue(request, "retry_cleanup", slide.id,
+           label=f"Retry cleanup {slide.course_code}")
+    return redirect("staff_portal")
+
 
 @staff_required
 @require_POST
@@ -1870,75 +1821,20 @@ def retry_slide_topic_split_view(request, slide_id):
     if not slide.chunks.exists():
         messages.warning(request, "Can't split by topic — no week-level chunks saved for this slide.")
         return redirect("staff_portal")
-
-    from .slide_topic_extractor import split_all_weeks_by_topic
-    try:
-        split_all_weeks_by_topic(slide)
-        count = slide.topic_chunks.exclude(is_empty=True).count()
-        messages.success(request, f"Topic-level split complete — {count} non-empty topic chunks saved.")
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        messages.warning(request, f"Topic split retry failed: {str(e)}")
-
+    _queue(request, "split_weeks_by_topic", slide.id,
+           label=f"Topic split (weeks) {slide.course_code}")
     return redirect("staff_portal")
+
 
 @staff_required
 @require_POST
-def retry_slide_cleanup_view(request, slide_id):
-    """Retry the AI text-cleanup pass for a slide. Cleanup chunks that
-    fell back to raw (uncleaned) text — because the model failed or
-    returned something suspiciously short — are reset to PENDING and
-    reprocessed; chunks that already cleaned successfully are left
-    untouched. The reassembled result is saved back onto
-    slide.extracted_text.
-
-    Cleanup chunks are always saved as COMPLETED even on fallback (to
-    avoid endlessly reprocessing them on every unrelated retry), so
-    without this reset step a plain re-run would find nothing left to do."""
+def run_topic_split_view(request, slide_id):
     slide = get_object_or_404(SlideDocument, id=slide_id)
-
-    if not slide.extracted_text:
-        messages.warning(request, "Can't retry — no extracted text saved for this slide.")
+    if not slide.extracted_topics or not slide.extracted_text.strip():
+        messages.warning(request, "Can't split — no extracted topics or text saved for this slide.")
         return redirect("staff_portal")
-
-    try:
-        from .slide_topic_extractor import _cleanup_mangled_text_with_ai
-
-        reset_count = slide.cleanup_chunks.exclude(error_message="").update(
-            status="PENDING", error_message="",
-        )
-
-        cleaned = _cleanup_mangled_text_with_ai(
-            slide.course_code, slide.course_title, slide.extracted_text, slide=slide,
-        )
-        slide.extracted_text = cleaned
-        slide.save(update_fields=["extracted_text"])
-
-        still_failed = slide.cleanup_chunks.exclude(error_message="").count()
-        if still_failed:
-            messages.warning(
-                request,
-                f"Cleanup retried ({reset_count} chunk(s) reprocessed) — {still_failed} "
-                "still fell back to raw text. Run again to retry those, or check the "
-                "terminal for details."
-            )
-        else:
-            note = (
-                " Note: topics and topic-split content generated before this retry "
-                "may now be out of date — consider re-running topic extraction and "
-                "topic split too."
-                if reset_count else ""
-            )
-            messages.success(
-                request,
-                f"Cleanup retried successfully ({reset_count} chunk(s) reprocessed)." + note
-            )
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        messages.warning(request, f"Cleanup retry failed: {str(e)}")
-
+    _queue(request, "run_topic_split", slide.id,
+           label=f"Run topic split {slide.course_code}")
     return redirect("staff_portal")
 
 @staff_required
@@ -2028,26 +1924,13 @@ def staff_generate_battle_questions_view(request):
     if request.method == "POST":
         form = BattleQuestionGenerationForm(request.POST, course_choices=course_choices)
         if form.is_valid():
-            logs = []
-            result = run_battle_question_generation(
-                per_chunk=8,
-                sleep_seconds=3.5,
-                course_filter=form.cleaned_data["course_code"] or None,
-                retry_failed=form.cleaned_data["retry_failed"],
-                limit=form.cleaned_data["limit"],
-                log=lambda msg: logs.append(msg),
+            _queue(
+                request, "generate_battle_questions",
+                form.cleaned_data["course_code"] or None,
+                form.cleaned_data["retry_failed"],
+                form.cleaned_data["limit"],
+                label="Generate battle questions",
             )
-            if result["chunks_processed"] == 0:
-                messages.info(request, "No eligible chunks left to process — everything is already generated (or previously failed; check 'retry failed' to try those again).")
-            else:
-                messages.success(
-                    request,
-                    f"Generated {result['questions_generated']} question(s) across "
-                    f"{result['chunks_processed'] - result['chunks_failed']} chunk(s). "
-                    f"All saved as pending_review — approve them in the admin before they're servable."
-                )
-            for failure in result["failures"]:
-                messages.warning(request, f"Failed: {failure}")
             return redirect("staff_generate_battle_questions")
     else:
         form = BattleQuestionGenerationForm(course_choices=course_choices)
@@ -2234,168 +2117,27 @@ def staff_pregeneerate_lessons_view(request):
     courses = CourseDefinition.objects.all().order_by("level", "semester", "course_code")
 
     if request.method == "POST":
-        course_id = request.POST.get("course_id")
+        course = get_object_or_404(CourseDefinition, id=request.POST.get("course_id"))
         week_number = int(request.POST.get("week_number", 1))
-        course = get_object_or_404(CourseDefinition, id=course_id)
-
-        # Get topics for this course and week
         topics = _get_topics_for_week(course.course_code, course.level, week_number)
 
         if not topics:
             messages.error(request, f"No topics found for {course.course_code} Week {week_number}. Upload a course outline first.")
             return redirect("staff_pregenerate_lessons")
 
-        # Get outline text for context
-        outline_text = ""
-        try:
-            outline = CourseOutline.objects.get(
-                course_code=course.course_code,
-                level=course.level,
-                parsed=True,
-            )
-            if outline.extracted_text:
-                outline_text = f"\n\nCOURSE OUTLINE REFERENCE:\n{outline.extracted_text[:2000]}"
-        except CourseOutline.DoesNotExist:
-            pass
-
-        generated_count = 0
-        errors = []
-
         for i, topic in enumerate(topics):
-            chunk_text = _find_slide_content_for_topic(course.course_code, course.level, topic)
-            slide_text = (
-                f"\n\nLECTURER SLIDES (focus only on content relevant to this topic):\n{chunk_text}"
-                if chunk_text else ""
+            async_task(
+                "core.tasks.pregenerate_topic_lesson",
+                course.id, week_number, topic, i, len(topics),
+                task_name=f"Lesson {course.course_code} W{week_number}: {topic[:60]}",
             )
-            existing = PreGeneratedLesson.objects.filter(
-                course=course, week_number=week_number, topic_title=topic,
-            ).first()
-
-            if existing and existing.content_chunk.strip() and not existing.is_truncated:
-                continue
-
-            # NEW — reference-table topics skip LLM generation entirely.
-            if chunk_text and is_reference_table_content(chunk_text):
-                PreGeneratedLesson.objects.update_or_create(
-                    course=course, week_number=week_number, topic_title=topic,
-                    defaults={
-                        "content_chunk": _render_reference_table_lecture(topic, chunk_text),
-                        "is_published": False,
-                        "is_truncated": False,
-                        "continuation_attempts": 0,
-                    }
-                )
-                generated_count += 1
-                continue
-
-            if existing and existing.is_truncated and existing.content_chunk.strip():
-                if existing.continuation_attempts >= MAX_CONTINUATION_ATTEMPTS:
-                    errors.append(
-                        f"{topic}: still incomplete after {MAX_CONTINUATION_ATTEMPTS} "
-                        f"continuation attempts — needs manual review/edit in admin."
-                    )
-                    continue
-
-                try:
-                    continuation = continue_truncated_lecture(
-                        generation_client, course.course_code, course.course_title,
-                        topic, week_number, course.level,
-                        student_name="Student", topic_index=i,
-                        previous_content=existing.content_chunk,
-                        slide_text=slide_text + outline_text,
-                        total_topics_in_round=len(topics),
-                    )
-
-                    if detect_likely_duplicate_reteach(existing.content_chunk, continuation):
-                        errors.append(
-                            f"{topic}: continuation looked like it was re-teaching an "
-                            f"earlier section — discarded, not saved. Needs manual review "
-                            f"or a fresh regeneration instead of continuation."
-                        )
-                        time.sleep(3.5)
-                        continue  # don't merge/save it — leave existing.content_chunk untouched
-
-                    merged = existing.content_chunk.rstrip() + "\n\n" + continuation.strip()
-                    still_truncated = is_lecture_truncated(continuation)
-                    final_content = merged if not still_truncated else find_safe_cutoff(merged)
-
-                    existing.content_chunk = final_content
-                    existing.is_truncated = still_truncated
-                    existing.continuation_attempts += 1
-                    existing.save(update_fields=["content_chunk", "is_truncated", "continuation_attempts"])
-
-                    if still_truncated:
-                        remaining = MAX_CONTINUATION_ATTEMPTS - existing.continuation_attempts
-                        errors.append(
-                            f"{topic}: still truncated after continuation pass "
-                            f"({remaining} attempt(s) left) — will retry on next run."
-                        )
-                    else:
-                        generated_count += 1
-
-                    time.sleep(3.5)
-
-                except Exception as e:
-                    errors.append(f"{topic}: continuation failed — {str(e)}")
-                    time.sleep(3)
-
-                continue  # move to next topic — don't fall through to fresh generation
-
-                        # No existing content at all — fresh generation.
-            if not chunk_text:
-                errors.append(
-                    f"{topic}: no slide content found for this topic — skipped "
-                    f"(run the topic split first)."
-                )
-                continue
-
-            try:
-                full_text, review_note, hit_limit = _generate_verified_lecture(
-                    course.course_code, course.course_title, topic, chunk_text,
-                    is_course_opening=(week_number == 1 and i == 0),
-                    course_context=(
-                        f"Level: {course.get_level_display()}\n"
-                        f"Department: {course.get_department_display()}\n"
-                    ),
-                )
-
-                if hit_limit:
-                    errors.append(f"{topic}: hit the output limit — not saved. Run again to regenerate.")
-                    continue
-
-                if not full_text or not full_text.strip():
-                    errors.append(f"{topic}: AI returned empty response — skipping.")
-                    continue
-
-                PreGeneratedLesson.objects.update_or_create(
-                    course=course, week_number=week_number, topic_title=topic,
-                    defaults={
-                        "content_chunk": full_text,
-                        "is_published": False,
-                        "is_truncated": False,
-                        "continuation_attempts": 0,
-                    }
-                )
-                generated_count += 1
-                if review_note:
-                    errors.append(f"{topic}: saved, but review before publishing — {review_note}")
-
-                time.sleep(3.5)
-
-            except Exception as e:
-                errors.append(f"{topic}: {str(e)}")
-                time.sleep(3)
-                continue
-
-        if generated_count:
-            messages.success(request, f"Generated {generated_count} lesson(s) for {course.course_code} Week {week_number}. Review and publish them in the admin panel.")
-        if errors:
-            for error in errors:
-                messages.warning(request, f"Failed: {error}")
-
+        messages.success(
+            request,
+            f"Queued {len(topics)} lesson(s) for {course.course_code} Week {week_number}. "
+            f"See progress on the Background Jobs page."
+        )
         return redirect("staff_pregenerate_lessons")
 
-        # GET — show existing pre-generated lessons
     filter_course_id = request.GET.get("filter_course", "")
     lessons = PreGeneratedLesson.objects.select_related("course").order_by(
         "course__level", "course__course_code", "week_number", "topic_title"
@@ -2894,16 +2636,12 @@ def staff_sim_bank_view(request):
             ).update(status="approved")
             messages.success(request, f"Approved {n} question(s) for {course_code}.")
         elif action == "generate_topic":
-            # One topic per request (~4 model calls). For a whole course use
-            # the generate_sim_bank management command instead.
-            course = get_object_or_404(CourseDefinition, course_code=course_code)
-            logs = []
-            outcome = process_topic(
-                course.course_code, course.course_title, course.level,
-                request.POST.get("topic", ""),
-                force=request.POST.get("force") == "1", log=logs.append,
+            topic = request.POST.get("topic", "")
+            _queue(
+                request, "generate_sim_topic",
+                course_code, topic, request.POST.get("force") == "1",
+                label=f"Sim bank {course_code}: {topic[:60]}",
             )
-            messages.info(request, " ".join(l.strip() for l in logs) or outcome)
         return redirect(f"{list_url}?course_code={course_code}&status={status}")
 
     course_code = request.GET.get("course_code", "")
@@ -3114,55 +2852,6 @@ Never say "As an AI". Stay in character as Rovea."""
     resp["Cache-Control"] = "no-cache"
     resp["X-Accel-Buffering"] = "no"
     return resp
-
-@staff_required
-@require_POST
-def run_topic_split_view(request, slide_id):
-    """Runs (or resumes) the resumable topic split for a slide, then
-    automatically backfills any topics that came out empty. Safe to
-    click multiple times — it's resumable and idempotent."""
-    slide = get_object_or_404(SlideDocument, id=slide_id)
-
-    if not slide.extracted_topics or not slide.extracted_text.strip():
-        messages.warning(request, "Can't split — no extracted topics or text saved for this slide.")
-        return redirect("staff_portal")
-
-    from core.slide_topic_extractor import split_slide_by_extracted_topics, retry_missing_topic_splits
-
-    try:
-        success, count = split_slide_by_extracted_topics(slide)
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        messages.warning(request, f"Topic split failed: {str(e)} — any progress made was saved, click again to resume.")
-        return redirect("staff_portal")
-
-    empty_topics = list(slide.topic_chunks.filter(is_empty=True).values_list("topic_name", flat=True))
-
-    if empty_topics:
-        try:
-            filled, filled_count = retry_missing_topic_splits(slide, topic_names=empty_topics)
-            still_empty = list(slide.topic_chunks.filter(is_empty=True).values_list("topic_name", flat=True))
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            messages.warning(request, f"Split completed ({count} topics) but backfill failed: {str(e)}")
-            return redirect("staff_portal")
-
-        if still_empty:
-            messages.warning(
-                request,
-                f"Split complete — {count} topics saved, but {len(still_empty)} still have no "
-                f"content after backfill: {', '.join(still_empty[:5])}"
-                f"{'...' if len(still_empty) > 5 else ''}. Click 'Run Topic Split' again to retry, "
-                f"or check the source slides for these topics manually."
-            )
-        else:
-            messages.success(request, f"Split complete — all {count} topics have content. Ready to generate lectures.")
-    else:
-        messages.success(request, f"Split complete — all {count} topics have content. Ready to generate lectures.")
-
-    return redirect("staff_portal")
 
 @staff_required
 def staff_preview_lesson_view(request, lesson_id):
@@ -3447,3 +3136,20 @@ def render_lecture_markdown(text):
         html = html.replace(key, val)
 
     return html
+
+@staff_required
+def staff_jobs_view(request):
+    rows = [
+        {
+            "name": t.name,
+            "ok": t.success,
+            "started": t.started,
+            "stopped": t.stopped,
+            "result": str(t.result)[:500],
+        }
+        for t in Task.objects.order_by("-started")[:40]
+    ]
+    return render(request, "core/staff/jobs.html", {
+        "rows": rows,
+        "waiting": OrmQ.objects.count(),   # queued or currently running
+    })

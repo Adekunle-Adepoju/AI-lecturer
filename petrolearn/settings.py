@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.google",
     'engagement',
     'focus_sprint',
+    "django_q",
 ]
 
 # Staff/superuser traffic is ignored by default so sponsor numbers are clean.
@@ -110,14 +111,15 @@ WSGI_APPLICATION = 'petrolearn.wsgi.application'
 
 ASGI_APPLICATION = 'petrolearn.asgi.application'
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")],
+if os.environ.get("REDIS_URL"):
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [os.environ["REDIS_URL"]]},
         },
-    },
-}
+    }
+else:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 
 # Database
@@ -144,6 +146,28 @@ DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 #     }
 # }
 
+# --- Django-Q2: ORM broker, tuned for 512 MB ---
+Q_CLUSTER = {
+    "name": "rovea",
+    "orm": "default",            # use the default Django DB as the broker (no Redis)
+    "workers": 1,                # one process = one Gemini job at a time. Don't raise on 512 MB.
+    "recycle": 5,                # restart the worker after 5 tasks to release leaked memory
+    "max_rss": 180_000,          # KB (~175 MB): recycle the worker if it grows past this
+    "timeout": 600,              # hard-kill a task after 10 min (Gemini takes 30-60s)
+    "retry": 660,                # MUST be greater than timeout, or tasks run twice
+    "max_attempts": 1,           # never auto-rerun: avoids double Gemini quota burn
+    "ack_failures": True,        # failed tasks leave the queue instead of looping
+    "queue_limit": 10,           # cap tasks held in memory by the cluster
+    "bulk": 1,                   # take one task at a time
+    "poll": 2,                   # check the DB every 2s instead of 0.2s (lighter on Supabase)
+    "save_limit": 50,            # keep only the last 50 successful task records
+    "catch_up": False,           # don't replay missed schedules after downtime
+    "cpu_affinity": 1,
+    "label": "Rovea Tasks",
+    "sync": os.getenv("Q_SYNC") == "1",   # set Q_SYNC=1 locally/in tests to run tasks inline
+}
+
+MAX_UPLOAD_MB = 25
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators

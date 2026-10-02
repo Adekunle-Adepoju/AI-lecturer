@@ -184,7 +184,6 @@
       <h3>Review battle questions</h3>
       <p>Approve or retire generated questions — flags likely external citations.</p>
     </a>
-  </div>
 
     <a href="{% url 'engagement:dashboard' %}" class="action-tile">
       <span class="tile-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>
@@ -196,6 +195,13 @@
       <h3>Test question bank</h3>
       <p>Generate, review and approve simulator questions per topic.</p>
     </a>
+    <!-- NEW TILE -->
+    <a href="{% url 'staff_jobs' %}" class="action-tile">
+      <span class="tile-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+      <h3>Background jobs</h3>
+      <p>See which uploads and AI jobs are queued, finished or failed.</p>
+    </a>
+  </div>
   <a href="{% url 'staff_course_code_check' %}" class="diag-link">
     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12a3 3 0 1 1 6 0c0 2-3 2.5-3 4.5M12 20h.01"/><circle cx="12" cy="12" r="9"/></svg>
     Check course code consistency

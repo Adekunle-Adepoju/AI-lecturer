@@ -1,0 +1,102 @@
+{% extends "core/base.html" %}
+{% load tz %}
+{% block title %}Background Jobs — Rovea{% endblock %}
+{% block body_attrs %} data-back-target="{% url 'staff_portal' %}"{% endblock %}
+
+{% block content %}
+<style>
+  #jobsRoot{
+    --bg:#0F1D2B; --bg-alt:#16283A; --surface:#13212F;
+    --ink:#ECEFF3; --ink-soft:#B7C2CB; --ink-faint:#8A97A0;
+    --line:rgba(236,239,243,.14); --heading:#E7EDF3;
+    --amber:#E2A63B; --coral:#D96A45; --green:#4A9D74;
+    --font-display:'Newsreader',serif; --font-body:'Inter',sans-serif;
+    --radius-md:14px; --radius-lg:20px;
+    color-scheme:dark; background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    line-height:1.55; padding:clamp(36px,6vh,64px) clamp(14px,3vw,32px) 70px;
+    border-radius:0 0 var(--radius-lg) var(--radius-lg);
+  }
+  #jobsRoot[data-theme="light"]{
+    --bg:#F1EFE6; --bg-alt:#E7E2D3; --surface:#FBFAF4;
+    --ink:#17212B; --ink-soft:#54626D; --ink-faint:#818D94;
+    --line:rgba(23,33,43,.14); --heading:#0A2E4D; color-scheme:light;
+  }
+  #jobsRoot *{box-sizing:border-box;}
+  #jobsRoot .wrap{max-width:900px;margin-inline:auto;}
+  #jobsRoot h2{font-family:var(--font-display);font-weight:500;color:var(--heading);margin:0 0 6px;font-size:clamp(1.5rem,3vw,2rem);}
+  #jobsRoot .sub{color:var(--ink-soft);font-size:.9rem;margin-bottom:20px;}
+  #jobsRoot .waiting{display:inline-block;background:var(--bg-alt);border:1px solid var(--line);
+    border-radius:999px;padding:6px 14px;font-size:.8rem;font-weight:600;margin-bottom:18px;}
+  #jobsRoot .waiting.busy{color:var(--amber);border-color:rgba(226,166,59,.4);}
+  #jobsRoot .job{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);
+    padding:14px 16px;margin-bottom:10px;}
+  #jobsRoot .job-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  #jobsRoot .job-name{font-weight:600;font-size:.9rem;color:var(--heading);}
+  #jobsRoot .badge{padding:3px 10px;border-radius:999px;font-size:.68rem;font-weight:700;}
+  #jobsRoot .ok{background:rgba(74,157,116,.16);color:var(--green);}
+  #jobsRoot .bad{background:rgba(217,106,69,.14);color:var(--coral);}
+  #jobsRoot .when{margin-left:auto;font-size:.75rem;color:var(--ink-faint);}
+  #jobsRoot .result{margin-top:8px;font-size:.8rem;color:var(--ink-soft);white-space:pre-wrap;word-break:break-word;}
+  #jobsRoot .empty{color:var(--ink-faint);font-size:.9rem;padding:20px 0;}
+  #jobsRoot .refresh{display:inline-block;margin-top:6px;font-size:.8rem;color:var(--ink-soft);
+    border:1px solid var(--line);border-radius:999px;padding:7px 14px;text-decoration:none;}
+</style>
+
+<div class="page-container" id="jobsRoot" data-theme="dark">
+  <div class="wrap">
+    <h2>Background jobs</h2>
+    <p class="sub">Uploads and AI jobs run in the background. If a job failed, fix the cause and click the same button again — finished work is skipped.</p>
+
+    <span class="waiting {% if waiting %}busy{% endif %}">
+      {% if waiting %}{{ waiting }} job{{ waiting|pluralize }} waiting or running — this page refreshes itself{% else %}Nothing waiting{% endif %}
+    </span>
+
+    {% timezone "Africa/Lagos" %}
+    {% for r in rows %}
+    <div class="job">
+      <div class="job-top">
+        <span class="job-name">{{ r.name }}</span>
+        {% if r.ok %}<span class="badge ok">Done</span>{% else %}<span class="badge bad">Failed</span>{% endif %}
+        <span class="when">{{ r.stopped|date:"d M, H:i" }}</span>
+      </div>
+      {% if r.result and r.result != "None" %}
+      <div class="result">{{ r.result }}</div>
+      {% endif %}
+    </div>
+    {% empty %}
+    <p class="empty">No finished jobs yet.</p>
+    {% endfor %}
+    {% endtimezone %}
+
+    <a href="{% url 'staff_jobs' %}" class="refresh">Refresh</a>
+  </div>
+</div>
+
+{% if waiting %}
+<script>setTimeout(function(){ location.reload(); }, 8000);</script>
+{% endif %}
+
+<script>
+  // Follow the theme set by base.html's Appearance toggle (same logic as the portal page).
+  (function(){
+    const root = document.getElementById('jobsRoot');
+    if(!root) return;
+    function detectTheme(){
+      const html = document.documentElement, body = document.body;
+      const attr = html.getAttribute('data-theme') || (body && body.getAttribute('data-theme'));
+      if (attr) return attr;
+      if (html.classList.contains('dark') || (body && body.classList.contains('dark'))) return 'dark';
+      if (html.classList.contains('light') || (body && body.classList.contains('light'))) return 'light';
+      try{
+        const stored = localStorage.getItem('theme') || localStorage.getItem('appearance') || localStorage.getItem('rovea-theme');
+        if (stored) return stored;
+      }catch(e){}
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    function sync(){ root.setAttribute('data-theme', detectTheme()); }
+    sync();
+    new MutationObserver(sync).observe(document.documentElement, { attributes:true, attributeFilter:['class','data-theme'] });
+    if (document.body) new MutationObserver(sync).observe(document.body, { attributes:true, attributeFilter:['class','data-theme'] });
+  })();
+</script>
+{% endblock %}
