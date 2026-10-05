@@ -35,9 +35,10 @@ from django_q.models import Task, OrmQ
 from .forms import SignupForm, OnboardingForm, ProfileEditForm, ElectiveSelectionForm
 from .models import (
     StudentProfile, TimetableEntry, Session, TopicSession, ChatMessage,
-    SlideDocument, CourseOutline, COURSES, COURSE_OUTLINES, CourseDefinition,
+    SlideDocument, CourseOutline, CourseDefinition,
     PastQuestion, SimulatorTest, PreGeneratedLesson, SlideTopicChunk, SimulatorQuestion, SimulatorBankTopic,
 )
+from .outline_generation import get_generation_source, NO_SOURCE_MESSAGE
 from .prompt import (
     SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, QUIZ_GENERATION_PROMPT,
     LECTURE_PROMPT, LECTURE_VERIFIER_PROMPT,
@@ -305,25 +306,6 @@ def _generate_timetable(profile):
 
     all_courses = compulsory + electives
 
-    # Fall back to hardcoded COURSES if no CourseDefinitions exist yet
-    if not all_courses:
-        courses = COURSES.get(profile.level, {}).get(profile.semester, [])
-        entries = []
-        for i, course in enumerate(courses):
-            day = days[i % len(days)]
-            time = "09:00" if i < len(days) else "11:00"
-            entries.append(TimetableEntry(
-                student=profile,
-                course_code=course["code"],
-                course_title=course["title"],
-                day=day,
-                time=time,
-                week_number=1,
-                total_weeks=10,
-            ))
-        TimetableEntry.objects.bulk_create(entries)
-        return
-
     entries = []
     for i, course in enumerate(all_courses):
         day = days[i % len(days)]
@@ -393,8 +375,10 @@ def dashboard_view(request):
     todays_courses = [
         e for e in scheduled_today
         if not e.is_completed and e.course_code not in done_today
+        and e.week_number != TEST_WEEK
     ]
     other_courses = [e for e in entries if e not in todays_courses and not e.is_completed]
+    pending_tests, test_heads_up = _test_context(profile, entries)
     is_rest_day = not scheduled_today
 
     incomplete_sessions = {
@@ -420,6 +404,8 @@ def dashboard_view(request):
         "all_done": all_done,
         "is_rest_day": is_rest_day,
         "other_courses": other_courses,
+        "pending_tests": pending_tests,
+        "test_heads_up": test_heads_up,
     })
 
 
@@ -481,6 +467,42 @@ def _streak_continues(profile, last, today):
     entries = _ensure_study_days(profile)
     return not any(_courses_on(entries, last + timedelta(days=i)) for i in range(1, gap))
 
+# ─── Test week: every course holds its own test when it reaches week 7 ───────
+
+HEADS_UP_WEEKS = (4, 5, 6)
+
+
+def _ready_test_topics(course_code, level):
+    """Topics from weeks 1-6 that have approved questions."""
+    ready = {a["topic"] for a in get_topic_availability(course_code, level) if a["ready"]}
+    return [
+        t for r in range(1, TEST_WEEK)
+        for t in _get_topics_for_week(course_code, level, r) if t in ready
+    ]
+
+
+def _test_context(profile, entries):
+    """pending: courses sitting at week 7 (test waiting).
+    heads_up: courses on weeks 4-6 (test coming)."""
+    pending = []
+    for e in entries:
+        if e.week_number == TEST_WEEK and not e.is_completed:
+            level = _course_level(e.course_code, profile)
+            pending.append({
+                "entry": e,
+                "ready": bool(_ready_test_topics(e.course_code, level)),
+                "in_progress": SimulatorTest.objects.filter(
+                    student=profile, course_code=e.course_code, mode="auto",
+                    week_number=TEST_WEEK, status="in_progress",
+                ).exists(),
+            })
+    heads_up = [
+        {"entry": e, "lessons_left": TEST_WEEK - e.week_number}
+        for e in entries
+        if e.week_number in HEADS_UP_WEEKS and not e.is_completed
+    ]
+    return pending, heads_up
+
 TOTAL_TEACHING_WEEKS = 15  # fixed course length in teaching rounds
 
 
@@ -532,19 +554,15 @@ def _get_total_topics_for_course(course_code, level):
         # still catches it downstream, same as today.
         return list(slide.extracted_topics)
 
-    flat = []
-    for week in sorted(COURSE_OUTLINES.get(course_code, {}).keys()):
-        flat.extend(COURSE_OUTLINES[course_code][week])
-    if flat:
-        return flat
 
-    return ["Core Concepts", "Key Applications", "Problem Solving"]
+    return []
 
 def _get_course_progress_pct(profile, course_code):
     """Percent of the course's total topic list the student has completed,
     based on real TopicSession completion — not session count or week
     number, so it reflects actual topics finished vs the full syllabus."""
-    total_topics = len(_get_total_topics_for_course(course_code, profile.level))
+    level = _course_level(course_code, profile)
+    total_topics = len(_get_total_topics_for_course(course_code, level))
     if not total_topics:
         return 0
     completed = TopicSession.objects.filter(
@@ -939,6 +957,30 @@ def _parse_quiz_json(text):
 
 # ─── Session ───────────────────────────────────────────────────────────────────
 
+def _course_overview(profile, course_code, today_topics=()):
+    """The whole course split into covered / still-to-cover for this student."""
+    level = _course_level(course_code, profile)
+    all_topics = _get_total_topics_for_course(course_code, level)
+    done_names = set(
+        TopicSession.objects.filter(
+            session__student=profile,
+            session__course_code=course_code,
+            is_complete=True,
+        ).values_list("topic_name", flat=True)
+    )
+    covered, remaining = [], []
+    for number, name in enumerate(all_topics, start=1):
+        item = {"number": number, "name": name, "is_today": name in today_topics}
+        (covered if name in done_names else remaining).append(item)
+    total = len(all_topics)
+    return {
+        "covered": covered,
+        "remaining": remaining,
+        "total": total,
+        "done_count": len(covered),
+        "percent": round(100 * len(covered) / total) if total else 0,
+    }
+
 @login_required
 def session_view(request, course_code):
     if not hasattr(request.user, "profile"):
@@ -948,6 +990,7 @@ def session_view(request, course_code):
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
     if entry.week_number == TEST_WEEK:
         return redirect(f"{reverse('simulator_setup', kwargs={'mode': 'auto'})}?course_code={course_code}")
+    level = _course_level(course_code, profile)
 
     if request.method == "GET":
         existing_session = Session.objects.filter(
@@ -957,8 +1000,11 @@ def session_view(request, course_code):
         if existing_session:
             return _render_chat_session(request, entry, profile, existing_session)
 
-        topics = _get_topics_for_week(course_code, profile.level, entry.week_number)
+        topics = _get_topics_for_week(course_code, level, entry.week_number)
         if not topics:
+            if not _get_total_topics_for_course(course_code, level):
+                messages.info(request, f"Lessons for {entry.course_code} aren't ready yet. Check back soon.")
+                return redirect("dashboard")
             entry.is_completed = True
             entry.save(update_fields=["is_completed"])
             messages.success(request, f"You've completed all topics for {entry.course_code}! 🎉")
@@ -968,6 +1014,7 @@ def session_view(request, course_code):
             "entry": entry,
             "chat_mode": False,
             "upcoming_topics": topics,
+            "overview": _course_overview(profile, course_code, topics),
         })
 
     action = request.POST.get("action")
@@ -978,11 +1025,17 @@ def session_view(request, course_code):
             week_number=entry.week_number, is_complete=False,
         ).first()
         if not existing_session:
-            topics = _get_topics_for_week(course_code, profile.level, entry.week_number)
+            topics = _get_topics_for_week(course_code, level, entry.week_number)
             existing_session = Session.objects.create(
                 student=profile, course_code=course_code, course_title=entry.course_title,
                 week_number=entry.week_number, topics=topics, current_topic_index=0,
             )
+            if entry.week_number in HEADS_UP_WEEKS:
+                messages.info(
+                    request,
+                    f"Heads up: your {course_code} test comes at week 7 and covers weeks 1–6. "
+                    f"You can't move on to week 8 until you've taken it.",
+                )
         return redirect("session", course_code=course_code)
 
     if action == "show_lecture":
@@ -998,39 +1051,32 @@ def course_outline_view(request, course_code):
     profile = request.user.profile
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
 
-    week_topics = COURSE_OUTLINES.get(course_code, {})
-
+    level = _course_level(course_code, profile)
     sessions = Session.objects.filter(student=profile, course_code=course_code)
     session_by_week = {s.week_number: s for s in sessions}
 
     weeks_display = []
-    for week_number in sorted(week_topics.keys()):
-        topics = week_topics[week_number]
+    for week_number in range(1, TOTAL_TEACHING_WEEKS + 1):
+        topics = _get_topics_for_week(course_code, level, week_number)
+        if not topics:
+            continue
         session = session_by_week.get(week_number)
         completed_indices = set()
         if session:
             completed_indices = set(
                 session.topic_sessions.filter(is_complete=True).values_list("topic_index", flat=True)
             )
-        topics_display = [
-            {"name": name, "is_complete": i in completed_indices}
-            for i, name in enumerate(topics)
-        ]
         weeks_display.append({
             "week_number": week_number,
-            "topics": topics_display,
+            "topics": [{"name": n, "is_complete": i in completed_indices} for i, n in enumerate(topics)],
             "all_complete": len(completed_indices) == len(topics),
         })
-
     return render(request, "core/course_outline.html", {
         "entry": entry,
         "course_code": course_code,
         "course_title": entry.course_title,
         "weeks": weeks_display,
     })
-
-    
-
 
 def _teach_topic(request, session, entry, profile, topic_name, topic_index):
     slide_text = ""
@@ -1264,6 +1310,8 @@ def answer_view(request):
     profile = request.user.profile
 
     topic_session = get_object_or_404(TopicSession, id=topic_session_id, session__student=profile)
+    if topic_session.is_complete:
+        return redirect("quiz_result", topic_session_id=topic_session.id)
     session = topic_session.session
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=session.course_code)
 
@@ -1284,6 +1332,7 @@ def answer_view(request):
         else:
             profile.streak = 1
     profile.last_session_date = today
+    profile.xp += xp
     profile.save()
 
     session.xp_earned += xp
@@ -1304,14 +1353,17 @@ def answer_view(request):
         session.current_topic_index = total_topics
         session.completed_at = timezone.now()
         session.save()
-        entry.week_number += 1
-        level = _course_level(session.course_code, profile)
-        # Complete only when there is nothing left to teach (and it isn't test week)
-        entry.is_completed = (
-            entry.week_number != TEST_WEEK
-            and not _get_topics_for_week(session.course_code, level, entry.week_number)
-        )
-        entry.save()
+        advanced = TimetableEntry.objects.filter(
+            pk=entry.pk, week_number=session.week_number
+        ).update(week_number=session.week_number + 1)
+        if advanced:
+            entry.refresh_from_db()
+            level = _course_level(session.course_code, profile)
+            entry.is_completed = (
+                entry.week_number != TEST_WEEK
+                and not _get_topics_for_week(session.course_code, level, entry.week_number)
+            )
+            entry.save(update_fields=["is_completed"])
 
     return redirect("quiz_result", topic_session_id=topic_session.id)   # ← was: return render(request, "core/result.html", {...})
 
@@ -1515,6 +1567,9 @@ def restart_session_view(request, course_code, week_number):
 
     profile = request.user.profile
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
+    if week_number < 1 or week_number > entry.week_number or week_number == TEST_WEEK:
+        messages.error(request, "You can only restart a week you have already reached.")
+        return redirect("dashboard")
 
     session = Session.objects.filter(
         student=profile,
@@ -1630,9 +1685,12 @@ def _bypasses_restrictions(request):
     profile = getattr(request.user, "profile", None)
     return bool(profile and profile.is_staff_member)
 
-def _queue(request, func_name, *args, label):
+LONG_JOB = 7200   # seconds a slide job may run (2 hours)
+
+def _queue(request, func_name, *args, label, timeout=None):
     """Put a job in the queue and tell staff it was queued."""
-    async_task(f"core.tasks.{func_name}", *args, task_name=label)
+    options = {"timeout": timeout} if timeout else {}
+    async_task(f"core.tasks.{func_name}", *args, task_name=label, **options)
     messages.success(request, f"Queued: {label}. See progress on the Background Jobs page.")
 
 @staff_required
@@ -1681,11 +1739,11 @@ def staff_upload_slide_view(request):
                 temp.level = "999"
                 temp.save()
                 _queue(request, "parse_slide_upload", temp.id, existing_slide.id,
-                       label=f"Append slide to {course_code}")
+                       label=f"Append slide to {course_code}", timeout=LONG_JOB)
             else:
                 slide = form.save()
                 _queue(request, "parse_slide_upload", slide.id,
-                       label=f"Parse slide {course_code}")
+                       label=f"Parse slide {course_code}", timeout=LONG_JOB)
             return redirect("staff_portal")
     else:
         form = SlideUploadForm()
@@ -1842,7 +1900,7 @@ def retry_slide_topics_view(request, slide_id):
         messages.warning(request, "Can't retry — no extracted text saved for this slide.")
         return redirect("staff_portal")
     _queue(request, "retry_topic_extraction", slide.id,
-           label=f"Retry topics {slide.course_code}")
+           label=f"Retry topics {slide.course_code}", timeout=LONG_JOB)
     return redirect("staff_portal")
 
 
@@ -1853,8 +1911,7 @@ def retry_slide_cleanup_view(request, slide_id):
     if not slide.extracted_text:
         messages.warning(request, "Can't retry — no extracted text saved for this slide.")
         return redirect("staff_portal")
-    _queue(request, "retry_cleanup", slide.id,
-           label=f"Retry cleanup {slide.course_code}")
+    _queue(request, "retry_cleanup", slide.id, label=f"Retry cleanup {slide.course_code}", timeout=LONG_JOB)
     return redirect("staff_portal")
 
 
@@ -1866,7 +1923,7 @@ def retry_slide_topic_split_view(request, slide_id):
         messages.warning(request, "Can't split by topic — no week-level chunks saved for this slide.")
         return redirect("staff_portal")
     _queue(request, "split_weeks_by_topic", slide.id,
-           label=f"Topic split (weeks) {slide.course_code}")
+           label=f"Topic split (weeks) {slide.course_code}", timeout=LONG_JOB)
     return redirect("staff_portal")
 
 
@@ -1878,7 +1935,18 @@ def run_topic_split_view(request, slide_id):
         messages.warning(request, "Can't split — no extracted topics or text saved for this slide.")
         return redirect("staff_portal")
     _queue(request, "run_topic_split", slide.id,
-           label=f"Run topic split {slide.course_code}")
+           label=f"Run topic split {slide.course_code}", timeout=LONG_JOB)
+    return redirect("staff_portal")
+
+@staff_required
+@require_POST
+def retry_slide_diagrams_view(request, slide_id):
+    slide = get_object_or_404(SlideDocument, id=slide_id)
+    if not slide.extracted_text:
+        messages.warning(request, "Can't retry — no extracted text saved for this slide.")
+        return redirect("staff_portal")
+    _queue(request, "retry_diagrams", slide.id,
+           label=f"Retry diagrams {slide.course_code}", timeout=LONG_JOB)
     return redirect("staff_portal")
 
 @staff_required
@@ -2002,45 +2070,52 @@ def _render_reference_table_lecture(topic_name, chunk_text):
         f"{chunk_text.strip()}"
     )
 
+GENERATION_MODELS = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"]
+
+
 def _call_generation_model(contents, system_instruction, max_output_tokens, temperature, label):
-    """Same retry behaviour as _generate_topic_lecture, but with temperature control."""
+    """Retries transient errors, and falls back to the next model when a model's quota is gone."""
     last_error = None
-    for attempt in range(3):
-        try:
-            response = generation_client.models.generate_content(
-                model="gemini-3.6-flash",
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    max_output_tokens=max_output_tokens,
-                    temperature=temperature,
-                ),
-            )
-            text = response.text
-            if not text or not text.strip():
-                raise ValueError("Empty response")
-            hit_limit = False
+    for model in GENERATION_MODELS:
+        for attempt in range(3):
             try:
-                hit_limit = "MAX_TOKENS" in str(response.candidates[0].finish_reason)
-            except Exception:
-                pass
-            return text, hit_limit
-        except Exception as e:
-            last_error = e
-            s = str(e)
-            if "429" in s or "RESOURCE_EXHAUSTED" in s:
-                print(f"{label}: 429 (attempt {attempt + 1}/3) — sleeping 20s...")
-                time.sleep(20)
-                continue
-            transient = any(m in s for m in (
-                "503", "UNAVAILABLE", "timeout", "Timeout",
-                "ConnectionError", "RemoteDisconnected",
-            ))
-            if transient and attempt < 2:
-                print(f"{label}: transient error (attempt {attempt + 1}/3) — retrying in 10s...")
-                time.sleep(10)
-                continue
-            break
+                response = generation_client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        max_output_tokens=max_output_tokens,
+                        temperature=temperature,
+                    ),
+                )
+                text = response.text
+                if not text or not text.strip():
+                    raise ValueError("Empty response")
+                hit_limit = False
+                try:
+                    hit_limit = "MAX_TOKENS" in str(response.candidates[0].finish_reason)
+                except Exception:
+                    pass
+                return text, hit_limit
+            except Exception as e:
+                last_error = e
+                s = str(e)
+                if "429" in s or "RESOURCE_EXHAUSTED" in s:
+                    if "PerDay" in s:
+                        print(f"{label}: {model} daily quota used up — trying next model.")
+                        break
+                    print(f"{label}: {model} 429 (attempt {attempt + 1}/3) — sleeping 20s...")
+                    time.sleep(20)
+                    continue
+                transient = any(m in s for m in (
+                    "503", "UNAVAILABLE", "timeout", "Timeout",
+                    "ConnectionError", "RemoteDisconnected",
+                ))
+                if transient and attempt < 2:
+                    print(f"{label}: {model} transient error (attempt {attempt + 1}/3) — retrying in 10s...")
+                    time.sleep(10)
+                    continue
+                break
     raise RuntimeError(f"{label} failed: {last_error}")
 
 
@@ -2166,11 +2241,16 @@ def staff_pregeneerate_lessons_view(request):
     if request.method == "POST":
         course = get_object_or_404(CourseDefinition, id=request.POST.get("course_id"))
         week_number = int(request.POST.get("week_number", 1))
-        topics = _get_topics_for_week(course.course_code, course.level, week_number)
 
-        if not topics:
-            messages.error(request, f"No topics found for {course.course_code} Week {week_number}. Upload a course outline first.")
+        if get_generation_source(course) is None:
+            messages.error(request, NO_SOURCE_MESSAGE)
             return redirect("staff_pregenerate_lessons")
+
+        topics = _get_topics_for_week(course.course_code, course.level, week_number)
+        if not topics:
+            messages.error(request, f"No topics are scheduled for {course.course_code} Week {week_number}.")
+            return redirect("staff_pregenerate_lessons")
+
 
         for i, topic in enumerate(topics):
             async_task(
@@ -2237,7 +2317,9 @@ def staff_bulk_delete_lessons_view(request):
 def staff_bulk_publish_lessons_view(request):
     course_id = request.POST.get("course_id")
     course = get_object_or_404(CourseDefinition, id=course_id)
-    updated = PreGeneratedLesson.objects.filter(course=course, is_published=False).update(is_published=True)
+    updated = PreGeneratedLesson.objects.filter(
+        course=course, is_published=False,
+    ).exclude(source_type="outline").update(is_published=True)
     messages.success(request, f"Published {updated} lesson(s) for {course.course_code}.")
     return redirect(f"{reverse('staff_pregenerate_lessons')}?filter_course={course_id}")
 
@@ -2324,27 +2406,17 @@ def simulator_home_view(request):
         return redirect("onboarding")
 
     profile = request.user.profile
-    timetable = profile.timetable.all()
-
-    # Check which courses have a pending auto test (week 7, not yet done)
-    auto_test_courses = []
-    for entry in timetable:
-        if entry.week_number == TEST_WEEK:
-            already_done = SimulatorTest.objects.filter(
-                student=profile,
-                course_code=entry.course_code,
-                mode="auto",
-                week_number=TEST_WEEK,
-                status="complete",
-            ).exists()
-            auto_test_courses.append({
-                "entry": entry,
-                "done": already_done,
-            })
+    entries = list(profile.timetable.order_by("course_code"))
+    pending_tests, test_heads_up = _test_context(profile, entries)
+    past_auto_tests = SimulatorTest.objects.filter(
+        student=profile, mode="auto", status="complete",
+    )[:6]
 
     return render(request, "core/simulator/home.html", {
         "profile": profile,
-        "auto_test_courses": auto_test_courses,
+        "pending_tests": pending_tests,
+        "test_heads_up": test_heads_up,
+        "past_auto_tests": past_auto_tests,
     })
 
 def _start_auto_test(request, profile):
@@ -2353,7 +2425,7 @@ def _start_auto_test(request, profile):
         student=profile, course_code=course_code, week_number=TEST_WEEK
     ).first()
     if entry is None:
-        messages.info(request, "That course isn't at its test week yet.")
+        messages.info(request, "That course isn't at its test yet.")
         return redirect("simulator_home")
 
     existing = SimulatorTest.objects.filter(
@@ -2364,20 +2436,18 @@ def _start_auto_test(request, profile):
         return redirect("simulator_test", test_id=existing.id)
 
     level = _course_level(course_code, profile)
-    ready = {a["topic"] for a in get_topic_availability(course_code, level) if a["ready"]}
-    topics = [
-        t for r in range(1, TEST_WEEK)
-        for t in _get_topics_for_week(course_code, level, r) if t in ready
-    ]
+    topics = _ready_test_topics(course_code, level)
     try:
         if not topics:
-            raise NotEnoughQuestions("No ready questions for weeks 1–6.")
+            raise NotEnoughQuestions("No approved questions for weeks 1–6 yet.")
         questions, fmt = draw_test(profile, course_code, level, topics, "mixed")
     except NotEnoughQuestions:
-        entry.week_number = TEST_WEEK + 1          # never trap a student on week 7
-        entry.save(update_fields=["week_number"])
-        messages.info(request, "The test for this course isn't ready yet, so you've moved on to week 8.")
-        return redirect("session", course_code=course_code)
+        messages.warning(
+            request,
+            f"The {course_code} test is still being prepared. Check back soon. "
+            f"You'll move on to week 8 once you've taken it.",
+        )
+        return redirect("simulator_home")
 
     test = SimulatorTest.objects.create(
         student=profile, mode="auto", question_format=fmt, week_number=TEST_WEEK,
@@ -3234,6 +3304,7 @@ def staff_jobs_view(request):
             "started": t.started,
             "stopped": t.stopped,
             "result": str(t.result)[:500],
+            "warn": str(t.result).startswith("WARNING"),
         }
         for t in Task.objects.order_by("-started")[:40]
     ]

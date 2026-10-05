@@ -148,19 +148,19 @@ DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 
 # --- Django-Q2: ORM broker, tuned for 512 MB ---
 Q_CLUSTER = {
-    "name": "rovea",
+    "name": os.environ.get("Q_CLUSTER_NAME", "rovea"),
     "orm": "default",            # use the default Django DB as the broker (no Redis)
     "workers": 1,                # one process = one Gemini job at a time. Don't raise on 512 MB.
     "recycle": 5,                # restart the worker after 5 tasks to release leaked memory
     "max_rss": 180_000,          # KB (~175 MB): recycle the worker if it grows past this
-    "timeout": 1800,              # hard-kill a task after 10 min (Gemini takes 30-60s)
-    "retry": 2000,                # MUST be greater than timeout, or tasks run twice
+    "timeout": 7200,              # hard-kill a task after 10 min (Gemini takes 30-60s)
+    "retry": 7500,                # MUST be greater than timeout, or tasks run twice
     "max_attempts": 1,           # never auto-rerun: avoids double Gemini quota burn
     "ack_failures": True,        # failed tasks leave the queue instead of looping
     "queue_limit": 10,           # cap tasks held in memory by the cluster
     "bulk": 1,                   # take one task at a time
     "poll": 2,                   # check the DB every 2s instead of 0.2s (lighter on Supabase)
-    "save_limit": 50,            # keep only the last 50 successful task records
+    "save_limit": 100,            # keep only the last 100 successful task records
     "catch_up": False,           # don't replay missed schedules after downtime
     "cpu_affinity": 1,
     "label": "Rovea Tasks",

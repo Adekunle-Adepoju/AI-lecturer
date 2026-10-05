@@ -97,6 +97,30 @@
   #sessionRoot .topic-brief-list li:first-child .topic-brief-index{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
   #sessionRoot .brief-note{margin-top:18px;color:var(--ink-soft);font-size:.86rem;padding-top:16px;border-top:1px solid var(--line-soft);}
   #sessionRoot .start-form{max-width:var(--content-max);margin:0 auto;}
+    /* ---------- course overview (covered / still to cover) ---------- */
+  #sessionRoot .ov-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px;}
+  #sessionRoot .ov-head h3{margin:0;}
+  #sessionRoot .ov-count{font-size:.82rem;color:var(--ink-soft);}
+  #sessionRoot .ov-section{margin:20px 0 10px;font-family:var(--font-body);font-size:.78rem;font-weight:700;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);}
+  #sessionRoot .ov-section.is-done{color:var(--green);}
+  #sessionRoot .ov-section.is-todo{color:var(--coral);}
+  #sessionRoot .course-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}
+  #sessionRoot .course-list li{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:var(--radius-md);
+    background:var(--bg-alt);border:1px solid var(--line);font-size:.92rem;color:var(--ink);}
+  #sessionRoot .course-list .ci{width:22px;height:22px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+    font-size:.7rem;font-weight:600;margin-top:1px;border:1px solid var(--line);color:var(--ink-soft);}
+  #sessionRoot .course-list li.done{border-color:var(--green);
+    box-shadow:0 0 14px rgba(26,158,122,.5),inset 0 0 8px rgba(26,158,122,.12);
+    box-shadow:0 0 14px color-mix(in srgb,var(--green) 55%,transparent),inset 0 0 8px color-mix(in srgb,var(--green) 14%,transparent);}
+  #sessionRoot .course-list li.done .ci{border-color:var(--green);color:var(--green);}
+  #sessionRoot .course-list li.todo{border-color:var(--coral);
+    box-shadow:0 0 14px rgba(239,122,99,.5),inset 0 0 8px rgba(239,122,99,.12);
+    box-shadow:0 0 14px color-mix(in srgb,var(--coral) 55%,transparent),inset 0 0 8px color-mix(in srgb,var(--coral) 14%,transparent);}
+  #sessionRoot .course-list li.todo .ci{border-color:var(--coral);color:var(--coral);}
+  #sessionRoot .course-list .today-tag{margin-left:auto;flex:none;font-size:.68rem;font-weight:600;padding:3px 9px;
+    border-radius:999px;background:var(--amber-glow);border:1px solid var(--border-accent);color:var(--amber);white-space:nowrap;}
+  #sessionRoot .ov-empty{font-size:.88rem;color:var(--ink-soft);margin:0;}
 
   /* ---------- buttons ---------- */
   #sessionRoot .btn{
@@ -309,12 +333,39 @@
   {% if not chat_mode %}
     <!-- ─── BRIEF / OVERVIEW PAGE ─────────────────────────────────────── -->
     <div class="brief-card">
-      <h3>This week you'll cover:</h3>
-      <ol class="topic-brief-list">
-        {% for topic in upcoming_topics %}
-          <li><span class="topic-brief-index">{{ forloop.counter }}</span><span>{{ topic }}</span></li>
-        {% endfor %}
-      </ol>
+      <div class="ov-head">
+        <h3>Your course so far</h3>
+        <span class="ov-count">{{ overview.done_count }} of {{ overview.total }} topics · {{ overview.percent }}%</span>
+      </div>
+      <div class="prog-bar" style="max-width:none;margin:0;">
+        <div class="prog-fill" style="width: {{ overview.percent }}%"></div>
+      </div>
+
+      <div class="ov-section is-done">Covered ({{ overview.covered|length }})</div>
+      {% if overview.covered %}
+        <ul class="course-list">
+          {% for t in overview.covered %}
+            <li class="done"><span class="ci">{{ t.number }}</span><span>{{ t.name }}</span></li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="ov-empty">Nothing covered yet. You're about to start.</p>
+      {% endif %}
+
+      <div class="ov-section is-todo">Still to cover ({{ overview.remaining|length }})</div>
+      {% if overview.remaining %}
+        <ul class="course-list">
+          {% for t in overview.remaining %}
+            <li class="todo">
+              <span class="ci">{{ t.number }}</span><span>{{ t.name }}</span>
+              {% if t.is_today %}<span class="today-tag">Today</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="ov-empty">Every topic is covered.</p>
+      {% endif %}
+
       <p class="brief-note">
         Each topic is taught step by step in a live chat with Rovea AI — you'll check in as you go, and there's a short quiz after each one.
       </p>

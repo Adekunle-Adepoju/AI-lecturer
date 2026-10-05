@@ -5,6 +5,7 @@ from google import genai
 from google.genai import types
 from django.conf import settings
 import math
+import os
 
 from .models import SlideDocument, SlideExtractionChunk, SlideTopicChunk, CourseOutline
 from .models import SlideTopicSplitChunk
@@ -161,12 +162,12 @@ def _get_cleanup_client():
 DEFAULT_MODEL_FALLBACK_CHAIN = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"]
 
 
-def _call_gemini_with_retry(client, model, contents, config, course_code, chunk_label, max_retries=3, model_fallback_chain=None):
-    """Calls Gemini with 429-aware retry. If a model is exhausted (all
-    retries fail with 429/503), automatically moves to the next model in
-    model_fallback_chain and resumes retrying there — instead of giving
-    up entirely. Cycles through the whole chain once; only returns None
-    if EVERY model in the chain fails."""
+DIAGRAM_REPEAT_LIMIT = 4   # a picture shown on this many pages is template decoration
+DIAGRAM_FAIL_LIMIT = 3     # stop asking Gemini after this many pages fail in a row
+
+
+def _call_gemini_with_retry(client, model, contents, config, course_code, chunk_label,
+                            max_retries=3, model_fallback_chain=None, wait_seconds=20):
     chain = model_fallback_chain or DEFAULT_MODEL_FALLBACK_CHAIN
 
     if model in chain:
@@ -179,11 +180,10 @@ def _call_gemini_with_retry(client, model, contents, config, course_code, chunk_
         is_last_model = (model_idx == len(models_to_try) - 1)
 
         for attempt in range(max_retries):
+            is_last_attempt = (attempt == max_retries - 1)
             try:
                 response = client.models.generate_content(
-                    model=current_model,
-                    contents=contents,
-                    config=config,
+                    model=current_model, contents=contents, config=config,
                 )
                 if model_idx > 0:
                     print(f"[{course_code}] {chunk_label}: succeeded on fallback model {current_model}.")
@@ -194,12 +194,17 @@ def _call_gemini_with_retry(client, model, contents, config, course_code, chunk_
                 is_unavailable = "503" in error_str or "UNAVAILABLE" in error_str
 
                 if is_rate_limit or is_unavailable:
-                    print(f"[{course_code}] {chunk_label}: {current_model} — 429/503 (attempt {attempt + 1}/{max_retries}) — sleeping 20s...")
-                    time.sleep(20)
+                    if is_last_attempt:
+                        # Waiting now would be pointless: we are about to give up on
+                        # this model (and try the next one straight away).
+                        print(f"[{course_code}] {chunk_label}: {current_model} — 429/503 (attempt {attempt + 1}/{max_retries}) — giving up on this model.")
+                        break
+                    print(f"[{course_code}] {chunk_label}: {current_model} — 429/503 (attempt {attempt + 1}/{max_retries}) — sleeping {wait_seconds}s...")
+                    time.sleep(wait_seconds)
                     continue
                 else:
                     print(f"[{course_code}] {chunk_label}: {current_model} — non-rate-limit error ({e}) — attempt {attempt + 1}/{max_retries}")
-                    if attempt < max_retries - 1:
+                    if not is_last_attempt:
                         time.sleep(3)
                         continue
                     break
@@ -273,7 +278,7 @@ def extract_topics_for_slide_resumable(slide):
                     "Do NOT return markdown, explanation, or any text outside the JSON array. "
                     "Example: [\"Introduction to Fluid Flow\", \"Darcy's Law\", \"Permeability Measurement\"]"
                 ),
-                max_output_tokens=2000,
+                max_output_tokens=8000,
             ),
             course_code=slide.course_code,
             chunk_label=chunk_label,
@@ -437,21 +442,38 @@ def _extract_tables_as_markdown(page):
 
     return "\n\n".join(blocks)
 
-def _describe_page_diagrams(fitz_page, client, course_code, page_number):
-    """Return one '[DIAGRAM: ...]' line for pages with a large picture, else ''."""
-    try:
-        page_area = fitz_page.rect.width * fitz_page.rect.height
-        big = [
-            i for i in fitz_page.get_image_info()
-            if 0.08 * page_area
-               < (i["bbox"][2] - i["bbox"][0]) * (i["bbox"][3] - i["bbox"][1])
-               < 0.85 * page_area
-        ]
-    except Exception:
-        return ""
-    if not big:
-        return ""
+def _diagram_candidate_pages(fdoc):
+    """1-based numbers of pages that carry a REAL picture. A picture that
+    repeats on DIAGRAM_REPEAT_LIMIT or more pages is the slide template's
+    background/logo, so it is ignored (it used to cost one Gemini call per page)."""
+    per_page, seen = [], {}
+    for page in fdoc:
+        try:
+            infos = page.get_image_info(hashes=True)
+        except Exception:
+            infos = []
+        per_page.append((page.rect.width * page.rect.height, infos))
+        for d in {im.get("digest") for im in infos if im.get("digest")}:
+            seen[d] = seen.get(d, 0) + 1
 
+    result = []
+    for number, (area, infos) in enumerate(per_page, start=1):
+        for im in infos:
+            d = im.get("digest")
+            if d and seen.get(d, 0) >= DIAGRAM_REPEAT_LIMIT:
+                continue
+            b = im["bbox"]
+            share = ((b[2] - b[0]) * (b[3] - b[1])) / area if area else 0
+            if 0.08 < share < 0.85:
+                result.append(number)
+                break
+    return result
+
+
+def _describe_page_diagram(fitz_page, client, course_code, page_number):
+    """Returns (line, failed).
+    line   = '[DIAGRAM: ...]', or '' when the picture is only decoration.
+    failed = True only when Gemini could not be reached on ANY model."""
     pix = fitz_page.get_pixmap(dpi=90)
     img_bytes = pix.tobytes("jpeg")
     pix = None  # free the pixel buffer right away
@@ -468,14 +490,114 @@ def _describe_page_diagrams(fitz_page, client, course_code, page_number):
         client=client,
         model="gemini-3.6-flash",
         contents=[types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"), prompt],
-        config=types.GenerateContentConfig(max_output_tokens=400),
+        config=types.GenerateContentConfig(max_output_tokens=2000),
         course_code=course_code,
         chunk_label=f"Diagram page {page_number}",
+        max_retries=2,   # and now the full model fallback chain, like every other step
     )
-    reply = " ".join((reply or "").split())
-    if reply.startswith("[DIAGRAM:") and reply.endswith("]"):
-        return reply
-    return ""
+    if reply is None:
+        return "", True
+    reply = " ".join(reply.split())
+    a, b = reply.find("[DIAGRAM:"), reply.rfind("]")
+    if a != -1 and b > a:
+        return reply[a:b + 1], False
+    return "", False
+
+
+def _page_numbers(text):
+    return [int(n) for n in PAGE_MARKER_RE.findall(text or "")]
+
+
+def _pages_with_diagram_line(text):
+    text = text or ""
+    markers = list(PAGE_MARKER_RE.finditer(text))
+    have = set()
+    for i, m in enumerate(markers):
+        end = markers[i + 1].start() if i + 1 < len(markers) else len(text)
+        if "[DIAGRAM:" in text[m.end():end]:
+            have.add(int(m.group(1)))
+    return have
+
+
+def _insert_diagram_line(text, page_number, line):
+    """Put `line` at the end of that page's block (or add the block in page order)."""
+    text = text or ""
+    markers = list(PAGE_MARKER_RE.finditer(text))
+    for i, m in enumerate(markers):
+        if int(m.group(1)) == page_number:
+            end = markers[i + 1].start() if i + 1 < len(markers) else len(text)
+            block = text[m.end():end]
+            if "[DIAGRAM:" in block:
+                return text
+            return text[:m.end()] + block.rstrip() + f"\n\n{line}\n\n" + text[end:]
+    # The page had no text at all, so it never got a marker: add a new block in order.
+    new_block = f"--- Page {page_number} ---\n\n{line}\n\n"
+    for m in markers:
+        if int(m.group(1)) > page_number:
+            return text[:m.start()] + new_block + text[m.start():]
+    return (text.rstrip() + "\n\n" + new_block) if text.strip() else new_block
+
+
+def _patch_slide_with_diagram(slide, page_number, line):
+    """Add the description to slide.extracted_text AND to the saved cleanup rows.
+    (If only extracted_text were changed, 'Retry cleanup' would rebuild the text
+    from the cleanup rows and silently throw the new description away.)"""
+    slide.extracted_text = _insert_diagram_line(slide.extracted_text, page_number, line)
+    slide.save(update_fields=["extracted_text"])
+
+    rows = list(slide.cleanup_chunks.order_by("chunk_index"))
+    if not rows:
+        return
+    target = next((r for r in rows if page_number in _page_numbers(r.chunk_text)), None)
+    if target is None:
+        target = next((r for r in rows if any(n > page_number for n in _page_numbers(r.chunk_text))), rows[-1])
+    target.chunk_text = _insert_diagram_line(target.chunk_text, page_number, line)
+    target.cleaned_text = _insert_diagram_line(target.cleaned_text, page_number, line)
+    target.save(update_fields=["chunk_text", "cleaned_text", "updated_at"])
+
+
+def retry_missing_diagrams(slide):
+    """Ask Gemini again ONLY for pages that carry a real picture but still have no
+    [DIAGRAM: ...] line. Returns (added, still_missing)."""
+    import fitz
+
+    if (slide.append_count or 1) > 1:
+        raise RuntimeError("This deck was built from several uploads, so page numbers repeat. "
+                           "Re-upload it as one PDF to redo its diagrams.")
+    if not slide.file or not os.path.isfile(slide.file.path):
+        raise RuntimeError("The original PDF is no longer on disk (Render clears files on restart). Re-upload the slide.")
+    if not (slide.extracted_text or "").strip():
+        raise RuntimeError("No extracted text saved for this slide.")
+
+    fdoc = fitz.open(slide.file.path)
+    try:
+        have = _pages_with_diagram_line(slide.extracted_text)
+        todo = [n for n in _diagram_candidate_pages(fdoc) if n not in have]
+        if not todo:
+            print(f"[{slide.course_code}] Diagrams: every picture page already has a description.")
+            return 0, []
+
+        client = _get_batch_client()
+        added, still_missing, in_a_row = 0, [], 0
+        for pos, n in enumerate(todo):
+            line, failed = _describe_page_diagram(fdoc[n - 1], client, slide.course_code, n)
+            if failed:
+                still_missing.append(n)
+                in_a_row += 1
+                if in_a_row >= DIAGRAM_FAIL_LIMIT:
+                    still_missing.extend(todo[pos + 1:])
+                    print(f"[{slide.course_code}] Gemini keeps failing — stopping diagram retry. Try again later.")
+                    break
+                continue
+            in_a_row = 0
+            if line:
+                _patch_slide_with_diagram(slide, n, line)
+                added += 1
+            time.sleep(1)
+        print(f"[{slide.course_code}] Diagram retry: {added} added, {len(still_missing)} still missing.")
+        return added, still_missing
+    finally:
+        fdoc.close()
 
 def _parse_slide_document(slide):
     import gc
@@ -484,29 +606,58 @@ def _parse_slide_document(slide):
 
     extracted_text = ""
     fdoc = None
+    diagram_pages, diagram_failed = [], []
     try:
         fdoc = fitz.open(slide.file.path)
         vision_client = _get_batch_client()
+        candidates = set(_diagram_candidate_pages(fdoc))
+        diagram_pages = sorted(candidates)
+        vision_on, in_a_row = True, 0
         with pdfplumber.open(slide.file.path) as pdf:
             total = len(pdf.pages)
+            print(f"[{slide.course_code}] {len(candidates)} of {total} pages carry a real picture "
+                  f"(pictures repeated on every page are ignored).", flush=True)
             for page_number, page in enumerate(pdf.pages, start=1):
                 print(f"[{slide.course_code}] Extracting page {page_number}/{total}", flush=True)
                 text = (_extract_page_text_layout_aware(page) or "").strip()
                 page.flush_cache()  # release pdfplumber's per-page cache
-                diagram = _describe_page_diagrams(
-                    fdoc[page_number - 1], vision_client, slide.course_code, page_number
-                )
-                if diagram:
-                    text = f"{text}\n\n{diagram}".strip()
+
+                if page_number in candidates:
+                    if vision_on:
+                        diagram, failed = _describe_page_diagram(
+                            fdoc[page_number - 1], vision_client, slide.course_code, page_number
+                        )
+                    else:
+                        diagram, failed = "", True
+                    if failed:
+                        diagram_failed.append(page_number)
+                        in_a_row += 1
+                        if vision_on and in_a_row >= DIAGRAM_FAIL_LIMIT:
+                            vision_on = False
+                            print(f"[{slide.course_code}] Gemini keeps failing — skipping diagram "
+                                  f"descriptions for the rest of this deck. Use 'Retry diagrams' later.", flush=True)
+                    else:
+                        in_a_row = 0
+                    if diagram:
+                        text = f"{text}\n\n{diagram}".strip()
+
                 if text:
                     extracted_text += f"--- Page {page_number} ---\n\n{text}\n\n"
                 if page_number % 10 == 0:
                     gc.collect()
     except Exception as e:
         print(f"PDF extraction failed for {slide.course_code}: {e}")
+        raise
     finally:
         if fdoc:
             fdoc.close()
+
+    if not extracted_text.strip():
+        raise RuntimeError(f"{slide.course_code}: no text could be extracted from the PDF.")
+
+    # Save the raw text right away, so a crash in the long AI steps below never loses it.
+    slide.extracted_text = extracted_text
+    slide.save(update_fields=["extracted_text"])
 
     extracted_text = _cleanup_mangled_text_with_ai(slide.course_code, slide.course_title, extracted_text, slide=slide)
 
@@ -529,6 +680,8 @@ def _parse_slide_document(slide):
         slide.extracted_topics = []
         slide.topics_incomplete = False
         slide.save(update_fields=["extracted_topics", "topics_incomplete"])
+
+    return {"diagram_pages": diagram_pages, "diagram_failed": diagram_failed}
 
 def _macro_chunk_text(text, target_chunk_size=17500, min_chunks=3, max_chunks=None):
     """Split text into chunks near target_chunk_size, cutting ONLY at page
@@ -664,7 +817,7 @@ def _cleanup_mangled_text_with_ai(course_code, course_title, raw_text, slide=Non
             ),
             config=types.GenerateContentConfig(
                 system_instruction=CLEANUP_SYSTEM_INSTRUCTION,
-                max_output_tokens=8000,
+                max_output_tokens=24000,
             ),
             course_code=course_code,
             chunk_label=chunk_label,
@@ -793,7 +946,7 @@ def _ask_page_map(client, slide, pages, topic_names, label):
             ),
             config=types.GenerateContentConfig(
                 system_instruction=TOPIC_PAGE_MAP_INSTRUCTION,
-                max_output_tokens=3000,
+                max_output_tokens=8000,
             ),
             course_code=slide.course_code,
             chunk_label=label,
@@ -825,6 +978,73 @@ def _get_or_create_topic_split_chunks(slide, pages):
         ))
     return created
 
+ORPHAN_PAGE_INSTRUCTION = (
+    "You are placing university lecture slide pages that a first pass left without a topic. "
+    "You will get a list of topic names and some pages, each starting with a line like [[PAGE 12]].\n\n"
+    "For each page, choose the ONE topic from the list that the page most directly teaches, "
+    "even when the match is only approximate.\n"
+    "Answer NONE only if the page is a title slide, a course outline or agenda, a section "
+    "divider, an 'end' or 'thank you' page, or has no teachable content.\n"
+    "Rules: return page numbers and topic names only, never slide text. Use topic names exactly "
+    "as given. Return ONLY a JSON object mapping the page number (as a string) to a topic name "
+    'or "NONE", with no markdown fences, e.g. {"6": "Topic A", "9": "NONE"}'
+)
+
+
+def _is_content_page(page, min_chars=80):
+    """Title-only pages ('End', 'Day 2', a bare divider) have nothing to teach."""
+    return len(re.sub(r"\s+", " ", page.text).strip()) >= min_chars
+
+
+def _parse_json_object(raw):
+    if not raw or not raw.strip():
+        return None
+    clean = raw.replace("```json", "").replace("```", "").strip()
+    a, b = clean.find("{"), clean.rfind("}")
+    if a == -1 or b <= a:
+        return None
+    try:
+        data = json.loads(clean[a:b + 1])
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _assign_orphan_pages(client, slide, orphans, topic_names, batch_size=12):
+    """One extra, forced-choice pass for pages the first pass left out.
+    Returns {page seq: topic}. Never invents topics, so lesson weeks do not shift."""
+    canonical = {_norm(t): t for t in topic_names}
+    valid = {p.seq for p in orphans}
+    topics_list_str = "\n".join(f"- {t}" for t in topic_names)
+    placed = {}
+
+    for i in range(0, len(orphans), batch_size):
+        batch = orphans[i:i + batch_size]
+        body = "\n\n".join(f"[[PAGE {p.seq}]]\n{p.text[:1500]}" for p in batch)
+        raw = _call_gemini_with_retry(
+            client=client,
+            model="gemini-3.6-flash",
+            contents=(
+                f"Course: {slide.course_code} — {slide.course_title}\n\n"
+                f"Topics:\n{topics_list_str}\n\nPages to place:\n{body}"
+            ),
+            config=types.GenerateContentConfig(
+                system_instruction=ORPHAN_PAGE_INSTRUCTION, max_output_tokens=2000,
+            ),
+            course_code=slide.course_code,
+            chunk_label=f"Unplaced pages {i // batch_size + 1}",
+        )
+        data = _parse_json_object(raw)
+        if not data:
+            continue
+        for key, value in data.items():
+            m = re.search(r"\d+", str(key))
+            seq = int(m.group()) if m else None
+            topic = canonical.get(_norm(value)) if isinstance(value, str) else None
+            if seq in valid and topic:
+                placed[seq] = topic
+        time.sleep(3)
+    return placed
 
 def split_slide_by_extracted_topics(slide):
     """Resumable. Gemini only returns PAGE NUMBERS per topic; the chunk text is
@@ -879,6 +1099,14 @@ def split_slide_by_extracted_topics(slide):
                     topic_seqs[t].add(s)
                     assigned.add(s)
 
+    # Pages the first pass left without a topic: one extra forced-choice pass
+    orphans = [p for p in pages if p.seq not in assigned and _is_content_page(p)]
+    if orphans:
+        placed = _assign_orphan_pages(batch_client, slide, orphans, topics)
+        for seq, topic in placed.items():
+            topic_seqs[topic].add(seq)
+            assigned.add(seq)
+        print(f"[{slide.course_code}] Unplaced pages: {len(placed)} of {len(orphans)} placed in a topic.")
     created = 0
     for t in topics:
         text = build_chunk_text(pages_by_seq, topic_seqs[t])
@@ -1009,7 +1237,7 @@ def dedup_topics_semantically(slide):
         contents=f"Course: {slide.course_code} — {slide.course_title}\n\nTopics:\n{topics_list_str}",
         config=types.GenerateContentConfig(
             system_instruction=TOPIC_DEDUP_SYSTEM_INSTRUCTION,
-            max_output_tokens=3000,
+            max_output_tokens=8000,
         ),
         course_code=slide.course_code,
         chunk_label="Topic dedup pass",
@@ -1054,3 +1282,19 @@ def dedup_topics_semantically(slide):
         print(f"[{slide.course_code}] Topic dedup: no duplicates found.")
 
     return canonical_order
+
+def summarize_slide(slide):
+    """Plain facts about how the slide pipeline went (used for the job result)."""
+    pages = split_pages(slide.extracted_text or "")
+    all_chunks = "\n".join(slide.topic_chunks.values_list("chunk_text", flat=True))
+    placed = set(re.findall(r"^--- (.+?) ---[ \t]*$", all_chunks, re.MULTILINE))
+    has_markers = bool(PAGE_MARKER_RE.search(slide.extracted_text or ""))
+    return {
+        "topics": len(slide.extracted_topics or []),
+        "topics_incomplete": bool(slide.topics_incomplete),
+        "empty_topics": list(slide.topic_chunks.filter(is_empty=True).values_list("topic_name", flat=True)),
+        "cleanup_fallbacks": slide.cleanup_chunks.exclude(error_message="").count(),
+        "split_failed": slide.topic_split_chunks.filter(status="FAILED").count(),
+        "unplaced_pages": [p.label for p in pages
+                           if has_markers and p.label not in placed and _is_content_page(p)],
+    }

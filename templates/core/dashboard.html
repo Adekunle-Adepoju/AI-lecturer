@@ -324,6 +324,15 @@
     #dashboardRoot .hero-stat-val{ font-size:1.05rem; }
     #dashboardRoot .hero-stat-lbl{ font-size:.7rem; white-space:nowrap; overflow:visible; }
   }
+    #dashboardRoot .test-alert{
+    display:flex;gap:12px;align-items:flex-start;
+    border-radius:var(--radius-md);padding:16px 18px;margin-bottom:14px;
+    border:1px solid rgba(235,174,69,.35);background:var(--amber-soft);
+  }
+  #dashboardRoot .test-alert strong{color:var(--heading);}
+  #dashboardRoot .test-alert p{margin:4px 0 0;font-size:.86rem;color:var(--ink-soft);}
+  #dashboardRoot .test-alert .ta-emoji{font-size:1.2rem;line-height:1.3;}
+  #dashboardRoot .test-due-card::before{background:linear-gradient(180deg,var(--coral),var(--amber));}
 </style>
 
 <div class="bg-glow"></div>
@@ -382,6 +391,41 @@
       <a href="{% url 'profile_edit' %}" class="btn btn-primary">Update my level / semester</a>
     </div>
     {% endif %}
+
+        {% for t in pending_tests %}
+    <div class="today-card test-due-card">
+      <div>
+        <div class="tc-code-row">
+          <span class="tc-icon">📋</span>
+          <span class="tc-code">{{ t.entry.course_code }}</span>
+        </div>
+        <div class="tc-title">{{ t.entry.course_title }}</div>
+        <div class="tc-meta"><span>Compulsory test</span> · <span>Covers weeks 1–6</span></div>
+      </div>
+      <div class="tc-actions">
+        {% if t.ready %}
+        <a href="{% url 'simulator_setup' 'auto' %}?course_code={{ t.entry.course_code }}" class="btn btn-primary">
+          {% if t.in_progress %}Resume test →{% else %}Take test →{% endif %}
+        </a>
+        {% else %}
+        <span class="badge badge-amber">Being prepared</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+    {% for h in test_heads_up %}
+    <div class="test-alert">
+      <span class="ta-emoji">📋</span>
+      <div>
+        <strong>{{ h.entry.course_code }}: test at week 7</strong>
+        <p>
+          You're on week {{ h.entry.week_number }}. After week 6 you'll take a compulsory test covering weeks 1–6.
+          You can't move on to week 8 until you've taken it.
+        </p>
+      </div>
+    </div>
+    {% endfor %}
 
     <p class="section-label">
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>

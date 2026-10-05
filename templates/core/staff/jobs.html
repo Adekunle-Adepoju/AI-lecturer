@@ -35,6 +35,7 @@
   #jobsRoot .badge{padding:3px 10px;border-radius:999px;font-size:.68rem;font-weight:700;}
   #jobsRoot .ok{background:rgba(74,157,116,.16);color:var(--green);}
   #jobsRoot .bad{background:rgba(217,106,69,.14);color:var(--coral);}
+  #jobsRoot .warn{background:rgba(226,166,59,.16);color:var(--amber);}
   #jobsRoot .when{margin-left:auto;font-size:.75rem;color:var(--ink-faint);}
   #jobsRoot .result{margin-top:8px;font-size:.8rem;color:var(--ink-soft);white-space:pre-wrap;word-break:break-word;}
   #jobsRoot .empty{color:var(--ink-faint);font-size:.9rem;padding:20px 0;}
@@ -56,7 +57,7 @@
     <div class="job">
       <div class="job-top">
         <span class="job-name">{{ r.name }}</span>
-        {% if r.ok %}<span class="badge ok">Done</span>{% else %}<span class="badge bad">Failed</span>{% endif %}
+          {% if not r.ok %}<span class="badge bad">Failed</span>{% elif r.warn %}<span class="badge warn">Done — needs attention</span>{% else %}<span class="badge ok">Done</span>{% endif %}
         <span class="when">{{ r.stopped|date:"d M, H:i" }}</span>
       </div>
       {% if r.result and r.result != "None" %}

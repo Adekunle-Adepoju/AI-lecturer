@@ -81,4 +81,5 @@ urlpatterns = [
     path("staff/lessons/bulk-refresh/", views.staff_refresh_course_lessons_view, name="staff_refresh_course_lessons"),
     path("staff/sim-bank/", views.staff_sim_bank_view, name="staff_sim_bank"),
     path("staff/jobs/", views.staff_jobs_view, name="staff_jobs"),
+    path("staff/slides/<int:slide_id>/retry-diagrams/", views.retry_slide_diagrams_view, name="retry_slide_diagrams"),
 ]

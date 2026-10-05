@@ -6,6 +6,7 @@ from google import genai
 from google.genai import types
 from django.conf import settings
 from .slide_topic_extractor import _macro_chunk_text
+from .outline_generation import isolate_course_section, split_outcomes_and_contents, list_course_codes
 
 
 def extract_text_from_file(file_path):
@@ -70,6 +71,9 @@ Extract ONLY the topic names that are actually written in this text, in the
 order they appear. Do NOT invent, expand, pad, or add topics that aren't
 explicitly present in this excerpt — if this excerpt names 4 topics, return
 exactly 4. If it names none, return an empty list.
+Course contents are often written as one paragraph. Treat each semicolon- or sentence-separated
+item as ONE topic, keep its own wording as a clear title of at most 12 words, and treat anything
+in brackets after it as part of that topic, never as separate topics.
 
 Return ONLY a JSON array of topic name strings, nothing else.
 Example: ["Topic A", "Topic B"]
@@ -101,22 +105,29 @@ def _validate_topics_against_source(topics, source_text, min_match_ratio=0.5):
 
 
 def _parse_course_outline(outline_obj):
-    """Extract text and parse topics from an uploaded outline file. Saves
-    a flat, validated topic list — never week-keyed, never padded. If
-    validation fails, topics_json stays empty and the app falls back to
-    slide-extracted topics (the more reliable source in practice)."""
+    """Extracts THIS course's section from the uploaded file (a document may hold
+    many courses), then parses topics from its Course Contents only."""
     text = extract_text_from_file(outline_obj.file.path)
-    outline_obj.extracted_text = text
+    section = isolate_course_section(text, outline_obj.course_code)
+    if section is None:
+        found = ", ".join(list_course_codes(text)) or "none"
+        raise ValueError(
+            f"{outline_obj.course_code} was not found in this file. Course codes found: {found}. "
+            f"The code on the course must match the heading in the outline."
+        )
+
+    _outcomes, contents = split_outcomes_and_contents(section)
+    outline_obj.extracted_text = section       # outcomes + contents; the generator needs both
     outline_obj.parsed = True
     outline_obj.save()
 
     try:
-        topics = parse_outline_with_ai(outline_obj.course_code, outline_obj.course_title, text)
-        if _validate_topics_against_source(topics, text):
+        topics = parse_outline_with_ai(outline_obj.course_code, outline_obj.course_title, contents)
+        if _validate_topics_against_source(topics, contents):
             outline_obj.topics_json = {"topics": topics}
             outline_obj.save()
         else:
             print(f"[{outline_obj.course_code}] Outline parse failed validation — "
-                  f"leaving topics_json empty so the app falls back to slide-extracted topics.")
+                  f"leaving topics_json empty.")
     except Exception:
         traceback.print_exc()

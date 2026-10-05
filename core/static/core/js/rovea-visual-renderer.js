@@ -50,7 +50,7 @@
    * Splits raw markdown into an ordered list of segments:
    *   { type: "text", content } | { type: "json_chart"|"mermaid"|"svg", raw }
    */
-  function splitIntoSegments(markdown) {
+    function splitIntoSegments(markdown) {
     const segments = [];
     let lastIndex = 0;
     let match;
@@ -61,11 +61,14 @@
       if (match.index > lastIndex) {
         segments.push({ type: "text", content: markdown.slice(lastIndex, match.index) });
       }
-      segments.push({ type: blockType, raw: rawContent.trim() });
+      segments.push({ type: blockType.toLowerCase(), raw: rawContent.trim() });
       lastIndex = match.index + full.length;
     }
+
+    // Whatever is left after the last chart (or the whole lecture, if it has no charts)
+    // is ordinary text.
     if (lastIndex < markdown.length) {
-      segments.push({ type: blockType.toLowerCase(), raw: rawContent.trim() });
+      segments.push({ type: "text", content: markdown.slice(lastIndex) });
     }
     return segments;
   }

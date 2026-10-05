@@ -232,6 +232,10 @@
         {% csrf_token %}
         <button type="submit" class="btn">Retry cleanup</button>
       </form>
+      <form method="post" action="{% url 'retry_slide_diagrams' slide.id %}" style="margin:0">
+        {% csrf_token %}
+        <button type="submit" class="btn">Retry diagrams</button>
+      </form>
 
       {% if slide.parsed and slide.topics_incomplete %}
       <form method="post" action="{% url 'retry_slide_topics' slide.id %}" style="margin:0">

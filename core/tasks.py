@@ -9,6 +9,29 @@ logger = logging.getLogger(__name__)
 # Click the button again to continue; finished chunks are skipped.
 BATTLE_CHUNKS_PER_JOB = 25
 
+def _slide_report(slide, headline, diagram_failed=None):
+    """One honest line for the Background jobs page. Starts with OK or WARNING."""
+    from .slide_topic_extractor import summarize_slide
+    s = summarize_slide(slide)
+    problems = []
+    if diagram_failed:
+        shown = ", ".join(str(n) for n in diagram_failed[:15]) + ("..." if len(diagram_failed) > 15 else "")
+        problems.append(f"{len(diagram_failed)} picture page(s) not described (pages {shown}) - click 'Retry diagrams'")
+    if s["unplaced_pages"]:
+        problems.append(f"{len(s['unplaced_pages'])} content page(s) in no topic ({', '.join(s['unplaced_pages'][:10])})")
+    if s["empty_topics"]:
+        problems.append(f"{len(s['empty_topics'])} topic(s) with no content - click 'Run split'")
+    if s["topics_incomplete"]:
+        problems.append("topic extraction incomplete - click 'Retry topics'")
+    if s["cleanup_fallbacks"]:
+        problems.append(f"{s['cleanup_fallbacks']} text chunk(s) not cleaned - click 'Retry cleanup'")
+    if s["split_failed"]:
+        problems.append(f"{s['split_failed']} split step(s) failed - click 'Run split'")
+
+    base = f"{slide.course_code}: {headline}, {s['topics']} topics"
+    if problems:
+        return "WARNING: " + base + ". Needs attention: " + "; ".join(problems) + "."
+    return "OK: " + base + ", every content page placed."
 
 def _fresh_db():
     # Replaces database connections that went stale during a long Gemini call.
@@ -45,6 +68,14 @@ def pregenerate_topic_lesson(course_id, week_number, topic, topic_index, total_t
     )
 
     course = CourseDefinition.objects.get(pk=course_id)
+    from .outline_generation import (
+        NO_SOURCE_MESSAGE, SOURCE_OUTLINE, get_generation_source, pregenerate_outline_lesson,
+    )
+    source = get_generation_source(course)
+    if source is None:
+        raise RuntimeError(NO_SOURCE_MESSAGE)
+    if source == SOURCE_OUTLINE:
+        return pregenerate_outline_lesson(course, week_number, topic, topic_index, total_topics)
     chunk_text = _find_slide_content_for_topic(course.course_code, course.level, topic)
     slide_text = (
         f"\n\nLECTURER SLIDES (focus only on content relevant to this topic):\n{chunk_text}"
@@ -54,6 +85,8 @@ def pregenerate_topic_lesson(course_id, week_number, topic, topic_index, total_t
     existing = PreGeneratedLesson.objects.filter(
         course=course, week_number=week_number, topic_title=topic,
     ).first()
+    if existing and existing.source_type == "outline":
+        existing = None   # slides now exist: regenerate from them
 
     # Already generated -> nothing to do
     if existing and existing.content_chunk.strip() and not existing.is_truncated:
@@ -62,7 +95,7 @@ def pregenerate_topic_lesson(course_id, week_number, topic, topic_index, total_t
     # Reference-table topics need no AI call
     if chunk_text and is_reference_table_content(chunk_text):
         PreGeneratedLesson.objects.update_or_create(
-            course=course, week_number=week_number, topic_title=topic,
+            course=course, week_number=week_number, topic_title=topic, source_type="slides", review_note="",
             defaults={
                 "content_chunk": _render_reference_table_lecture(topic, chunk_text),
                 "is_published": False, "is_truncated": False, "continuation_attempts": 0,
@@ -119,7 +152,7 @@ def pregenerate_topic_lesson(course_id, week_number, topic, topic_index, total_t
 
     _fresh_db()
     PreGeneratedLesson.objects.update_or_create(
-        course=course, week_number=week_number, topic_title=topic,
+        course=course, week_number=week_number, topic_title=topic, source_type="slides", review_note="",
         defaults={
             "content_chunk": full_text, "is_published": False,
             "is_truncated": False, "continuation_attempts": 0,
@@ -142,13 +175,13 @@ def parse_slide_upload(new_slide_id, existing_slide_id=None):
 
     if existing_slide_id is None:
         slide = SlideDocument.objects.get(pk=new_slide_id)
-        _parse_slide_document(slide)
-        return f"{slide.course_code}: {len(slide.extracted_topics)} topics extracted"
+        stats = _parse_slide_document(slide)
+        return _slide_report(slide, "slide processed", stats["diagram_failed"])
 
     temp = SlideDocument.objects.get(pk=new_slide_id)
     existing = SlideDocument.objects.get(pk=existing_slide_id)
     try:
-        _parse_slide_document(temp)
+        stats = _parse_slide_document(temp)
         _fresh_db()
         existing.refresh_from_db()
         existing.extracted_text = (
@@ -159,7 +192,11 @@ def parse_slide_upload(new_slide_id, existing_slide_id=None):
         existing.extracted_topics.extend(new_topics)
         existing.append_count += 1
         existing.save()
-        return f"Appended to {existing.course_code}: {len(new_topics)} new topics"
+        msg = f"Appended to {existing.course_code}: {len(new_topics)} new topics. Run the topic split to include them."
+        if stats["diagram_failed"]:
+            return (f"WARNING: {msg} {len(stats['diagram_failed'])} picture page(s) of the new file were "
+                    f"not described, and appended decks cannot be retried - upload that file again later.")
+        return msg
     finally:
         try:
             if temp.file and os.path.isfile(temp.file.path):
@@ -241,7 +278,7 @@ def run_topic_split(slide_id):
                 f"{slide.course_code}: {count} topics saved, but {len(still_empty)} still "
                 f"empty: {', '.join(still_empty[:5])}. Run again to retry."
             )
-    return f"{slide.course_code}: all {count} topics have content"
+    return _slide_report(slide, "topic split done")
 
 
 # ─── Outline / past questions ─────────────────────────────────────────────────
@@ -301,3 +338,18 @@ def generate_sim_topic(course_code, topic, force=False):
         force=force, log=logs.append,
     )
     return " ".join(l.strip() for l in logs) or str(outcome)
+
+def retry_diagrams(slide_id):
+    """Describe only the picture pages that are still missing, then rebuild the topic split."""
+    _fresh_db()
+    from .models import SlideDocument
+    from .slide_topic_extractor import retry_missing_diagrams, split_slide_by_extracted_topics
+
+    slide = SlideDocument.objects.get(pk=slide_id)
+    added, still_missing = retry_missing_diagrams(slide)
+    if added:
+        _fresh_db()
+        # The text changed, so the split rows are stale; this rebuilds them automatically.
+        split_slide_by_extracted_topics(slide)
+        slide.refresh_from_db()
+    return _slide_report(slide, f"{added} diagram(s) added", still_missing)

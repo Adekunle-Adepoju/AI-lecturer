@@ -111,28 +111,58 @@
     Practice tests and exam simulations, all in one place.
   </p>
 
-  {% if auto_test_courses %}
-  <p class="section-label">⚠️ Test Week — Week 7</p>
+    {% if pending_tests %}
+  <p class="section-label">⚠️ Compulsory tests</p>
   <div class="testweek-banner">
-    <h3>📋 You have pending test week tests</h3>
-    <p>These tests are compulsory. Complete them before continuing your lectures.</p>
+    <h3>📋 You have tests waiting</h3>
+    <p>Each course holds its own test when you reach week 7. You can't move on to week 8 of a course until you've taken its test.</p>
     <div class="testweek-list">
-      {% for item in auto_test_courses %}
+      {% for t in pending_tests %}
       <div class="testweek-item">
         <div>
-          <div class="tw-title">{{ item.entry.course_code }} — {{ item.entry.course_title }}</div>
+          <div class="tw-title">{{ t.entry.course_code }} — {{ t.entry.course_title }}</div>
           <div class="tw-meta">Covers Weeks 1–6</div>
         </div>
-        {% if item.done %}
-        <span class="badge badge-green">✓ Done</span>
-        {% else %}
-        <a href="{% url 'simulator_setup' 'auto' %}?course_code={{ item.entry.course_code }}" class="btn btn-primary">
-          Start Test →
+        {% if t.ready %}
+        <a href="{% url 'simulator_setup' 'auto' %}?course_code={{ t.entry.course_code }}" class="btn btn-primary">
+          {% if t.in_progress %}Resume Test →{% else %}Start Test →{% endif %}
         </a>
+        {% else %}
+        <span class="badge badge-amber">Being prepared</span>
         {% endif %}
       </div>
       {% endfor %}
     </div>
+  </div>
+  {% endif %}
+
+  {% if test_heads_up %}
+  <p class="section-label">Coming up</p>
+  <div class="testweek-list" style="margin-bottom:24px">
+    {% for h in test_heads_up %}
+    <div class="testweek-item">
+      <div>
+        <div class="tw-title">{{ h.entry.course_code }} — {{ h.entry.course_title }}</div>
+        <div class="tw-meta">You're on week {{ h.entry.week_number }}. The test comes at week 7.</div>
+      </div>
+      <span class="badge badge-amber">{{ h.lessons_left }} week{{ h.lessons_left|pluralize }} to go</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if past_auto_tests %}
+  <p class="section-label">Test results</p>
+  <div class="testweek-list" style="margin-bottom:24px">
+    {% for t in past_auto_tests %}
+    <a href="{% url 'simulator_result' test_id=t.id %}" class="testweek-item" style="text-decoration:none;color:inherit">
+      <div>
+        <div class="tw-title">{{ t.course_code }} — {{ t.course_title }}</div>
+        <div class="tw-meta">{{ t.percentage_score }}% · Grade {{ t.grade }}</div>
+      </div>
+      <span class="mc-arrow" style="opacity:1">→</span>
+    </a>
+    {% endfor %}
   </div>
   {% endif %}
 
