@@ -90,6 +90,7 @@
     <span class="badge badge-amber">+50 XP</span>
   </div>
 
+  {% if quiz_ready %}
   <div class="quiz-card">
     <div class="quiz-header">
       <span class="quiz-icon">
@@ -110,6 +111,13 @@
       {% endfor %}
     </form>
   </div>
+  {% else %}
+  <div class="quiz-card">
+    <p class="quiz-q">Your quiz isn't ready yet.</p>
+    <p style="color:var(--ink-soft);margin:0 0 20px;">It takes a moment to prepare. Your lecture progress is saved.</p>
+    <button type="button" class="qopt" style="justify-content:center;font-weight:600;" onclick="location.reload()">Try again</button>
+  </div>
+{% endif %}
 
 </div>
 

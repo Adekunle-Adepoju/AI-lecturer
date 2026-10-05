@@ -22,7 +22,7 @@ from django.views.decorators.http import require_POST
 from google import genai
 from google.genai import types
 from django.http import StreamingHttpResponse
-from django.http import JsonResponse
+from django.http import JsonResponse, Http404
 from django.db.models import F, Count
 from django.db import transaction
 from django_q.tasks import async_task
@@ -41,7 +41,7 @@ from .models import (
 from .outline_generation import get_generation_source, NO_SOURCE_MESSAGE
 from .prompt import (
     SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, QUIZ_GENERATION_PROMPT,
-    LECTURE_PROMPT, LECTURE_VERIFIER_PROMPT,
+    LECTURE_PROMPT, LECTURE_VERIFIER_PROMPT, LECTURE_QUIZ_PROMPT
 )
 from functools import wraps
 from .staff_forms import SlideUploadForm, CourseOutlineUploadForm, PastQuestionUploadForm, CourseDefinitionForm
@@ -67,6 +67,18 @@ CITATION_HEURISTIC_RE = re.compile(
 )
 MAX_TOPIC_CONTEXT_CHARS = 24000
 
+_VISUAL_FENCE_RE = re.compile(r"```(?:svg|mermaid|json_chart)[^\n]*\n.*?```", re.DOTALL)
+
+def _strip_visual_blocks(text):
+    return _VISUAL_FENCE_RE.sub("[diagram]", text or "")
+
+def _own_topic_session(request, topic_session_id):
+    """The topic session if it belongs to the logged-in student, else 404."""
+    try:
+        pk = int(topic_session_id)
+    except (TypeError, ValueError):
+        raise Http404
+    return get_object_or_404(TopicSession, pk=pk, session__student__user=request.user)
 
 def _build_history(topic_session):
     """Convert saved ChatMessages into Gemini content format."""
@@ -88,11 +100,13 @@ def _check_daily_message_cap(topic_session, cap=10):
     ).count()
     return count >= cap
 
+@login_required
+@require_POST
 def chat_message_view(request):
     topic_session_id = request.POST.get("topic_session_id")
     user_message = request.POST.get("message")
     is_retry = request.POST.get("retry") == "true"
-    topic_session = get_object_or_404(TopicSession, id=topic_session_id)
+    topic_session = _own_topic_session(request, topic_session_id)
     is_start_trigger = (user_message == "__START__")
 
         # ── Daily message cap ─────────────────────────────────────────────────────
@@ -864,11 +878,9 @@ def _merge_worked_example_paragraphs(paragraphs):
     return merged
 
 def _split_into_pages(text, target_chars=1800):
-    """Break a long pre-generated lecture into digestible pages. Tries
-    paragraph boundaries first; falls back to sentence boundaries.
-    Fenced code blocks (```lang ... ```) are protected as atomic units
-    so a mermaid/json_chart/svg block never gets split mid-fence —
-    a partial fence renders as broken raw text instead of a diagram."""
+    """Break a long pre-generated lecture into digestible pages. Fenced
+    blocks stay atomic, and a diagram stays glued to its lead-in sentence
+    and its short caption line."""
     text = text.strip()
 
     FENCE_RE = re.compile(r"```.*?\n[\s\S]*?```", re.MULTILINE)
@@ -890,10 +902,23 @@ def _split_into_pages(text, target_chars=1800):
             s = s.replace(key, val)
         return s
 
+    # Glue: lead-in sentence + diagram + short caption stay on one page.
+    glued = []
+    for para in paragraphs:
+        prev = glued[-1] if glued else ""
+        if glued and para.strip() in placeholders and prev.strip() not in placeholders:
+            glued[-1] = f"{prev}\n\n{para}"
+        elif (glued and prev.rstrip().endswith("\x00") and len(para) < 300
+              and not para.lstrip().startswith("**")):
+            glued[-1] = f"{prev}\n\n{para}"
+        else:
+            glued.append(para)
+    paragraphs = glued
+
     pages = []
     current = ""
     for para in paragraphs:
-        real_len = len(placeholders.get(para.strip(), para))
+        real_len = len(_restore(para))
         if current and len(current) + real_len > target_chars:
             pages.append(_restore(current.strip()))
             current = para
@@ -1276,6 +1301,89 @@ def _render_chat_session(request, entry, profile, session):
 
 # ─── Quiz ──────────────────────────────────────────────────────────────────────
 
+PLACEHOLDER_QUIZ_STEM = "Which of the following best describes a key concept from"
+_GENERIC_STEM_RE = re.compile(r"key concept from|best describes a key concept", re.IGNORECASE)
+_LECTURE_REF_RE = re.compile(r"\b(the lecture|the slides?|the passage|as discussed|as mentioned)\b", re.IGNORECASE)
+_VAGUE_OPTION_RE = re.compile(r"all of the above|none of the above|both [a-d] and [a-d]", re.IGNORECASE)
+
+
+def _has_real_quiz(ts):
+    q = (ts.quiz_question or "").strip()
+    return bool(q) and not q.startswith(PLACEHOLDER_QUIZ_STEM) and len(ts.quiz_options or []) == 4
+
+
+def _quiz_is_valid(quiz):
+    opts = quiz.get("options") or []
+    if len(opts) != 4:
+        return False
+    texts = [re.sub(r"^[A-D]\.\s*", "", str(o)).strip() for o in opts]
+    question = (quiz.get("question") or "").strip()
+    if len(question) < 30 or _GENERIC_STEM_RE.search(question) or _LECTURE_REF_RE.search(question):
+        return False
+    if any(len(t) < 2 or re.fullmatch(r"option [a-d]", t.lower()) or _VAGUE_OPTION_RE.search(t) for t in texts):
+        return False
+    if len({t.lower() for t in texts}) != 4:
+        return False
+    return 0 <= quiz.get("correct_index", -1) < 4
+
+
+def _quiz_key_checks_out(lecture, quiz):
+    """A second, independent call answers the question from the lecture alone.
+    If it disagrees with the stored key, the quiz is thrown away rather than
+    risk marking a student wrong for the right answer."""
+    prompt = (
+        f"LECTURE:\n{lecture}\n\nQUESTION:\n{quiz['question']}\n\n"
+        "OPTIONS:\n" + "\n".join(quiz["options"]) + "\n\n"
+        "Using ONLY the lecture, which option is correct? Reply with a single letter: A, B, C or D."
+    )
+    try:
+        raw, _ = _call_generation_model(prompt, None, 500, 0.0, "Quiz check", api_client=client, attempts=1)
+    except Exception as e:
+        print(f"Quiz check unavailable: {e}")
+        return False
+    m = re.match(r"\s*\(?([ABCD])\b", raw.upper())
+    return bool(m) and "ABCD".index(m.group(1)) == quiz["correct_index"]
+
+
+def _generate_lecture_quiz(topic_session):
+    lecture = _strip_visual_blocks(topic_session.lecture_content or "").strip()
+    if len(lecture) < 300:
+        return None
+    contents = f"Topic: {topic_session.topic_name}\n\nLECTURE:\n{lecture}"
+    for attempt in range(2):
+        try:
+            raw, _ = _call_generation_model(
+                contents, LECTURE_QUIZ_PROMPT, 3000, 0.5,
+                f"Quiz gen — {topic_session.topic_name}", api_client=client, attempts=1,
+            )
+            quiz = _parse_quiz_json(raw)
+        except Exception as e:
+            print(f"Quiz gen attempt {attempt + 1} failed: {e}")
+            continue
+        if _quiz_is_valid(quiz) and _quiz_key_checks_out(lecture, quiz):
+            return quiz
+        print(f"Quiz gen attempt {attempt + 1} rejected by validation for {topic_session.topic_name}")
+    return None
+
+
+def _ensure_quiz(topic_session):
+    """True if the topic has a real quiz (generating one if needed). Never saves a fake."""
+    if topic_session.is_complete or _has_real_quiz(topic_session):
+        return True
+    quiz = _generate_lecture_quiz(topic_session)
+    if quiz is None:
+        return False
+    with transaction.atomic():
+        ts = TopicSession.objects.select_for_update().get(pk=topic_session.pk)
+        if not _has_real_quiz(ts):
+            ts.quiz_question = quiz["question"]
+            ts.quiz_options = quiz["options"]
+            ts.correct_answer_index = quiz["correct_index"]
+            ts.quiz_explanation = quiz["explanation"]
+            ts.save(update_fields=["quiz_question", "quiz_options", "correct_answer_index", "quiz_explanation"])
+    topic_session.refresh_from_db()
+    return True
+
 @login_required
 def quiz_view(request, topic_session_id):
     if not hasattr(request.user, "profile"):
@@ -1284,6 +1392,7 @@ def quiz_view(request, topic_session_id):
     topic_session = get_object_or_404(TopicSession, id=topic_session_id, session__student=request.user.profile)
     session = topic_session.session
     entry = get_object_or_404(TimetableEntry, student=request.user.profile, course_code=session.course_code)
+    quiz_ready = _ensure_quiz(topic_session)
 
     return render(request, "core/quiz.html", {
         "entry": entry,
@@ -1294,6 +1403,7 @@ def quiz_view(request, topic_session_id):
         "topic_number": topic_session.topic_index + 1,
         "total_topics": len(session.topics),
         "topic_name": topic_session.topic_name,
+        "quiz_ready": quiz_ready,
     })
 
 
@@ -1974,45 +2084,10 @@ def retry_outline_topics_view(request, outline_id):
 
     return redirect("staff_portal")
 
+@login_required
 @require_POST
 def chat_next_topic_view(request):
-    topic_session_id = request.POST.get("topic_session_id")
-    topic_session = get_object_or_404(TopicSession, id=topic_session_id)
-
-    if not topic_session.quiz_question:
-        transcript = "\n".join(
-            f"{'Student' if m.role == 'user' else 'Rovea'}: {m.content}"
-            for m in topic_session.chatmessage_set.order_by("created_at")
-        )
-        try:
-            response = client.models.generate_content(
-                model="gemini-3.6-flash",
-                contents=f"Topic taught: {topic_session.topic_name}\n\nCONVERSATION TRANSCRIPT:\n{transcript}",
-                config=types.GenerateContentConfig(
-                    system_instruction=QUIZ_GENERATION_PROMPT,
-                    max_output_tokens=1000,
-                ),
-            )
-            quiz_data = _parse_quiz_json(response.text)
-            topic_session.quiz_question = quiz_data["question"]
-            topic_session.quiz_options = quiz_data["options"]
-            topic_session.correct_answer_index = quiz_data["correct_index"]
-            topic_session.quiz_explanation = quiz_data["explanation"]
-        except Exception:
-            import traceback
-            traceback.print_exc()
-            # Fallback so the quiz page is never blank, even if generation fails
-            topic_session.quiz_question = f"Which of the following best describes a key concept from '{topic_session.topic_name}'?"
-            topic_session.quiz_options = [
-                "A. The concept applies only in theory",
-                "B. The concept has direct practical applications",
-                "C. The concept is unrelated to engineering",
-                "D. The concept was recently discovered",
-            ]
-            topic_session.correct_answer_index = 1
-            topic_session.quiz_explanation = ""
-        topic_session.save()
-
+    topic_session = _own_topic_session(request, request.POST.get("topic_session_id"))
     return JsonResponse({"redirect": f"/quiz/{topic_session.id}/"})
 
 @staff_required
@@ -2073,13 +2148,16 @@ def _render_reference_table_lecture(topic_name, chunk_text):
 GENERATION_MODELS = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"]
 
 
-def _call_generation_model(contents, system_instruction, max_output_tokens, temperature, label):
+def _call_generation_model(contents, system_instruction, max_output_tokens, temperature, label,
+                           api_client=None, attempts=3):
     """Retries transient errors, and falls back to the next model when a model's quota is gone."""
+    api = api_client or generation_client
     last_error = None
     for model in GENERATION_MODELS:
-        for attempt in range(3):
+        for attempt in range(attempts):
+            last_try = attempt == attempts - 1
             try:
-                response = generation_client.models.generate_content(
+                response = api.models.generate_content(
                     model=model,
                     contents=contents,
                     config=types.GenerateContentConfig(
@@ -2104,15 +2182,17 @@ def _call_generation_model(contents, system_instruction, max_output_tokens, temp
                     if "PerDay" in s:
                         print(f"{label}: {model} daily quota used up — trying next model.")
                         break
-                    print(f"{label}: {model} 429 (attempt {attempt + 1}/3) — sleeping 20s...")
+                    if last_try:
+                        break
+                    print(f"{label}: {model} 429 (attempt {attempt + 1}/{attempts}) — sleeping 20s...")
                     time.sleep(20)
                     continue
                 transient = any(m in s for m in (
                     "503", "UNAVAILABLE", "timeout", "Timeout",
                     "ConnectionError", "RemoteDisconnected",
                 ))
-                if transient and attempt < 2:
-                    print(f"{label}: {model} transient error (attempt {attempt + 1}/3) — retrying in 10s...")
+                if transient and not last_try:
+                    print(f"{label}: {model} transient error (attempt {attempt + 1}/{attempts}) — retrying in 10s...")
                     time.sleep(10)
                     continue
                 break
