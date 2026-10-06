@@ -92,7 +92,7 @@
   #pregenRoot .lesson-card.is-draft{border-left:3px solid var(--amber);}
   #pregenRoot .lesson-title{font-size:.92rem;font-weight:600;color:var(--heading);}
   #pregenRoot .lesson-meta{font-size:.78rem;color:var(--ink-faint);margin-top:3px;}
-  #pregenRoot .lesson-actions{display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap;}
+  #pregenRoot .lesson-actions{display:flex;gap:8px;align-items:center;flex:1 1 100%;flex-wrap:wrap;}
   #pregenRoot .empty-note{max-width:900px;margin:0 auto;color:var(--ink-faint);font-size:.85rem;padding:8px 0;}
   #pregenRoot .no-match-note{display:none;max-width:900px;margin:0 auto;color:var(--ink-faint);font-size:.85rem;padding:20px 0;text-align:center;}
 </style>
@@ -164,6 +164,11 @@
     </form>
 
     {% if filter_course_id %}
+    <form method="POST" action="{% url 'staff_generate_quizzes' %}" style="margin:0">
+      {% csrf_token %}
+      <input type="hidden" name="course_id" value="{{ filter_course_id }}">
+      <button type="submit" class="btn btn-sm btn-primary">Generate quizzes</button>
+    </form>
     <form method="POST" action="{% url 'staff_bulk_publish_lessons' %}" style="margin:0"
           onsubmit="return confirm('Publish ALL lessons for this course?')">
       {% csrf_token %}
@@ -214,10 +219,18 @@
         {% else %}
           <span class="badge badge-amber">Draft</span>
         {% endif %}
+        {% if lesson.quiz_state == "ready" %}
+          <span class="badge badge-green">Quiz ready</span>
+        {% elif lesson.quiz_state == "stale" %}
+          <span class="badge badge-amber">Quiz outdated</span>
+        {% else %}
+          <span class="badge badge-amber">No quiz</span>
+        {% endif %}
         <a href="{% url 'staff_preview_lesson' lesson.id %}" class="btn btn-sm">Preview</a>
         <form method="POST" action="{% url 'staff_publish_lesson' lesson.id %}" style="margin:0">
           {% csrf_token %}
           <button type="submit" class="btn btn-sm">{% if lesson.is_published %}Unpublish{% else %}Publish{% endif %}</button>
+        </form>
         {% if lesson.is_published %}
         <form method="POST" action="{% url 'staff_refresh_lesson' lesson.id %}" style="margin:0"
               onsubmit="return confirm('Send every student back to the start of this topic, using the current lecture?')">
@@ -225,6 +238,10 @@
           <button type="submit" class="btn btn-sm">Refresh for students</button>
         </form>
         {% endif %}
+        <form method="POST" action="{% url 'staff_generate_quizzes' %}" style="margin:0">
+          {% csrf_token %}
+          <input type="hidden" name="lesson_id" value="{{ lesson.id }}">
+          <button type="submit" class="btn btn-sm">{% if lesson.quiz_state == "ready" %}Redo quiz{% else %}Make quiz{% endif %}</button>
         </form>
         <form method="POST" action="{% url 'staff_delete_lesson' lesson.id %}" style="margin:0">
           {% csrf_token %}

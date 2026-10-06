@@ -39,6 +39,8 @@ class PreGeneratedLesson(models.Model):
     continuation_attempts = models.PositiveSmallIntegerField(default=0)
     source_type = models.CharField(max_length=10, choices=SOURCE_CHOICES, default="slides")
     review_note = models.TextField(blank=True)
+    quiz = models.JSONField(default=dict, blank=True)
+    quiz_source_hash = models.CharField(max_length=64, blank=True)
 
     class Meta:
         ordering = ["week_number", "topic_title"]

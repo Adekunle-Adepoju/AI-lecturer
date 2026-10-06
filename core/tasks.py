@@ -9,6 +9,26 @@ logger = logging.getLogger(__name__)
 # Click the button again to continue; finished chunks are skipped.
 BATTLE_CHUNKS_PER_JOB = 25
 
+def _queue_quiz_for(course_id, week_number, topic):
+    """Queue a quiz for this lesson unless it already has a current one."""
+    from django_q.tasks import async_task
+    from .models import PreGeneratedLesson
+    from .views import _lesson_quiz_is_current
+    lesson = PreGeneratedLesson.objects.filter(
+        course_id=course_id, week_number=week_number, topic_title=topic,
+    ).select_related("course").first()
+    if lesson and lesson.content_chunk.strip() and not lesson.is_truncated and not _lesson_quiz_is_current(lesson):
+        async_task(
+            "core.tasks.generate_lesson_quiz_task", lesson.id,
+            task_name=f"Quiz {lesson.course.course_code} W{week_number}: {topic[:60]}",
+        )
+
+
+def generate_lesson_quiz_task(lesson_id, force=False):
+    _fresh_db()
+    from .views import generate_lesson_quiz
+    return generate_lesson_quiz(lesson_id, force)
+
 def _slide_report(slide, headline, diagram_failed=None):
     """One honest line for the Background jobs page. Starts with OK or WARNING."""
     from .slide_topic_extractor import summarize_slide
@@ -88,8 +108,9 @@ def pregenerate_topic_lesson(course_id, week_number, topic, topic_index, total_t
     if existing and existing.source_type == "outline":
         existing = None   # slides now exist: regenerate from them
 
-    # Already generated -> nothing to do
+    # the "already generated" skip, so re-running Generate backfills missing quizzes
     if existing and existing.content_chunk.strip() and not existing.is_truncated:
+        _queue_quiz_for(course.id, week_number, topic)
         return f"skipped (already generated): {topic}"
 
     # Reference-table topics need no AI call
@@ -131,6 +152,7 @@ def pregenerate_topic_lesson(course_id, week_number, topic, topic_index, total_t
         existing.save(update_fields=["content_chunk", "is_truncated", "continuation_attempts"])
         if still_truncated:
             return f"PARTIAL: {topic} still truncated — run again to continue."
+        _queue_quiz_for(course.id, week_number, topic)
         return f"saved (continued): {topic}"
 
     # Brand new lesson
@@ -158,6 +180,7 @@ def pregenerate_topic_lesson(course_id, week_number, topic, topic_index, total_t
             "is_truncated": False, "continuation_attempts": 0,
         },
     )
+    _queue_quiz_for(course.id, week_number, topic)
     if review_note:
         return f"saved: {topic} — REVIEW BEFORE PUBLISHING: {review_note}"
     return f"saved: {topic}"

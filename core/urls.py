@@ -61,6 +61,7 @@ urlpatterns = [
     path("staff/lessons/publish/<int:lesson_id>/", views.staff_publish_lesson_view, name="staff_publish_lesson"),
     path("staff/lesson/<int:lesson_id>/preview/", views.staff_preview_lesson_view, name="staff_preview_lesson"),
     path("staff/lessons/delete/<int:lesson_id>/", views.staff_delete_lesson_view, name="staff_delete_lesson"),
+    path("staff/lessons/generate-quizzes/", views.staff_generate_quizzes_view, name="staff_generate_quizzes"),
     path("chat/chunk-next/", views.chunk_next_view, name="chunk_next"),
     path("chat/chunk-clarify/", views.chunk_clarify_view, name="chunk_clarify"),
     path("staff/slide/<int:slide_id>/diagnostics/", views.staff_slide_diagnostics_view, name="staff_slide_diagnostics"),

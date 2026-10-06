@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 import re
 import math
 import time
+import hashlib
 
 from django.contrib import messages
 from django.contrib.auth import login, logout, update_session_auth_hash
@@ -68,6 +69,10 @@ CITATION_HEURISTIC_RE = re.compile(
 MAX_TOPIC_CONTEXT_CHARS = 24000
 
 _VISUAL_FENCE_RE = re.compile(r"```(?:svg|mermaid|json_chart)[^\n]*\n.*?```", re.DOTALL)
+
+quiz_client = genai.Client(
+    api_key=getattr(settings, "GEMINI_API_KEY_QUIZ", "") or settings.GEMINI_API_KEY_GENERATION
+)
 
 def _strip_visual_blocks(text):
     return _VISUAL_FENCE_RE.sub("[diagram]", text or "")
@@ -1327,59 +1332,102 @@ def _quiz_is_valid(quiz):
     return 0 <= quiz.get("correct_index", -1) < 4
 
 
+def _lecture_hash(text):
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+
+
+def _lesson_quiz_is_current(lesson):
+    q = lesson.quiz or {}
+    return bool(q.get("question")) and lesson.quiz_source_hash == _lecture_hash(lesson.content_chunk)
+
+
 def _quiz_key_checks_out(lecture, quiz):
     """A second, independent call answers the question from the lecture alone.
-    If it disagrees with the stored key, the quiz is thrown away rather than
-    risk marking a student wrong for the right answer."""
+    If it disagrees with the stored key, the quiz is discarded."""
     prompt = (
         f"LECTURE:\n{lecture}\n\nQUESTION:\n{quiz['question']}\n\n"
         "OPTIONS:\n" + "\n".join(quiz["options"]) + "\n\n"
         "Using ONLY the lecture, which option is correct? Reply with a single letter: A, B, C or D."
     )
-    try:
-        raw, _ = _call_generation_model(prompt, None, 500, 0.0, "Quiz check", api_client=client, attempts=1)
-    except Exception as e:
-        print(f"Quiz check unavailable: {e}")
-        return False
-    m = re.match(r"\s*\(?([ABCD])\b", raw.upper())
+    raw, _ = _call_generation_model(prompt, None, 500, 0.0, "Quiz check", api_client=quiz_client)
+    m = re.search(r"\b([ABCD])\b", raw.upper())
     return bool(m) and "ABCD".index(m.group(1)) == quiz["correct_index"]
 
 
-def _generate_lecture_quiz(topic_session):
-    lecture = _strip_visual_blocks(topic_session.lecture_content or "").strip()
+def _build_lesson_quiz(topic_name, lecture_text):
+    lecture = _strip_visual_blocks(lecture_text or "").strip()
     if len(lecture) < 300:
         return None
-    contents = f"Topic: {topic_session.topic_name}\n\nLECTURE:\n{lecture}"
-    for attempt in range(2):
+    contents = f"Topic: {topic_name}\n\nLECTURE:\n{lecture}"
+    for attempt in range(3):
         try:
             raw, _ = _call_generation_model(
                 contents, LECTURE_QUIZ_PROMPT, 3000, 0.5,
-                f"Quiz gen — {topic_session.topic_name}", api_client=client, attempts=1,
+                f"Quiz gen — {topic_name}", api_client=quiz_client,
             )
             quiz = _parse_quiz_json(raw)
+            if _quiz_is_valid(quiz) and _quiz_key_checks_out(lecture, quiz):
+                return quiz
+            print(f"Quiz gen attempt {attempt + 1} rejected for {topic_name}")
         except Exception as e:
-            print(f"Quiz gen attempt {attempt + 1} failed: {e}")
-            continue
-        if _quiz_is_valid(quiz) and _quiz_key_checks_out(lecture, quiz):
-            return quiz
-        print(f"Quiz gen attempt {attempt + 1} rejected by validation for {topic_session.topic_name}")
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                raise                      # quota gone: fail the job visibly, don't burn retries
+            print(f"Quiz gen attempt {attempt + 1} failed for {topic_name}: {e}")
     return None
 
 
-def _ensure_quiz(topic_session):
-    """True if the topic has a real quiz (generating one if needed). Never saves a fake."""
+def generate_lesson_quiz(lesson_id, force=False):
+    """Staff-side: build and store the one quiz for a lesson."""
+    from django.db import close_old_connections
+    lesson = PreGeneratedLesson.objects.get(pk=lesson_id)
+    if not force and _lesson_quiz_is_current(lesson):
+        return "quiz already current"
+    quiz = _build_lesson_quiz(lesson.topic_title, lesson.content_chunk)
+    if quiz is None:
+        raise RuntimeError(f"No valid quiz could be built for {lesson}")
+    close_old_connections()
+    lesson = PreGeneratedLesson.objects.get(pk=lesson_id)
+    if not force and _lesson_quiz_is_current(lesson):
+        return "quiz already current"
+    source_text = lesson.content_chunk          # the text the quiz is built from
+    quiz = _build_lesson_quiz(lesson.topic_title, source_text)
+    if quiz is None:
+        raise RuntimeError(f"No valid quiz could be built for {lesson}")
+    close_old_connections()
+    lesson = PreGeneratedLesson.objects.get(pk=lesson_id)   # reload after the long call
+    lesson.quiz = {
+        "question": quiz["question"],
+        "options": quiz["options"],
+        "correct_index": quiz["correct_index"],
+        "explanation": quiz["explanation"],
+    }
+    lesson.quiz_source_hash = _lecture_hash(source_text)    # hash what the quiz was built from
+    lesson.save(update_fields=["quiz", "quiz_source_hash"])
+    return f"quiz saved for {lesson}"
+
+
+def _attach_quiz(topic_session):
+    """Copy the lesson's quiz onto this student's session, options shuffled per student.
+    No Gemini call. Returns False if the quiz hasn't been generated yet."""
     if topic_session.is_complete or _has_real_quiz(topic_session):
         return True
-    quiz = _generate_lecture_quiz(topic_session)
-    if quiz is None:
+    lesson = PreGeneratedLesson.objects.filter(
+        course__course_code=topic_session.session.course_code,
+        week_number=topic_session.session.week_number,
+        topic_title=topic_session.topic_name,
+        is_published=True,
+    ).first()
+    if lesson is None or not _lesson_quiz_is_current(lesson):
         return False
+    q = lesson.quiz
+    options, correct = _shuffle_quiz_options(q["options"], q["correct_index"])
     with transaction.atomic():
         ts = TopicSession.objects.select_for_update().get(pk=topic_session.pk)
         if not _has_real_quiz(ts):
-            ts.quiz_question = quiz["question"]
-            ts.quiz_options = quiz["options"]
-            ts.correct_answer_index = quiz["correct_index"]
-            ts.quiz_explanation = quiz["explanation"]
+            ts.quiz_question = q["question"]
+            ts.quiz_options = options
+            ts.correct_answer_index = correct
+            ts.quiz_explanation = q.get("explanation", "")
             ts.save(update_fields=["quiz_question", "quiz_options", "correct_answer_index", "quiz_explanation"])
     topic_session.refresh_from_db()
     return True
@@ -1392,7 +1440,7 @@ def quiz_view(request, topic_session_id):
     topic_session = get_object_or_404(TopicSession, id=topic_session_id, session__student=request.user.profile)
     session = topic_session.session
     entry = get_object_or_404(TimetableEntry, student=request.user.profile, course_code=session.course_code)
-    quiz_ready = _ensure_quiz(topic_session)
+    quiz_ready = _attach_quiz(topic_session)
 
     return render(request, "core/quiz.html", {
         "entry": entry,
@@ -2220,6 +2268,7 @@ def _generate_pregenerated_lecture(course_code, course_title, topic_name, chunk_
             "If the earlier draft contained a visual block (svg, mermaid or json_chart), keep it. "
             "Change only the labels or connections listed above. Do not remove a visual just to "
             "avoid a flag.\n"
+            "Keep all the explanation and depth of the earlier draft. Change only what is listed above.\n"
         )
 
     contents = (
@@ -2283,6 +2332,7 @@ _VERIFIER_LABELS = {
     "missing": "Slide point never taught",
     "unexplained_terms": "Topic-specific term used without explanation",
     "inconsistent": "Two different values given for one quantity",
+    "meta_reference": "Mentions the slides or its source",
 }
 
 def _verify_lecture(chunk_text, lecture):
@@ -2352,6 +2402,14 @@ def staff_pregeneerate_lessons_view(request):
     if filter_course_id:
         lessons = lessons.filter(course_id=filter_course_id)
 
+    for l in lessons:   # evaluates the queryset once; the template reuses these same objects
+        if _lesson_quiz_is_current(l):
+            l.quiz_state = "ready"
+        elif (l.quiz or {}).get("question"):
+            l.quiz_state = "stale"   # lecture changed after the quiz was made
+        else:
+            l.quiz_state = "none"
+
     return render(request, "core/staff/pregenerate_lessons.html", {
         "courses": courses,
         "lessons": lessons,
@@ -2365,11 +2423,33 @@ def staff_pregeneerate_lessons_view(request):
 def staff_publish_lesson_view(request, lesson_id):
     """Toggle publish status of a pre-generated lesson"""
     lesson = get_object_or_404(PreGeneratedLesson, id=lesson_id)
+    back = f"{reverse('staff_pregenerate_lessons')}?filter_course={lesson.course_id}"
+    if not lesson.is_published and not _lesson_quiz_is_current(lesson):
+        messages.error(request, f"'{lesson.topic_title}' has no current quiz. Generate the quiz first, then publish.")
+        return redirect(back)
     lesson.is_published = not lesson.is_published
     lesson.save()
     status = "published" if lesson.is_published else "unpublished"
     messages.success(request, f"'{lesson.topic_title}' {status}.")
-    return redirect("staff_pregenerate_lessons")
+    return redirect(back)
+
+
+@staff_required
+@require_POST
+def staff_bulk_publish_lessons_view(request):
+    course_id = request.POST.get("course_id")
+    course = get_object_or_404(CourseDefinition, id=course_id)
+    candidates = PreGeneratedLesson.objects.filter(
+        course=course, is_published=False,
+    ).exclude(source_type="outline")
+    ready_ids = [l.id for l in candidates if _lesson_quiz_is_current(l)]
+    updated = PreGeneratedLesson.objects.filter(id__in=ready_ids).update(is_published=True)
+    skipped = len(candidates) - len(ready_ids)
+    msg = f"Published {updated} lesson(s) for {course.course_code}."
+    if skipped:
+        msg += f" {skipped} skipped: no current quiz yet."
+    messages.success(request, msg)
+    return redirect(f"{reverse('staff_pregenerate_lessons')}?filter_course={course_id}")
 
 
 @staff_required
@@ -2391,19 +2471,6 @@ def staff_bulk_delete_lessons_view(request):
     messages.success(request, f"Deleted {deleted_count} lesson(s) for {course.course_code}.")
     return redirect(f"{reverse('staff_pregenerate_lessons')}?filter_course={course_id}")
 
-
-@staff_required
-@require_POST
-def staff_bulk_publish_lessons_view(request):
-    course_id = request.POST.get("course_id")
-    course = get_object_or_404(CourseDefinition, id=course_id)
-    updated = PreGeneratedLesson.objects.filter(
-        course=course, is_published=False,
-    ).exclude(source_type="outline").update(is_published=True)
-    messages.success(request, f"Published {updated} lesson(s) for {course.course_code}.")
-    return redirect(f"{reverse('staff_pregenerate_lessons')}?filter_course={course_id}")
-
-
 @staff_required
 @require_POST
 def staff_bulk_unpublish_lessons_view(request):
@@ -2412,6 +2479,31 @@ def staff_bulk_unpublish_lessons_view(request):
     updated = PreGeneratedLesson.objects.filter(course=course, is_published=True).update(is_published=False)
     messages.success(request, f"Unpublished {updated} lesson(s) for {course.course_code}.")
     return redirect(f"{reverse('staff_pregenerate_lessons')}?filter_course={course_id}")
+
+@staff_required
+@require_POST
+def staff_generate_quizzes_view(request):
+    lesson_id = request.POST.get("lesson_id")
+    if lesson_id:
+        lesson = get_object_or_404(PreGeneratedLesson, id=lesson_id)
+        async_task(
+            "core.tasks.generate_lesson_quiz_task", lesson.id, True,
+            task_name=f"Quiz {lesson.course.course_code} W{lesson.week_number}: {lesson.topic_title[:60]}",
+        )
+        messages.success(request, f"Queued a quiz for '{lesson.topic_title}'. See the Background Jobs page.")
+        return redirect(f"{reverse('staff_pregenerate_lessons')}?filter_course={lesson.course_id}")
+
+    course = get_object_or_404(CourseDefinition, id=request.POST.get("course_id"))
+    queued = 0
+    for lesson in PreGeneratedLesson.objects.filter(course=course):
+        if not _lesson_quiz_is_current(lesson):
+            async_task(
+                "core.tasks.generate_lesson_quiz_task", lesson.id,
+                task_name=f"Quiz {course.course_code} W{lesson.week_number}: {lesson.topic_title[:60]}",
+            )
+            queued += 1
+    messages.success(request, f"Queued {queued} quiz(zes) for {course.course_code}. See the Background Jobs page.")
+    return redirect(f"{reverse('staff_pregenerate_lessons')}?filter_course={course.id}")
 
 def _refresh_lesson_for_students(lesson):
     """Reset every in-progress student session on this lesson's topic so the
@@ -2930,13 +3022,13 @@ def simulator_result_view(request, test_id):
     })
 
 # ─── Chunk navigation ──────────────────────────────────────────────────────────
-
+@login_required
 @require_POST
 def chunk_next_view(request):
     """Student clicked Got it — advance to next chunk, no Gemini call for
     text (image generation for [IMAGE:] markers, if present, still runs)."""
     topic_session_id = request.POST.get("topic_session_id")
-    topic_session = get_object_or_404(TopicSession, id=topic_session_id)
+    topic_session = _own_topic_session(request, request.POST.get("topic_session_id"))
 
     total_chunks = len(topic_session.chunks)
     if total_chunks == 0:
@@ -2975,13 +3067,13 @@ def chunk_next_view(request):
         "is_last_chunk": is_last,
     })
 
-
+@login_required
 @require_POST
 def chunk_clarify_view(request):
     """Student asked a clarification question — call Gemini with chunk context."""
     topic_session_id = request.POST.get("topic_session_id")
     user_message = request.POST.get("message", "").strip()
-    topic_session = get_object_or_404(TopicSession, id=topic_session_id)
+    topic_session = _own_topic_session(request, request.POST.get("topic_session_id"))
 
     if not user_message:
         return JsonResponse({"error": "No message provided"}, status=400)

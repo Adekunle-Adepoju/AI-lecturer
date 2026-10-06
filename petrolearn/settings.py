@@ -154,7 +154,7 @@ Q_CLUSTER = {
     "recycle": 5,                # restart the worker after 5 tasks to release leaked memory
     "max_rss": 180_000,          # KB (~175 MB): recycle the worker if it grows past this
     "timeout": 7200,              # hard-kill a task after 10 min (Gemini takes 30-60s)
-    "retry": 7500,                # MUST be greater than timeout, or tasks run twice
+    "retry": 604800,                # MUST be greater than timeout, or tasks run twice
     "max_attempts": 1,           # never auto-rerun: avoids double Gemini quota burn
     "ack_failures": True,        # failed tasks leave the queue instead of looping
     "queue_limit": 10,           # cap tasks held in memory by the cluster
@@ -231,6 +231,7 @@ GEMINI_API_KEY_SIMULATOR = os.environ.get('GEMINI_API_KEY_SIMULATOR')
 GEMINI_API_KEY_GENERATION = os.environ.get('GEMINI_API_KEY_GENERATION')
 GEMINI_API_KEY_BATTLE = os.environ.get('GEMINI_API_KEY_BATTLE')
 GEMINI_API_KEY_CLEANUP = os.environ.get("GEMINI_API_KEY_CLEANUP")
+GEMINI_API_KEY_QUIZ = os.environ.get("GEMINI_API_KEY_QUIZ")
 
 LOGIN_URL = '/'
 
