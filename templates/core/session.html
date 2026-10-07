@@ -97,6 +97,13 @@
   #sessionRoot .topic-brief-list li:first-child .topic-brief-index{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
   #sessionRoot .brief-note{margin-top:18px;color:var(--ink-soft);font-size:.86rem;padding-top:16px;border-top:1px solid var(--line-soft);}
   #sessionRoot .start-form{max-width:var(--content-max);margin:0 auto;}
+
+    #sessionRoot .start-form-top{
+    position:sticky; top:8px; z-index:5;
+    margin-bottom:16px;
+    padding:8px 0;
+    background:linear-gradient(var(--bg) 70%, transparent);
+  }
     /* ---------- course overview (covered / still to cover) ---------- */
   #sessionRoot .ov-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px;}
   #sessionRoot .ov-head h3{margin:0;}
@@ -121,6 +128,13 @@
   #sessionRoot .course-list .today-tag{margin-left:auto;flex:none;font-size:.68rem;font-weight:600;padding:3px 9px;
     border-radius:999px;background:var(--amber-glow);border:1px solid var(--border-accent);color:var(--amber);white-space:nowrap;}
   #sessionRoot .ov-empty{font-size:.88rem;color:var(--ink-soft);margin:0;}
+    #sessionRoot .course-list li.has-link{cursor:pointer;transition:transform .15s var(--ease);}
+  #sessionRoot .course-list li.has-link:hover{transform:translateY(-1px);}
+  #sessionRoot .course-list li a.ov-link{
+    display:flex;align-items:flex-start;gap:12px;flex:1;min-width:0;
+    margin:-12px -14px;padding:12px 14px;border-radius:inherit;
+    color:inherit;text-decoration:none;
+  }
 
   /* ---------- buttons ---------- */
   #sessionRoot .btn{
@@ -332,6 +346,11 @@
 
   {% if not chat_mode %}
     <!-- ─── BRIEF / OVERVIEW PAGE ─────────────────────────────────────── -->
+    <form method="POST" action="{% url 'session' entry.course_code %}" class="start-form start-form-top">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="start">
+      <button type="submit" class="btn btn-primary btn-full">Start session →</button>
+    </form>
     <div class="brief-card">
       <div class="ov-head">
         <h3>Your course so far</h3>
@@ -340,12 +359,25 @@
       <div class="prog-bar" style="max-width:none;margin:0;">
         <div class="prog-fill" style="width: {{ overview.percent }}%"></div>
       </div>
-
+  {% if not off_week %}
+  <form method="post" action="{% url 'restart_session' course_code=entry.course_code week_number=entry.week_number %}" class="restart-form">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-white-outline btn-full"
+            onclick="return confirm('This will erase your progress for Week {{ entry.week_number }} and restart from scratch. Continue?');">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 1 2.6 6.4M3 21v-6h6"/></svg>
+      Restart this week from the beginning
+    </button>
+  </form>
+  {% endif %}
       <div class="ov-section is-done">Covered ({{ overview.covered|length }})</div>
       {% if overview.covered %}
         <ul class="course-list">
           {% for t in overview.covered %}
-            <li class="done"><span class="ci">{{ t.number }}</span><span>{{ t.name }}</span></li>
+            <li class="done{% if t.url %} has-link{% endif %}">
+              {% if t.url %}<a href="{{ t.url }}" class="ov-link">{% endif %}
+                <span class="ci">{{ t.number }}</span><span>{{ t.name }}</span>
+              {% if t.url %}</a>{% endif %}
+            </li>
           {% endfor %}
         </ul>
       {% else %}
@@ -356,9 +388,11 @@
       {% if overview.remaining %}
         <ul class="course-list">
           {% for t in overview.remaining %}
-            <li class="todo">
-              <span class="ci">{{ t.number }}</span><span>{{ t.name }}</span>
-              {% if t.is_today %}<span class="today-tag">Today</span>{% endif %}
+            <li class="todo{% if t.url %} has-link{% endif %}">
+              {% if t.url %}<a href="{{ t.url }}" class="ov-link">{% endif %}
+                <span class="ci">{{ t.number }}</span><span>{{ t.name }}</span>
+                {% if t.is_today %}<span class="today-tag">Today</span>{% endif %}
+              {% if t.url %}</a>{% endif %}
             </li>
           {% endfor %}
         </ul>
@@ -370,12 +404,6 @@
         Each topic is taught step by step in a live chat with Rovea AI — you'll check in as you go, and there's a short quiz after each one.
       </p>
     </div>
-
-    <form method="POST" action="{% url 'session' entry.course_code %}" class="start-form">
-      {% csrf_token %}
-      <input type="hidden" name="action" value="start">
-      <button type="submit" class="btn btn-primary btn-full">Start session</button>
-    </form>
 
     {% else %}
     {% if no_lecture_available %}

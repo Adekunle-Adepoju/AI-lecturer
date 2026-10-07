@@ -400,7 +400,7 @@
           <span class="tc-code">{{ t.entry.course_code }}</span>
         </div>
         <div class="tc-title">{{ t.entry.course_title }}</div>
-        <div class="tc-meta"><span>Compulsory test</span> · <span>Covers weeks 1–6</span></div>
+        <div class="tc-meta"><span>Compulsory test</span> · <span>Covers weeks 1–{{ t.covers_to }}</span></div>
       </div>
       <div class="tc-actions">
         {% if t.ready %}
@@ -418,11 +418,8 @@
     <div class="test-alert">
       <span class="ta-emoji">📋</span>
       <div>
-        <strong>{{ h.entry.course_code }}: test at week 7</strong>
-        <p>
-          You're on week {{ h.entry.week_number }}. After week 6 you'll take a compulsory test covering weeks 1–6.
-          You can't move on to week 8 until you've taken it.
-        </p>
+        <strong>{{ h.entry.course_code }}: test at week {{ h.test_week }}</strong>
+        <p>You're on week {{ h.entry.week_number }}. After week {{ h.covers_to }} you'll take a compulsory test covering weeks 1–{{ h.covers_to }}. You can't move on to week {{ h.next_week }} until you've taken it.</p>
       </div>
     </div>
     {% endfor %}

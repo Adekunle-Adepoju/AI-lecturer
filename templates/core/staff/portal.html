@@ -284,11 +284,25 @@
     <div class="item-card">
       <div>
         <div class="item-name">{{ outline.course_code }} — {{ outline.course_title }}</div>
-        <div class="item-meta">
-          Level {{ outline.level }} · {% if outline.parsed %}Outline parsed ✓{% else %}Not yet parsed{% endif %} · {{ outline.uploaded_at|date:"d M Y" }}
+                <div class="item-meta">
+          Level {{ outline.level }} ·
+          {% if outline.parsed and outline.topics_json.topics %}
+            Outline parsed ✓ · {{ outline.topics_json.topics|length }} topics
+          {% elif outline.extracted_text %}
+            ⚠ Text read, but no topics extracted yet
+          {% else %}
+            Not yet parsed
+          {% endif %}
+          · {{ outline.uploaded_at|date:"d M Y" }}
         </div>
       </div>
       <div class="item-actions">
+        {% if outline.extracted_text and not outline.topics_json.topics %}
+        <form method="post" action="{% url 'retry_outline_topics' outline.id %}" style="margin:0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary">Retry topics</button>
+        </form>
+        {% endif %}
         <button type="button" class="btn btn-danger" onclick="openDeleteModal('outline', '{{ outline.id }}', '{{ outline.course_code }} outline')">Delete</button>
       </div>
     </div>

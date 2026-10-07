@@ -1,0 +1,433 @@
+{% extends "core/base.html" %}
+{% load static %}
+{% block title %}{{ topic_name }} — Rovea{% endblock %}
+{% block body_attrs %} data-back-target="{% url 'session' course_code %}"{% endblock %}
+
+{% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Same tokens and bubble styles as session.html, so the replay looks like the live chat. */
+  html, body{overflow-x:hidden;width:100%;}
+  #readRoot{
+    --bg:var(--navy); --bg-alt:var(--navy-mid); --surface:var(--navy-card); --surface-2:var(--navy-raised);
+    --ink:var(--text); --ink-soft:var(--text-secondary); --ink-faint:var(--text-muted);
+    --line:var(--border); --line-soft:var(--border);
+    --heading:var(--text);
+    --accent:var(--amber); --accent-deep:var(--amber-dark); --accent-ink:#0D1B2A;
+    --coral:var(--red-soft); --green:var(--green-text);
+    --bubble-ai:var(--surface-2); --bubble-user:var(--accent);
+    --bubble-ai-text:var(--ink); --bubble-user-text:var(--accent-ink);
+    --font-body:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --font-heading:'Newsreader',serif;
+    --ease:cubic-bezier(.4,0,.2,1);
+    --content-max:760px;
+    color-scheme: dark;
+    max-width:none; margin:0; position:relative; overflow-x:clip;
+    background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    line-height:1.55; padding:28px clamp(16px,4vw,32px) 60px;
+    transition:background .25s var(--ease),color .25s var(--ease);
+  }
+  [data-theme="light"] #readRoot{ color-scheme: light; }
+  #readRoot *{box-sizing:border-box;}
+  #readRoot img{max-width:100%;display:block;}
+  #readRoot a{color:var(--accent);}
+  #readRoot :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+  #readRoot .max{max-width:var(--content-max);margin-inline:auto;}
+  @keyframes sFade{from{opacity:0;}to{opacity:1;}}
+  @media(prefers-reduced-motion:reduce){#readRoot *{animation-duration:.001ms!important;transition-duration:.001ms!important;}}
+
+  /* ---------- header ---------- */
+  #readRoot .back-link{display:inline-block;max-width:var(--content-max);font-size:.85rem;color:var(--ink-soft);margin-bottom:14px;}
+  #readRoot .back-link:hover{color:var(--accent);}
+  #readRoot .read-header{max-width:var(--content-max);margin:0 auto 20px;display:flex;align-items:flex-start;gap:14px;animation:sFade .3s var(--ease);}
+  #readRoot .read-titles{min-width:0;flex:1;}
+  #readRoot .read-title{font-family:var(--font-heading);font-size:1.25rem;font-weight:700;color:var(--heading);line-height:1.3;margin:0;}
+  #readRoot .read-sub{font-size:.82rem;color:var(--ink-soft);margin-top:4px;}
+  #readRoot .badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:.75rem;font-weight:600;flex:none;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-soft);}
+  #readRoot .badge-green{background:var(--teal-glow);border-color:rgba(26,158,122,.3);color:var(--green);}
+  #readRoot .badge-amber{background:var(--amber-glow);border-color:var(--border-accent);color:var(--amber);}
+
+  #readRoot .note{
+    max-width:var(--content-max);margin:0 auto 16px;padding:14px 16px;border-radius:var(--radius-md);
+    background:var(--bg-alt);border:1px solid var(--line);border-left:3px solid var(--accent);
+    font-size:.88rem;color:var(--ink-soft);
+  }
+
+  /* ---------- chat (same look as the live session) ---------- */
+  #readRoot .chat-box{max-width:var(--content-max);margin:0 auto 16px;background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--radius-lg);overflow:hidden;animation:sFade .35s var(--ease);}
+  #readRoot #readChat{padding:22px 24px;display:flex;flex-direction:column;gap:14px;}
+
+  #readRoot .msg-row{display:flex;gap:8px;max-width:min(88%,600px);min-width:0;}
+  #readRoot .msg-row.ai{align-self:flex-start;}
+  #readRoot .msg-row.user{align-self:flex-end;flex-direction:row-reverse;}
+  #readRoot .msg-row.system{align-self:center;max-width:95%;}
+  #readRoot .msg-bubble{padding:11px 15px;border-radius:var(--radius-md);font-size:.92rem;line-height:1.6;word-wrap:break-word;overflow-wrap:anywhere;word-break:break-word;min-width:0;}
+  #readRoot .msg-row.ai .msg-bubble{background:var(--bubble-ai);color:var(--bubble-ai-text);border:1px solid var(--line);}
+  #readRoot .msg-row.user .msg-bubble{background:var(--bubble-user);color:var(--bubble-user-text);}
+  #readRoot .msg-row.system .msg-bubble{background:transparent;border:1px dashed var(--line);color:var(--ink-faint);font-size:.78rem;text-align:center;}
+  #readRoot .msg-bubble sub{font-size:.75em;}
+  #readRoot .msg-bubble sup{font-size:.72em;}
+  #readRoot .msg-bubble blockquote{
+    border-left:3px solid var(--accent);padding:10px 14px;margin:10px 0;background:var(--bg-alt);
+    border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:.88rem;line-height:1.6;
+  }
+  #readRoot .msg-bubble blockquote strong{color:var(--accent);}
+  #readRoot .msg-bubble .msg-heading{font-weight:600;font-size:1.02em;color:var(--heading);margin:8px 0 6px;}
+  #readRoot .msg-bubble .msg-table{width:100%;border-collapse:collapse;margin:8px 0;font-size:.86rem;}
+  #readRoot .msg-bubble .msg-table th,#readRoot .msg-bubble .msg-table td{border:1px solid var(--line);padding:6px 9px;text-align:left;}
+  #readRoot .msg-bubble .msg-table th{background:var(--bg-alt);font-weight:600;color:var(--heading);}
+  #readRoot .msg-bubble .msg-code{background:var(--bg-alt);border:1px solid var(--line);border-radius:8px;padding:10px 13px;overflow-x:auto;font-size:.83rem;margin:8px 0;}
+  #readRoot .msg-bubble .katex-display{display:block;overflow-x:auto;overflow-y:hidden;max-width:100%;padding:4px 2px 8px;-webkit-overflow-scrolling:touch;}
+  #readRoot .msg-bubble .katex{max-width:100%;}
+  #readRoot .lecture-img{cursor:zoom-in;max-width:100%;border-radius:12px;margin-top:12px;}
+
+  /* ---------- quiz at the end ---------- */
+  #readRoot .quiz-card{max-width:var(--content-max);margin:0 auto 16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:22px 24px;}
+  #readRoot .quiz-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;}
+  #readRoot .quiz-label{font-size:.9rem;font-weight:600;color:var(--ink-soft);}
+  #readRoot .quiz-q{font-family:var(--font-heading);font-size:1.1rem;font-weight:600;color:var(--heading);line-height:1.4;margin:0 0 16px;}
+  #readRoot .qopt{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;margin-bottom:9px;
+    border:1px solid var(--line);border-radius:var(--radius-md);background:var(--bg-alt);color:var(--ink-soft);font-size:.9rem;
+  }
+  #readRoot .qopt.correct{border-color:var(--green);background:var(--teal-glow);color:var(--green);font-weight:600;}
+  #readRoot .qopt.wrong{border-color:var(--coral);background:rgba(239,122,99,.1);color:var(--coral);font-weight:600;}
+  #readRoot .qopt-tag{font-size:.75rem;font-weight:700;flex:none;text-align:right;}
+  #readRoot .explanation{
+    margin-top:14px;padding:13px 15px;background:var(--bg-alt);border-radius:var(--radius-md);
+    border-left:3px solid var(--accent);font-size:.86rem;color:var(--ink-soft);line-height:1.65;
+  }
+  #readRoot .explanation strong{color:var(--accent);}
+
+  /* ---------- buttons / nav ---------- */
+  #readRoot .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:999px;border:1px solid transparent;
+    font-weight:600;font-size:.88rem;cursor:pointer;padding:11px 22px;font-family:var(--font-body);
+    transition:background .15s var(--ease),border-color .15s var(--ease);text-decoration:none;
+  }
+  #readRoot .btn-primary{background:var(--accent);color:var(--accent-ink);}
+  #readRoot .btn-primary:hover{background:var(--accent-deep);}
+  #readRoot .btn-white-outline{background:transparent;color:var(--ink-soft);border-color:var(--line);}
+  #readRoot .btn-white-outline:hover{border-color:var(--ink-soft);color:var(--ink);}
+  #readRoot .btn-full{width:100%;}
+  #readRoot .read-continue{max-width:var(--content-max);margin:0 auto 16px;}
+  #readRoot .read-nav{max-width:var(--content-max);margin:0 auto;display:flex;gap:10px;}
+  #readRoot .read-nav > *{flex:1;}
+
+  @media (max-width: 640px){
+    #readRoot{ padding:14px 10px 80px; }
+    #readRoot .read-title{ font-size:1.05rem; }
+    #readRoot .chat-box{ margin-left:-10px; margin-right:-10px; width:calc(100% + 20px); border-radius:0; border-left:none; border-right:none; }
+    #readRoot #readChat{ padding:14px 10px; gap:10px; }
+    #readRoot .msg-row{ max-width:100%; gap:6px; }
+    #readRoot .msg-bubble{ padding:10px 13px; font-size:.9rem; }
+    #readRoot .read-nav{ flex-direction:column; }
+  }
+</style>
+
+<div class="page-container" id="readRoot" data-theme="dark">
+
+  <a href="{% url 'session' course_code %}" class="back-link">← Back to course</a>
+
+  <div class="read-header">
+    <div class="read-titles">
+      <h1 class="read-title">{{ topic_name }}</h1>
+      <div class="read-sub">
+        {{ course_code }}{% if entry.course_title %} · {{ entry.course_title }}{% endif %}{% if number %} · Topic {{ number }} of {{ total }}{% endif %}
+      </div>
+    </div>
+    <span class="badge {% if state == 'completed' %}badge-green{% elif state == 'in_progress' %}badge-amber{% endif %}">
+      {% if state == "completed" %}Completed{% elif state == "in_progress" %}In progress{% else %}Not taken yet{% endif %}
+    </span>
+  </div>
+
+  {% if not chat_messages %}
+    <div class="note">This lesson isn't available yet. Check back once it has been published.</div>
+  {% elif state == "preview" %}
+    <div class="note">
+      You haven't taken this topic yet, so this is the full lecture. When you reach it in your course,
+      your own chat and quiz result will be saved here.
+    </div>
+  {% endif %}
+
+  {% if chat_messages %}
+  <div class="chat-box">
+    <div id="readChat"></div>
+  </div>
+  {% endif %}
+
+  {% if quiz %}
+  <div class="quiz-card">
+    <div class="quiz-head">
+      <span class="quiz-label">Your quiz</span>
+      {% if quiz.passed %}
+        <span class="badge badge-green">Correct</span>
+      {% else %}
+        <span class="badge badge-amber">Incorrect</span>
+      {% endif %}
+    </div>
+    <p class="quiz-q">{{ quiz.question }}</p>
+    {% for o in quiz.options %}
+    <div class="qopt {% if o.is_correct %}correct{% elif o.is_picked %}wrong{% endif %}">
+      <span>{{ o.text }}</span>
+      {% if o.is_correct and o.is_picked %}
+        <span class="qopt-tag">Your answer ✓</span>
+      {% elif o.is_correct %}
+        <span class="qopt-tag">Correct answer</span>
+      {% elif o.is_picked %}
+        <span class="qopt-tag">Your answer</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if quiz.explanation %}
+    <div class="explanation"><strong>Explanation:</strong> {{ quiz.explanation }}</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if state == "in_progress" %}
+    <div class="note">You haven't finished this topic yet. The rest of the lesson will appear here once you do.</div>
+    {% if can_continue %}
+      <div class="read-continue">
+        <a href="{% url 'session' course_code %}" class="btn btn-primary btn-full">Continue lesson →</a>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  <div class="read-nav">
+    {% if prev_number %}
+      <a class="btn btn-white-outline" href="{% url 'topic_read' course_code prev_number %}">← Previous topic</a>
+    {% else %}<span></span>{% endif %}
+    {% if next_number %}
+      <a class="btn btn-white-outline" href="{% url 'topic_read' course_code next_number %}">Next topic →</a>
+    {% else %}<span></span>{% endif %}
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+  window.mermaid = mermaid;
+  mermaid.initialize({ startOnLoad: false, theme: "dark" });
+</script>
+<script src="{% static 'core/js/rovea-visual-renderer.js' %}"></script>
+
+{{ chat_messages|json_script:"readMessages" }}
+<script>
+(function(){
+  "use strict";
+  const root = document.getElementById("readRoot");
+  if (!root) return;
+
+  // Mirror the site-wide theme toggle, same as session.html
+  function syncTheme(){
+    root.setAttribute("data-theme", document.documentElement.getAttribute("data-theme") || "dark");
+  }
+  syncTheme();
+  new MutationObserver(syncTheme).observe(document.documentElement, { attributes:true, attributeFilter:["data-theme"] });
+
+  const totalParts = {{ total_parts|default:0 }};
+  const chatWindow = document.getElementById("readChat");
+
+  // ── Same markdown renderer as the live session ───────────────────────────
+  function renderMarkdown(text) {
+    const mathSpans = [];
+    const protectedText = text.replace(
+      /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\n]+?\$)/g,
+      (m) => { mathSpans.push(m); return "\u0000MATH-" + (mathSpans.length - 1) + "-\u0000"; }
+    );
+
+    const lines = protectedText.split("\n");
+    const parts = [];
+    let quoteBuffer = [];
+    let tableBuffer = [];
+    let codeBuffer = null;
+
+    function flushQuote() {
+      if (quoteBuffer.length) {
+        parts.push("\u0001BQ\u0001" + quoteBuffer.join("\n") + "\u0001/BQ\u0001");
+        quoteBuffer = [];
+      }
+    }
+    function isTableRow(line) { return /^\s*\|.*\|\s*$/.test(line); }
+    function isTableSeparator(line) {
+      return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line);
+    }
+    function flushTable() {
+      if (tableBuffer.length >= 2 && isTableSeparator(tableBuffer[1])) {
+        const splitRow = (row) => row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
+        const header = splitRow(tableBuffer[0]);
+        const bodyRows = tableBuffer.slice(2).map(splitRow);
+        let inner = "<tr>" + header.map(h => `<th>${h}</th>`).join("") + "</tr>";
+        for (const row of bodyRows) {
+          inner += "<tr>" + row.map(c => `<td>${c}</td>`).join("") + "</tr>";
+        }
+        parts.push("\u0001TBL\u0001" + inner + "\u0001/TBL\u0001");
+      } else if (tableBuffer.length) {
+        parts.push(...tableBuffer);
+      }
+      tableBuffer = [];
+    }
+
+    for (const line of lines) {
+      if (/^\s*```/.test(line)) {
+        if (codeBuffer === null) {
+          codeBuffer = [];
+        } else {
+          const codeContent = codeBuffer.join("\n").trim();
+          if (codeContent) {
+            const encoded = codeBuffer.join("\u0002NL\u0002");
+            parts.push("\u0001CODE\u0001" + encoded + "\u0001/CODE\u0001");
+          }
+          codeBuffer = null;
+        }
+        continue;
+      }
+      if (codeBuffer !== null) { codeBuffer.push(line); continue; }
+
+      if (isTableRow(line)) {
+        flushQuote();
+        tableBuffer.push(line);
+        continue;
+      } else if (tableBuffer.length) {
+        flushTable();
+      }
+
+      const quoteMatch = line.match(/^\s*>\s?(.*)$/);
+      const headingMatch = line.match(/^\s{0,3}#{1,6}\s+(.*)$/);
+
+      if (quoteMatch) {
+        quoteBuffer.push(quoteMatch[1]);
+      } else if (headingMatch) {
+        flushQuote();
+        parts.push("\u0001HD\u0001" + headingMatch[1].trim() + "\u0001/HD\u0001");
+      } else {
+        flushQuote();
+        parts.push(line);
+      }
+    }
+    flushQuote();
+    flushTable();
+    if (codeBuffer !== null && codeBuffer.length) {
+      parts.push(...codeBuffer);
+    }
+
+    let html = parts.join("\n")
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+      .replace(/([A-Za-z])(\d+)/g, "$1<sub>$2</sub>")
+      .replace(/\^(\d+)/g, "<sup>$1</sup>")
+      .replace(/\n/g, "<br>");
+
+    html = html.replace(/\u0001BQ\u0001([\s\S]*?)\u0001\/BQ\u0001/g, (_, inner) => `<blockquote>${inner}</blockquote>`);
+    html = html.replace(/\u0001HD\u0001([\s\S]*?)\u0001\/HD\u0001/g, (_, inner) => `<div class="msg-heading">${inner}</div>`);
+    html = html.replace(/\u0001TBL\u0001([\s\S]*?)\u0001\/TBL\u0001/g, (_, inner) => `<table class="msg-table">${inner}</table>`);
+    html = html.replace(/\u0001CODE\u0001([\s\S]*?)\u0001\/CODE\u0001/g, (_, inner) => `<pre class="msg-code"><code>${inner.replace(/\u0002NL\u0002/g, "\n")}</code></pre>`);
+    html = html.replace(/\u0000MATH-(\d+)-\u0000/g, (_, i) => mathSpans[Number(i)]);
+    return html;
+  }
+
+  function stripImageMarker(text) {
+    return (text || "").replace(/\[IMAGE:.*?\]/gi, "");
+  }
+
+  function renderMathIn(el) {
+    if (!el || typeof window.renderMathInElement !== "function") return;
+    try {
+      window.renderMathInElement(el, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "\\[", right: "\\]", display: true },
+          { left: "\\(", right: "\\)", display: false },
+          { left: "$", right: "$", display: false }
+        ],
+        throwOnError: false
+      });
+    } catch (e) {}
+  }
+
+  function fillAiBubble(bubble, rawText) {
+    const segments = window.RoveaVisualRenderer
+      ? window.RoveaVisualRenderer._internal.splitIntoSegments(rawText)
+      : [{ type: "text", content: rawText }];
+
+    segments.forEach(seg => {
+      if (seg.type === "text") {
+        if (!seg.content.trim()) return;
+        const wrap = document.createElement("div");
+        wrap.innerHTML = renderMarkdown(seg.content);
+        renderMathIn(wrap);
+        bubble.appendChild(wrap);
+      } else if (window.RoveaVisualRenderer) {
+        const { renderJsonChart, renderMermaid, renderSvg } = window.RoveaVisualRenderer._internal;
+        let node = null;
+        if (seg.type === "json_chart") node = renderJsonChart(seg.raw);
+        else if (seg.type === "mermaid") node = renderMermaid(seg.raw);
+        else if (seg.type === "svg") node = renderSvg(seg.raw);
+        if (node) bubble.appendChild(node);
+      }
+    });
+  }
+
+  function appendUserBubble(text) {
+    const row = document.createElement("div");
+    row.className = "msg-row user";
+    const bubble = document.createElement("div");
+    bubble.className = "msg-bubble";
+    bubble.textContent = text;
+    row.appendChild(bubble);
+    chatWindow.appendChild(row);
+  }
+
+  function createAiBubble() {
+    const row = document.createElement("div");
+    row.className = "msg-row ai";
+    row.innerHTML = '<div class="msg-bubble"></div>';
+    chatWindow.appendChild(row);
+    return row.querySelector(".msg-bubble");
+  }
+
+  function appendSystemBubble(text) {
+    const row = document.createElement("div");
+    row.className = "msg-row system";
+    const bubble = document.createElement("div");
+    bubble.className = "msg-bubble";
+    bubble.textContent = text;
+    row.appendChild(bubble);
+    chatWindow.appendChild(row);
+  }
+
+  // ── Replay the saved conversation, in order ──────────────────────────────
+  document.addEventListener("DOMContentLoaded", function () {
+    const holder = document.getElementById("readMessages");
+    if (!chatWindow || !holder) return;
+    const data = JSON.parse(holder.textContent) || [];
+
+    let part = 0;
+    data.forEach(msg => {
+      if (msg.role === "user") {
+        appendUserBubble(msg.content);
+        return;
+      }
+      if (msg.is_pregenerated && totalParts) {
+        part += 1;
+        appendSystemBubble("— Part " + part + " of " + totalParts + " —");
+      }
+      const bubble = createAiBubble();
+      fillAiBubble(bubble, stripImageMarker(msg.content));
+      if (msg.image_url) {
+        const img = document.createElement("img");
+        img.src = msg.image_url;
+        img.alt = "Lecture illustration";
+        img.className = "lecture-img";
+        img.addEventListener("click", () => window.open(msg.image_url, "_blank"));
+        bubble.appendChild(img);
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

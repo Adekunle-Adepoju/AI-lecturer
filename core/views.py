@@ -394,15 +394,17 @@ def dashboard_view(request):
     todays_courses = [
         e for e in scheduled_today
         if not e.is_completed and e.course_code not in done_today
-        and e.week_number != TEST_WEEK
+            and not _at_test_week(profile, e)
     ]
     other_courses = [e for e in entries if e not in todays_courses and not e.is_completed]
     pending_tests, test_heads_up = _test_context(profile, entries)
     is_rest_day = not scheduled_today
 
+    week_by_code = {t.course_code: t.week_number for t in timetable}
     incomplete_sessions = {
         s.course_code: s
         for s in Session.objects.filter(student=profile, is_complete=False)
+        if s.week_number == week_by_code.get(s.course_code)
     }
 
     # Check if all courses are completed — show end of year message
@@ -434,7 +436,7 @@ def dashboard_view(request):
 # never from individual login/signup history — so students with the same
 # course list always land on the same course on the same calendar day.
 LAGOS = ZoneInfo("Africa/Lagos")
-TEST_WEEK = 7
+
 DEFAULT_STUDY_WEEKDAYS = [0, 1, 2, 3, 4, 5]   # Mon–Sat; Sunday stays free
 
 
@@ -486,40 +488,74 @@ def _streak_continues(profile, last, today):
     entries = _ensure_study_days(profile)
     return not any(_courses_on(entries, last + timedelta(days=i)) for i in range(1, gap))
 
-# ─── Test week: every course holds its own test when it reaches week 7 ───────
+# ─── Test week: placed at the middle of each course ─────────────────────────
 
-HEADS_UP_WEEKS = (4, 5, 6)
+HEADS_UP_WINDOW = 3          # warn this many weeks before the test
+MIN_WEEKS_BEFORE_TEST = 2    # a course needs this many lecture weeks before its test
+
+
+def _test_week_from_count(n_topics):
+    """Week number of a course's test, or None if the course is too short.
+    Course length = lecture weeks + the test week. The test sits at the half;
+    for an odd length (15) the earlier week (7) is used."""
+    rounds = min(n_topics, TEACHING_ROUNDS)
+    if rounds <= 0:
+        return None
+    tw = (rounds + 1) // 2
+    return tw if tw - 1 >= MIN_WEEKS_BEFORE_TEST else None
+
+
+def _test_week_for(course_code, level):
+    return _test_week_from_count(len(_get_total_topics_for_course(course_code, level)))
+
+
+def _course_total_weeks(course_code, level):
+    n = len(_get_total_topics_for_course(course_code, level))
+    return min(n, TEACHING_ROUNDS) + (1 if _test_week_from_count(n) else 0)
+
+
+def _at_test_week(profile, entry):
+    tw = _test_week_for(entry.course_code, _course_level(entry.course_code, profile))
+    return tw is not None and entry.week_number == tw
 
 
 def _ready_test_topics(course_code, level):
-    """Topics from weeks 1-6 that have approved questions."""
+    """Topics from every lecture week before the test that have approved questions."""
+    tw = _test_week_for(course_code, level)
+    if tw is None:
+        return []
     ready = {a["topic"] for a in get_topic_availability(course_code, level) if a["ready"]}
     return [
-        t for r in range(1, TEST_WEEK)
+        t for r in range(1, tw)
         for t in _get_topics_for_week(course_code, level, r) if t in ready
     ]
 
 
 def _test_context(profile, entries):
-    """pending: courses sitting at week 7 (test waiting).
-    heads_up: courses on weeks 4-6 (test coming)."""
-    pending = []
+    """pending: courses sitting at their test week.
+    heads_up: courses 1-3 weeks before it."""
+    pending, heads_up = [], []
     for e in entries:
-        if e.week_number == TEST_WEEK and not e.is_completed:
-            level = _course_level(e.course_code, profile)
+        if e.is_completed:
+            continue
+        level = _course_level(e.course_code, profile)
+        tw = _test_week_for(e.course_code, level)
+        if tw is None:
+            continue
+        if e.week_number == tw:
             pending.append({
-                "entry": e,
+                "entry": e, "test_week": tw, "covers_to": tw - 1,
                 "ready": bool(_ready_test_topics(e.course_code, level)),
                 "in_progress": SimulatorTest.objects.filter(
-                    student=profile, course_code=e.course_code, mode="auto",
-                    week_number=TEST_WEEK, status="in_progress",
+                    student=profile, course_code=e.course_code,
+                    mode="auto", status="in_progress",
                 ).exists(),
             })
-    heads_up = [
-        {"entry": e, "lessons_left": TEST_WEEK - e.week_number}
-        for e in entries
-        if e.week_number in HEADS_UP_WEEKS and not e.is_completed
-    ]
+        elif 1 <= tw - e.week_number <= HEADS_UP_WINDOW:
+            heads_up.append({
+                "entry": e, "lessons_left": tw - e.week_number,
+                "test_week": tw, "covers_to": tw - 1, "next_week": tw + 1,
+            })
     return pending, heads_up
 
 TOTAL_TEACHING_WEEKS = 15  # fixed course length in teaching rounds
@@ -576,30 +612,54 @@ def _get_total_topics_for_course(course_code, level):
 
     return []
 
+def _completed_topic_names(profile, course_code):
+    """Topics the student has actually finished (quiz answered).
+    Opening a topic to read it never counts."""
+    return set(
+        TopicSession.objects.filter(
+            session__student=profile,
+            session__course_code=course_code,
+            is_complete=True,
+        ).values_list("topic_name", flat=True)
+    )
+
 def _get_course_progress_pct(profile, course_code):
-    """Percent of the course's total topic list the student has completed,
-    based on real TopicSession completion — not session count or week
-    number, so it reflects actual topics finished vs the full syllabus."""
+    """Share of the course's topics the student has finished. Counts distinct
+    topics from the real topic list, and rounds DOWN, so it only reaches 100
+    once every single topic is done, whatever order they were taken in."""
     level = _course_level(course_code, profile)
-    total_topics = len(_get_total_topics_for_course(course_code, level))
-    if not total_topics:
+    all_topics = _get_total_topics_for_course(course_code, level)
+    if not all_topics:
         return 0
-    completed = TopicSession.objects.filter(
-        session__student=profile,
-        session__course_code=course_code,
-        is_complete=True,
-    ).count()
-    return min(100, round((completed / total_topics) * 100))
+    done = _completed_topic_names(profile, course_code) & set(all_topics)
+    return (100 * len(done)) // len(all_topics)
 
 
 TEACHING_ROUNDS = TOTAL_TEACHING_WEEKS - 1   # week 7 is the test, not a lecture
 
 
-def _week_to_round_index(week):
-    """0-based teaching-round index, or None for the test week / out of range."""
-    if week == TEST_WEEK or week < 1 or week > TOTAL_TEACHING_WEEKS:
+def _week_to_round_index(week, test_week=None):
+    """0-based lecture-round index, or None for the test week / out of range."""
+    if week < 1 or week > TOTAL_TEACHING_WEEKS:
         return None
-    return week - 1 if week < TEST_WEEK else week - 2
+    if test_week is None or week < test_week:
+        return week - 1
+    if week == test_week:
+        return None
+    return week - 2
+
+
+def _get_topics_for_week(course_code, level, week_number):
+    all_topics = _get_total_topics_for_course(course_code, level)
+    idx = _week_to_round_index(week_number, _test_week_from_count(len(all_topics)))
+    if idx is None:
+        return []
+    sizes = _topic_round_sizes(len(all_topics))
+    if idx >= len(sizes):
+        return []
+    start = sum(sizes[:idx])
+    size = sizes[idx]
+    return all_topics[start:start + size] if size else []
 
 
 def _topic_round_sizes(total_topics, total_rounds=TEACHING_ROUNDS):
@@ -608,16 +668,6 @@ def _topic_round_sizes(total_topics, total_rounds=TEACHING_ROUNDS):
     base, remainder = divmod(total_topics, total_rounds)
     return [base + 1 if i < remainder else base for i in range(total_rounds)]
 
-
-def _get_topics_for_week(course_code, level, week_number):
-    idx = _week_to_round_index(week_number)
-    if idx is None:
-        return []
-    all_topics = _get_total_topics_for_course(course_code, level)
-    sizes = _topic_round_sizes(len(all_topics))
-    start = sum(sizes[:idx])
-    size = sizes[idx]
-    return all_topics[start:start + size] if size else []
 
 
 def _find_slide_content_for_topic(course_code, level, topic_name):
@@ -988,28 +1038,57 @@ def _parse_quiz_json(text):
 # ─── Session ───────────────────────────────────────────────────────────────────
 
 def _course_overview(profile, course_code, today_topics=()):
-    """The whole course split into covered / still-to-cover for this student."""
+    """The whole course split into covered / still-to-cover, with the test week in place."""
     level = _course_level(course_code, profile)
     all_topics = _get_total_topics_for_course(course_code, level)
-    done_names = set(
-        TopicSession.objects.filter(
-            session__student=profile,
-            session__course_code=course_code,
-            is_complete=True,
-        ).values_list("topic_name", flat=True)
+    done_names = _completed_topic_names(profile, course_code)
+    tw = _test_week_from_count(len(all_topics))
+    test_after = sum(_topic_round_sizes(len(all_topics))[:tw - 1]) if tw else None
+    test_done = bool(tw) and SimulatorTest.objects.filter(
+        student=profile, course_code=course_code, mode="auto", status="complete",
+    ).exists()
+
+    # The test row only links when the student is actually at the test week.
+    entry = TimetableEntry.objects.filter(student=profile, course_code=course_code).first()
+    at_test = bool(tw) and entry is not None and entry.week_number == tw
+    test_url = (
+        f"{reverse('simulator_setup', kwargs={'mode': 'auto'})}?course_code={course_code}"
+        if at_test and not test_done else ""
     )
+
     covered, remaining = [], []
     for number, name in enumerate(all_topics, start=1):
-        item = {"number": number, "name": name, "is_today": name in today_topics}
+        if tw and number - 1 == test_after:
+            test_item = {
+                "number": "T", "is_today": False, "is_test": True, "url": test_url,
+                "name": f"Test week (week {tw}), covers weeks 1–{tw - 1}",
+            }
+            (covered if test_done else remaining).append(test_item)
+        item = {
+            "number": number, "name": name, "is_today": name in today_topics, "is_test": False,
+            "url": reverse("topic_read" if name in done_names else "topic_study", args=[course_code, number]),
+        }
         (covered if name in done_names else remaining).append(item)
+
     total = len(all_topics)
+    topics_done = sum(1 for t in covered if not t["is_test"])
     return {
         "covered": covered,
         "remaining": remaining,
         "total": total,
-        "done_count": len(covered),
-        "percent": round(100 * len(covered) / total) if total else 0,
+        "done_count": topics_done,
+        "percent": (100 * topics_done) // total if total else 0,
     }
+
+def _skip_finished_weeks(entry, profile, course_code):
+    """If a week was already finished early, move on to the next unfinished week."""
+    start = entry.week_number
+    while (entry.week_number <= TOTAL_TEACHING_WEEKS and Session.objects.filter(
+            student=profile, course_code=course_code,
+            week_number=entry.week_number, is_complete=True).exists()):
+        entry.week_number += 1
+    if entry.week_number != start:
+        entry.save(update_fields=["week_number"])
 
 @login_required
 def session_view(request, course_code):
@@ -1018,9 +1097,12 @@ def session_view(request, course_code):
 
     profile = request.user.profile
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
-    if entry.week_number == TEST_WEEK:
-        return redirect(f"{reverse('simulator_setup', kwargs={'mode': 'auto'})}?course_code={course_code}")
+    _skip_finished_weeks(entry, profile, course_code)
     level = _course_level(course_code, profile)
+    tw = _test_week_for(course_code, level)
+    if tw is not None and entry.week_number == tw:
+        return redirect(f"{reverse('simulator_setup', kwargs={'mode': 'auto'})}?course_code={course_code}")
+    entry.total_weeks = _course_total_weeks(course_code, level)   # shown in the header only, never saved
 
     if request.method == "GET":
         existing_session = Session.objects.filter(
@@ -1060,11 +1142,11 @@ def session_view(request, course_code):
                 student=profile, course_code=course_code, course_title=entry.course_title,
                 week_number=entry.week_number, topics=topics, current_topic_index=0,
             )
-            if entry.week_number in HEADS_UP_WEEKS:
+            if tw is not None and 1 <= tw - entry.week_number <= HEADS_UP_WINDOW:
                 messages.info(
                     request,
-                    f"Heads up: your {course_code} test comes at week 7 and covers weeks 1–6. "
-                    f"You can't move on to week 8 until you've taken it.",
+                    f"Heads up: your {course_code} test comes at week {tw} and covers weeks 1–{tw - 1}. "
+                    f"You can't move on to week {tw + 1} until you've taken it.",
                 )
         return redirect("session", course_code=course_code)
 
@@ -1082,11 +1164,22 @@ def course_outline_view(request, course_code):
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
 
     level = _course_level(course_code, profile)
+    tw = _test_week_for(course_code, level)
+    test_done = SimulatorTest.objects.filter(
+        student=profile, course_code=course_code, mode="auto", status="complete",
+    ).exists()
     sessions = Session.objects.filter(student=profile, course_code=course_code)
     session_by_week = {s.week_number: s for s in sessions}
 
     weeks_display = []
     for week_number in range(1, TOTAL_TEACHING_WEEKS + 1):
+        if tw is not None and week_number == tw:
+            weeks_display.append({
+                "week_number": tw,
+                "topics": [{"name": f"Test week: covers weeks 1–{tw - 1}", "is_complete": test_done}],
+                "all_complete": test_done,
+            })
+            continue
         topics = _get_topics_for_week(course_code, level, week_number)
         if not topics:
             continue
@@ -1194,7 +1287,16 @@ def _teach_topic(request, session, entry, profile, topic_name, topic_index):
         "topic_name": topic_name,
     })
 
-def _render_chat_session(request, entry, profile, session):
+def _render_chat_session(request, entry, profile, session, off_week=False):
+    # If the pointer sits on an already-finished topic, move to the next unfinished one.
+    finished = set(session.topic_sessions.filter(is_complete=True).values_list("topic_index", flat=True))
+    if session.current_topic_index in finished:
+        pending = [i for i in range(len(session.topics)) if i not in finished]
+        if pending:
+            later = [i for i in pending if i > session.current_topic_index]
+            session.current_topic_index = (later or pending)[0]
+            session.save(update_fields=["current_topic_index"])
+
     current_index = session.current_topic_index
     topic_name = session.topics[current_index]
 
@@ -1209,15 +1311,14 @@ def _render_chat_session(request, entry, profile, session):
             topic_index=current_index,
         )
 
-        # ── Check for pre-generated content ──────────────────────────────────────
-    try:
-        lesson = PreGeneratedLesson.objects.get(
-            course__course_code=session.course_code,
-            week_number=session.week_number,
-            topic_title=topic_name,
-            is_published=True,
-        )
-    except PreGeneratedLesson.DoesNotExist:
+    # ── Check for pre-generated content ──────────────────────────────────────
+    lesson = (
+        PreGeneratedLesson.objects
+        .filter(course__course_code=session.course_code, topic_title=topic_name, is_published=True)
+        .order_by("-updated_at")
+        .first()
+    )
+    if lesson is None:
         return render(request, "core/session.html", {
             "entry": entry,
             "session": session,
@@ -1227,6 +1328,7 @@ def _render_chat_session(request, entry, profile, session):
             "topic_name": topic_name,
             "chat_mode": True,
             "no_lecture_available": True,
+            "off_week": off_week,
         })
 
     is_pregenerated = True
@@ -1238,7 +1340,7 @@ def _render_chat_session(request, entry, profile, session):
         student_name = profile.user.first_name or profile.user.username
         greeting = (
             f"Hey {student_name}! 👋 How are you doing today? "
-            f"Ready to tackle some engineering concepts together? "
+            f"Ready to learn something new together? "
             f"Let's dive into **{topic_name}**.\n\n"
         )
         if pages:
@@ -1301,6 +1403,7 @@ def _render_chat_session(request, entry, profile, session):
             bool(topic_session.chunks)
             and topic_session.current_chunk_index == len(topic_session.chunks) - 1
         ),
+        "off_week": off_week,
     })
 
 
@@ -1382,13 +1485,6 @@ def generate_lesson_quiz(lesson_id, force=False):
     lesson = PreGeneratedLesson.objects.get(pk=lesson_id)
     if not force and _lesson_quiz_is_current(lesson):
         return "quiz already current"
-    quiz = _build_lesson_quiz(lesson.topic_title, lesson.content_chunk)
-    if quiz is None:
-        raise RuntimeError(f"No valid quiz could be built for {lesson}")
-    close_old_connections()
-    lesson = PreGeneratedLesson.objects.get(pk=lesson_id)
-    if not force and _lesson_quiz_is_current(lesson):
-        return "quiz already current"
     source_text = lesson.content_chunk          # the text the quiz is built from
     quiz = _build_lesson_quiz(lesson.topic_title, source_text)
     if quiz is None:
@@ -1401,7 +1497,7 @@ def generate_lesson_quiz(lesson_id, force=False):
         "correct_index": quiz["correct_index"],
         "explanation": quiz["explanation"],
     }
-    lesson.quiz_source_hash = _lecture_hash(source_text)    # hash what the quiz was built from
+    lesson.quiz_source_hash = _lecture_hash(source_text)
     lesson.save(update_fields=["quiz", "quiz_source_hash"])
     return f"quiz saved for {lesson}"
 
@@ -1517,8 +1613,9 @@ def answer_view(request):
         if advanced:
             entry.refresh_from_db()
             level = _course_level(session.course_code, profile)
+            tw = _test_week_for(session.course_code, level)
             entry.is_completed = (
-                entry.week_number != TEST_WEEK
+                entry.week_number != tw
                 and not _get_topics_for_week(session.course_code, level, entry.week_number)
             )
             entry.save(update_fields=["is_completed"])
@@ -1543,6 +1640,14 @@ def next_topic_view(request):
 
     session.current_topic_index = next_index
     session.save()
+
+    # A lecture from another week continues through the study route.
+    entry = TimetableEntry.objects.filter(student=profile, course_code=session.course_code).first()
+    if entry and session.week_number != entry.week_number and 0 <= next_index < len(session.topics):
+        all_topics = _get_total_topics_for_course(session.course_code, _course_level(session.course_code, profile))
+        name = session.topics[next_index]
+        if name in all_topics:
+            return redirect("topic_study", course_code=session.course_code, number=all_topics.index(name) + 1)
 
     return redirect("session", course_code=session.course_code)
 
@@ -1674,19 +1779,187 @@ def account_settings_view(request):
 
 # ─── Review ────────────────────────────────────────────────────────────────────
 
+def _lesson_pages(course_code, topic_name):
+    """The published lesson for a topic, cut into the same ~1800-char pages
+    the live chat uses. Empty list if no lesson is published."""
+    lesson = (
+        PreGeneratedLesson.objects
+        .filter(course__course_code=course_code, topic_title=topic_name, is_published=True)
+        .order_by("-updated_at")
+        .first()
+    )
+    return _split_into_pages(lesson.content_chunk, target_chars=1800) if lesson else []
+
+
+def _topic_read_context(profile, course_code, topic_name, entry):
+    """Everything the reader page needs for one topic."""
+    ts = (
+        TopicSession.objects
+        .filter(session__student=profile, session__course_code=course_code, topic_name=topic_name)
+        .order_by("-is_complete", "-id")
+        .first()
+    )
+
+    chat = list(ts.chatmessage_set.order_by("created_at", "id")) if ts else []
+    if chat:
+        # Exactly what the student saw: every chunk they opened, every question
+        # they asked, every reply they got, in order.
+        messages_out = [
+            {
+                "role": "user" if m.role == "user" else "ai",
+                "content": m.content,
+                "is_pregenerated": bool(m.is_pregenerated),
+                "image_url": m.image_url or "",
+            }
+            for m in chat
+        ]
+        total_parts = len(ts.chunks or []) or sum(1 for m in messages_out if m["is_pregenerated"])
+    else:
+        text = (ts.lecture_content if ts else "") or ""
+        pages = _split_into_pages(text, target_chars=1800) if text.strip() else _lesson_pages(course_code, topic_name)
+        messages_out = [{"role": "ai", "content": p, "is_pregenerated": True, "image_url": ""} for p in pages]
+        total_parts = len(pages)
+
+    if ts and ts.is_complete:
+        state = "completed"
+    elif chat:
+        state = "in_progress"
+    else:
+        state = "preview"
+
+    quiz = None
+    if ts and ts.is_complete and ts.quiz_question:
+        quiz = {
+            "question": ts.quiz_question,
+            "passed": bool(ts.passed_quiz),
+            "explanation": ts.quiz_explanation or "",
+            "options": [
+                {
+                    "text": opt,
+                    "is_correct": i == ts.correct_answer_index,
+                    "is_picked": i == ts.student_answer_index,
+                }
+                for i, opt in enumerate(ts.quiz_options or [])
+            ],
+        }
+
+    can_continue = bool(
+        ts and not ts.is_complete and not ts.session.is_complete
+        and ts.session.week_number == entry.week_number
+    )
+
+    return {
+        "entry": entry,
+        "course_code": course_code,
+        "topic_name": topic_name,
+        "topic_session": ts,
+        "chat_messages": messages_out,
+        "total_parts": total_parts,
+        "state": state,
+        "quiz": quiz,
+        "can_continue": can_continue,
+    }
+
+def _week_for_topic_number(all_topics, number):
+    """Which teaching week a topic belongs to. Mirrors _get_topics_for_week exactly,
+    including the gap left by the test week."""
+    pos = number - 1
+    sizes = _topic_round_sizes(len(all_topics))
+    tw = _test_week_from_count(len(all_topics))
+    start = 0
+    for r, size in enumerate(sizes):
+        if pos < start + size:
+            return r + 1 if (tw is None or r < tw - 1) else r + 2
+        start += size
+    return None
+
+
+@login_required
+def topic_study_view(request, course_code, number):
+    """Start or resume a normal lecture for any topic, in any week. The student's
+    own week_number is never changed here."""
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
+    profile = request.user.profile
+    entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
+    level = _course_level(course_code, profile)
+    all_topics = _get_total_topics_for_course(course_code, level)
+    if not 1 <= number <= len(all_topics):
+        raise Http404
+
+    topic_name = all_topics[number - 1]
+    if topic_name in _completed_topic_names(profile, course_code):
+        return redirect("topic_read", course_code=course_code, number=number)
+
+    week = _week_for_topic_number(all_topics, number)
+    week_topics = _get_topics_for_week(course_code, level, week) if week else []
+    if topic_name not in week_topics:
+        raise Http404
+
+    session = Session.objects.filter(
+        student=profile, course_code=course_code, week_number=week, is_complete=False,
+    ).first()
+    if session is None:
+        session = Session.objects.create(
+            student=profile, course_code=course_code, course_title=entry.course_title,
+            week_number=week, topics=week_topics,
+            current_topic_index=week_topics.index(topic_name),
+        )
+    else:
+        if topic_name not in session.topics:
+            messages.error(request, "This week's topics have changed. Restart the week to pick up the new list.")
+            return redirect("session", course_code=course_code)
+        idx = session.topics.index(topic_name)
+        if session.current_topic_index != idx:
+            session.current_topic_index = idx
+            session.save(update_fields=["current_topic_index"])
+
+    real_week = entry.week_number
+    entry.total_weeks = _course_total_weeks(course_code, level)   # display only, never saved
+    entry.week_number = week                                      # display only, never saved
+    return _render_chat_session(request, entry, profile, session, off_week=(week != real_week))
+
+@login_required
+def topic_read_view(request, course_code, number):
+    if not hasattr(request.user, "profile"):
+        return redirect("onboarding")
+    profile = request.user.profile
+    entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
+
+    all_topics = _get_total_topics_for_course(course_code, _course_level(course_code, profile))
+    if not 1 <= number <= len(all_topics):
+        raise Http404
+
+    topic_name = all_topics[number - 1]
+    if topic_name not in _completed_topic_names(profile, course_code):
+        return redirect("topic_study", course_code=course_code, number=number)
+
+    ctx = _topic_read_context(profile, course_code, topic_name, entry)
+    ctx.update({
+        "number": number,
+        "total": len(all_topics),
+        "prev_number": number - 1 if number > 1 else None,
+        "next_number": number + 1 if number < len(all_topics) else None,
+    })
+    return render(request, "core/topic_read.html", ctx)
+
 @login_required
 def review_view(request, topic_session_id):
     if not hasattr(request.user, "profile"):
         return redirect("onboarding")
+    profile = request.user.profile
+    ts = get_object_or_404(TopicSession, id=topic_session_id, session__student=profile)
+    course_code = ts.session.course_code
+    all_topics = _get_total_topics_for_course(course_code, _course_level(course_code, profile))
 
-    topic_session = get_object_or_404(TopicSession, id=topic_session_id, session__student=request.user.profile)
-    lecture_html = render_lecture_markdown(topic_session.lecture_content)
+    if ts.topic_name in all_topics:
+        return redirect("topic_read", course_code=course_code, number=all_topics.index(ts.topic_name) + 1)
 
-    return render(request, "core/review.html", {
-        "topic_session": topic_session,
-        "lecture_raw": topic_session.lecture_content,
-        "correct": topic_session.student_answer_index == topic_session.correct_answer_index,
-    })
+    # Topic was renamed/removed from the course list: still show what they did.
+    entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
+    ctx = _topic_read_context(profile, course_code, ts.topic_name, entry)
+    ctx.update({"number": None, "total": len(all_topics), "prev_number": None, "next_number": None})
+    return render(request, "core/topic_read.html", ctx)
 
 
 # ─── History ───────────────────────────────────────────────────────────────────
@@ -1716,7 +1989,6 @@ def history_view(request):
 
 
 # ─── Restart session ───────────────────────────────────────────────────────────
-
 @login_required
 @require_POST
 def restart_session_view(request, course_code, week_number):
@@ -1725,7 +1997,8 @@ def restart_session_view(request, course_code, week_number):
 
     profile = request.user.profile
     entry = get_object_or_404(TimetableEntry, student=profile, course_code=course_code)
-    if week_number < 1 or week_number > entry.week_number or week_number == TEST_WEEK:
+    tw = _test_week_for(course_code, _course_level(course_code, profile))
+    if week_number < 1 or week_number > entry.week_number or week_number == tw:
         messages.error(request, "You can only restart a week you have already reached.")
         return redirect("dashboard")
 
@@ -2371,6 +2644,9 @@ def staff_pregeneerate_lessons_view(request):
     if request.method == "POST":
         course = get_object_or_404(CourseDefinition, id=request.POST.get("course_id"))
         week_number = int(request.POST.get("week_number", 1))
+        if week_number == _test_week_for(course.course_code, course.level):
+            messages.error(request, f"Week {week_number} is the test week for {course.course_code}. Lessons run on the other weeks.")
+            return redirect("staff_pregenerate_lessons")
 
         if get_generation_source(course) is None:
             messages.error(request, NO_SOURCE_MESSAGE)
@@ -2413,7 +2689,7 @@ def staff_pregeneerate_lessons_view(request):
     return render(request, "core/staff/pregenerate_lessons.html", {
         "courses": courses,
         "lessons": lessons,
-        "week_range": [w for w in range(1, TOTAL_TEACHING_WEEKS + 1) if w != TEST_WEEK],
+        "week_range": list(range(1, TOTAL_TEACHING_WEEKS + 1)),
         "filter_course_id": filter_course_id,
     })
 
@@ -2593,38 +2869,40 @@ def simulator_home_view(request):
 
 def _start_auto_test(request, profile):
     course_code = request.GET.get("course_code", "")
-    entry = TimetableEntry.objects.filter(
-        student=profile, course_code=course_code, week_number=TEST_WEEK
-    ).first()
+    level = _course_level(course_code, profile)
+    tw = _test_week_for(course_code, level)
+    entry = None
+    if tw is not None:
+        entry = TimetableEntry.objects.filter(
+            student=profile, course_code=course_code, week_number=tw
+        ).first()
     if entry is None:
         messages.info(request, "That course isn't at its test yet.")
         return redirect("simulator_home")
 
     existing = SimulatorTest.objects.filter(
-        student=profile, course_code=course_code, mode="auto",
-        week_number=TEST_WEEK, status="in_progress",
+        student=profile, course_code=course_code, mode="auto", status="in_progress",
     ).first()
     if existing:
         return redirect("simulator_test", test_id=existing.id)
 
-    level = _course_level(course_code, profile)
     topics = _ready_test_topics(course_code, level)
     try:
         if not topics:
-            raise NotEnoughQuestions("No approved questions for weeks 1–6 yet.")
+            raise NotEnoughQuestions("No approved questions for the weeks before the test yet.")
         questions, fmt = draw_test(profile, course_code, level, topics, "mixed")
     except NotEnoughQuestions:
         messages.warning(
             request,
             f"The {course_code} test is still being prepared. Check back soon. "
-            f"You'll move on to week 8 once you've taken it.",
+            f"You'll move on to week {tw + 1} once you've taken it.",
         )
         return redirect("simulator_home")
 
     test = SimulatorTest.objects.create(
-        student=profile, mode="auto", question_format=fmt, week_number=TEST_WEEK,
+        student=profile, mode="auto", question_format=fmt, week_number=tw,
         course_code=entry.course_code, course_title=entry.course_title,
-        topic="Weeks 1–6", questions=questions,
+        topic=f"Weeks 1–{tw - 1}", questions=questions,
     )
     return redirect("simulator_test", test_id=test.id)
 
@@ -2942,8 +3220,8 @@ def simulator_grade_view(request, test_id):
         StudentProfile.objects.filter(pk=profile.pk).update(xp=F("xp") + xp)
         if test.mode == "auto":
             TimetableEntry.objects.filter(
-                student=profile, course_code=test.course_code, week_number=TEST_WEEK,
-            ).update(week_number=TEST_WEEK + 1)
+                student=profile, course_code=test.course_code, week_number=test.week_number,
+            ).update(week_number=test.week_number + 1)
 
     return redirect("simulator_result", test_id=test.id)
 
@@ -3310,9 +3588,18 @@ def quiz_result_view(request, topic_session_id):
         "Correct! Well done! 🎉" if correct
         else f"Not quite — the correct answer was {correct_option}. Keep going! 💪"
     )
-    next_index = topic_session.topic_index + 1
+
     total_topics = len(session.topics)
-    is_last_topic = next_index >= total_topics
+    finished = set(session.topic_sessions.filter(is_complete=True).values_list("topic_index", flat=True))
+    pending = [i for i in range(total_topics) if i not in finished]
+    is_last_topic = not pending
+    later = [i for i in pending if i > topic_session.topic_index]
+    next_index = (later or pending or [total_topics])[0]
+
+    level = _course_level(session.course_code, profile)
+    tw = _test_week_for(session.course_code, level)
+    is_ahead = session.week_number > entry.week_number
+    next_is_test = is_last_topic and not is_ahead and tw is not None and entry.week_number == tw
 
     return render(request, "core/result.html", {
         "entry": entry,
@@ -3325,6 +3612,8 @@ def quiz_result_view(request, topic_session_id):
         "next_topic_index": next_index,
         "next_topic_name": session.topics[next_index] if not is_last_topic else None,
         "is_last_topic": is_last_topic,
+        "is_ahead": is_ahead,
+        "next_is_test": next_is_test,
         "total_topics": total_topics,
         "topic_number": topic_session.topic_index + 1,
     })

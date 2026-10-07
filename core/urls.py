@@ -83,4 +83,6 @@ urlpatterns = [
     path("staff/sim-bank/", views.staff_sim_bank_view, name="staff_sim_bank"),
     path("staff/jobs/", views.staff_jobs_view, name="staff_jobs"),
     path("staff/slides/<int:slide_id>/retry-diagrams/", views.retry_slide_diagrams_view, name="retry_slide_diagrams"),
+    path("course/<str:course_code>/read/<int:number>/", views.topic_read_view, name="topic_read"),
+    path("course/<str:course_code>/study/<int:number>/", views.topic_study_view, name="topic_study"),
 ]

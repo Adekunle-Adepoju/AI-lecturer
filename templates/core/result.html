@@ -102,6 +102,12 @@
     cursor:pointer;transition:transform .25s var(--ease),background .2s var(--ease);align-items:center;justify-content:center;
   }
   #resultRoot #backToTopBtn:hover{transform:translateY(-3px);background:var(--navy-deep);}
+  #resultRoot .next-actions{display:flex;gap:12px;}
+#resultRoot .next-actions .btn{flex:1;min-height:48px;}
+
+@media(max-width:600px){
+  #resultRoot .next-actions{flex-direction:column;}
+}
 </style>
 
 <div class="page-container" id="resultRoot" data-theme="dark">
@@ -154,18 +160,32 @@
   </div>
 
   {% if is_last_topic %}
-  <div class="done-card is-celebration" style="margin-top:16px;">
-    <div class="done-icon">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 14.7 8.6 22 9.3l-5.5 4.8L18.2 21 12 17.3 5.8 21l1.7-6.9L2 9.3l7.3-.7L12 2Z"/></svg>
-    </div>
-    <div class="done-title">Session complete!</div>
-    <div class="done-sub">You completed all {{ total_topics }} topics for this week. See you next week!</div>
+<div class="done-card is-celebration" style="margin-top:16px;">
+  <div class="done-icon">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 14.7 8.6 22 9.3l-5.5 4.8L18.2 21 12 17.3 5.8 21l1.7-6.9L2 9.3l7.3-.7L12 2Z"/></svg>
   </div>
-  <div class="next-block">
-    <a href="{% url 'dashboard' %}" class="btn btn-primary">Back to dashboard →</a>
-  </div>
-
+  {% if entry.is_completed %}
+  <div class="done-title">Course complete!</div>
+  <div class="done-sub">You've finished every topic in {{ session.course_code }}. Well done!</div>
+  {% elif is_ahead %}
+  <div class="done-title">Week {{ session.week_number }} done!</div>
+  <div class="done-sub">You finished all {{ total_topics }} topic{{ total_topics|pluralize }} for week {{ session.week_number }}. It will be skipped when you reach it.</div>
   {% else %}
+  <div class="done-title">Session complete!</div>
+  <div class="done-sub">You completed all {{ total_topics }} topic{{ total_topics|pluralize }} for this week.</div>
+  {% endif %}
+</div>
+
+<div class="next-block next-actions">
+  {% if not entry.is_completed %}
+  <a href="{% url 'session' session.course_code %}" class="btn btn-primary">
+    {% if is_ahead %}Back to course →{% elif next_is_test %}Take your test →{% else %}Go to next week →{% endif %}
+  </a>
+  {% endif %}
+  <a href="{% url 'dashboard' %}" class="btn {% if entry.is_completed %}btn-primary{% else %}btn-white-outline{% endif %}">Back to dashboard</a>
+</div>
+
+{% else %}
   <div class="next-block">
     <p class="next-label">Up next: <strong>{{ next_topic_name }}</strong></p>
     <form method="POST" action="{% url 'next_topic' %}">

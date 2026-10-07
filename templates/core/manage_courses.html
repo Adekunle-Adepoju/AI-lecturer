@@ -1,5 +1,43 @@
 {% extends "core/base.html" %}
 {% block content %}
+<style>
+  /* Fallback header height; JS below overwrites it with the real value */
+  :root { --header-h: 72px; }
+
+  .sticky-actions {
+    position: sticky;
+    top: var(--header-h);
+    z-index: 40;                 /* keep below your header's z-index */
+    display: flex;
+    gap: 10px;
+    padding: 12px 0;
+    margin-bottom: 1.25rem;
+    background: var(--bg, #0f1b2d);   /* must be solid, swap for your page bg variable */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .sticky-actions .btn {
+    text-align: center;
+    min-height: 44px;            /* comfortable tap target on phones */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Phones: buttons share the row equally */
+  @media (max-width: 600px) {
+    .sticky-actions {
+      gap: 8px;
+      padding: 10px 0;
+    }
+    .sticky-actions .btn {
+      flex: 1;
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+  }
+</style>
+
 <div class="page-container">
   <div class="greeting-section">
     <div class="greeting">Manage Your Courses</div>
@@ -18,6 +56,11 @@
 
   <form method="post">
     {% csrf_token %}
+
+    <div class="sticky-actions">
+      <button type="submit" class="btn btn-primary">Save Selections</button>
+      <a href="{% url 'dashboard' %}" class="btn">Cancel</a>
+    </div>
 
     {% for level, courses in courses_by_level.items %}
       <div class="section-label" {% if forloop.first %}style="margin-top:0;"{% endif %}>
@@ -52,11 +95,33 @@
         No courses are available for your department yet.
       </div>
     {% endfor %}
-
-    <div style="display:flex;gap:10px;margin-top:0.5rem;">
-      <button type="submit" class="btn btn-primary">Save Selections</button>
-      <a href="{% url 'dashboard' %}" class="btn">Cancel</a>
-    </div>
   </form>
 </div>
+
+<script>
+  // Sets --header-h to the real height of the fixed header so the bar
+  // sits right under it on every screen size.
+  (function () {
+    function findHeader() {
+      var candidates = document.querySelectorAll('header, .navbar, .topbar, nav');
+      for (var i = 0; i < candidates.length; i++) {
+        var pos = getComputedStyle(candidates[i]).position;
+        if (pos === 'fixed' || pos === 'sticky') return candidates[i];
+      }
+      return null;
+    }
+
+    function update() {
+      var header = findHeader();
+      // If the header scrolls away with the page, stick to the very top
+      var h = header ? header.getBoundingClientRect().height : 0;
+      document.documentElement.style.setProperty('--header-h', h + 'px');
+    }
+
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+    window.addEventListener('load', update);
+  })();
+</script>
 {% endblock %}
