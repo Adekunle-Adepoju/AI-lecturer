@@ -1,0 +1,2126 @@
+--- Page 1 ---
+
+MME 311/412 – Electrochemistry & Corrosion
+
+Lecturers
+Dr. M.A Bodude
+Dr. A. M. Oladoye
+
+Dept of Metallurgical & Materials Engineering
+
+Email: aoladoye@unilag.edu.ng
+
+--- Page 3 ---
+
+Image result for corrosion in cooking pots
+
+Image result for fans
+
+Image result for Samsung mobile phone
+
+Materials are all around us -
+Name some of the materials
+
+[DIAGRAM: "Materials are all around us - Name some of the materials" is located at the bottom center; "ELEPAQ" is written on the generator in the center left circle; "DANGER", "LOCKED OUT", and "DO NOT REMOVE" are written on the lock in the top right circle.]
+
+--- Page 4 ---
+
+METALS
+
+▪ Important class of materials especially in the industry
+     ▪ Excellent mechanical properties
+     ▪ Can operate at very high temperatures
+     ▪ Can be fabricated into any shape, size /form
+     ▪ Metals are susceptible to Corrosion
+
+[DIAGRAM: No labels are visible in the photos.]
+
+--- Page 5 ---
+
+[DIAGRAM: Text "Corrosion management of autos by 1999 produced annual savings of $9.6 billion over 1975. Image credit: Pixabay." sits below the top-right photo.]
+
+--- Page 6 ---
+
+Image result for corrosion examples in everyday life
+
+Degradation of metals -
+Corrosion
+
+✔ Corrosion of cooking utensils
+✔ Corrosion of automobiles body parts
+✔ Corrosion of oil and gas pipes
+✔ Corrosion of reinforcing steel bars in concrete structures
+
+[DIAGRAM: Title "Degradation of metals - Corrosion" sits above a bulleted list containing "Corrosion of cooking utensils", "Corrosion of automobiles body parts", "Corrosion of oil and gas pipes", and "Corrosion of reinforcing steel bars in concrete structures"; four circular photos showing pipes, cooking pans, and chains are positioned along the top, and two circular photos showing a rusted car body and rusted steel bars in concrete are positioned on the lower right.]
+
+--- Page 7 ---
+
+Why study Corrosion?
+
+⮚ It is the role of the Engineer to design and maintain many industrial equipment
+⮚ In performing this role the Engineer must consider
+    ⮚ Selection of appropriate material
+    ⮚ Cost reduction
+    ⮚ Safety to human lives
+
+Corrosion is Costly and can be deadly!!!!!
+
+[DIAGRAM: A bracket connects 'Selection of appropriate material', 'Cost reduction', and 'Safety to human lives' to 'Corrosion is Costly and can be deadly!!!!!', with the stylized text 'Why?' positioned to the right of the bracket.]
+
+--- Page 8 ---
+
+Corrosion can be deadly ?
+
+Aloha Airlines Flight 243 plane crash in Hawaii (1988)
+
+Image result for hawaii plane crash due to corrosion
+
+While flying at 8,000 m above the ground, a large segment of the upper fuselage of the plane was literally torn off making a big hole in the passenger cabin. The aircraft inspection found separation, corrosion and cracks in the lap joints of the fuselage skin.
+
+Investigation by the United States National Transportation Safety Board (NTSB) concluded that the accident was caused by metal fatigue exacerbated by crevice corrosion. The aircraft was 19 years old and operated in a coastal environment, with exposure to salt and humidity.
+
+[DIAGRAM: No visible labels in the photo]
+
+--- Page 9 ---
+
+The Silver Bridge Collapse at Point Pleasant West Virginia
+
+On December 15, 1967, the Silver Bridge collapsed under the weight of rush-hour traffic, resulting in the deaths of 46 people. Two of the victims were never found.
+
+• The Bridge was an eyebar-chain suspension bridge built in 1928
+• The bridge carried U.S. Route 35 over the Ohio River, connecting Point Pleasant, West Virginia, and Gallipolis, Ohio.
+
+[DIAGRAM: No labels visible in the photo]
+
+--- Page 11 ---
+
+[DIAGRAM: Text titled '10/04/1992 EL AL Boeing 747 crash (Netherlands)' sits to the left of a photo; a photo sits to the left of text titled '05/19/2015 Oil spills (Santa Barbara / California)']
+
+--- Page 12 ---
+
+[DIAGRAM: Top section contains a photograph of an aircraft on the left, and text on the right: "08/15/2014 Landing of a Jetstream away from the runway (England)" positioned above "Immediately after landing, the left leg of the landing gear separated from the shackles. The aircraft slid off the runway into the grass. The results of the investigation showed that the failure had been caused by stress corrosion."; bottom section contains text on the left: "11/17/2014 The fall of railway traffic lights (Newbury / England)" positioned above "A train traveling at 180 km/h crashed into a railway traffic light that fell over two tracks. Corrosion caused almost a complete loss of the wall of the hollow pylon.", and a photograph of a fallen railway signal on the right]
+
+--- Page 13 ---
+
+The Flixborough explosion, UK 1974
+
+❑ The failure of a bypass assembly introduced into a train of six cyclohexane oxidation reactors after one of the reactors was removed owing to the development of a leak.
+❑ The leaking reactor was constructed of 12.3 mm mild steel plate with 3 mm stainless steel bonded to it
+❑ It developed a vertical crack in the mild steel outer layer of the reactor from which cyclohexane leaked leading to the removal of the reactor.
+❑ One of the factors that contributed to the crack was stress corrosion, resulting from the presence of nitrates that had contaminated river water being used to cool a leaking flange
+❑ Mild steel exposed to hot nitrate solution and to stresses which in extreme cases may be well below the yield strength, and may remain in the structure from the fabrication procedure or may derive from operating stresses, especially if intensified by a defect, can develop intergranular cracks. Such stress corrosion cracking results from the conjoint action of stress, of an appropriate magnitude, and a corrosive environment, of specific composition, upon steel having a wide range of compositions or structures
+
+Reference :https://corrosion-doctors.org/ProcessIndustry/flixborough.htm
+
+--- Page 14 ---
+
+More Examples
+Swimming Roof Collapse
+
+In 1985, 12 people were killed in Uster, Switzerland when the concrete roof of a swimming pool collapsed only after thirteen years of use. The roof was supported by stainless steel rods in tension, which failed due to stress corrosion cracking.
+
+The Examples shown thus far and many other shows how Corrosion can Cause death of human lives if not Controlled
+
+--- Page 15 ---
+
+Cost of Corrosion
+
+The global cost of corrosion is estimated to be US$2.505 trillion, which is equivalent to 3.4% of the global Gross Domestic Product - NACE international (2013)
+
+Implementing corrosion prevention best practices could result in global savings of 15-35% of that cost which is about $375-$875 billion
+
+These costs typically do not include individual safety or environmental consequences. Through near misses, incidents, forced shutdowns (outages), accidents, etc.,
+
+Reference :
+
+| The |  | global |  |  |  |  |  |  | cost |  |  |  |  | of |  |  |  | corrosion |  |  |  |  |  | is |  |  | estimated |  |  |  |  |  |  |  |  |  |  |  |  | to |  | be |  |  | US |  | $ |  | 2 | . | 505 |  |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| trillion |  |  | , |  | which |  |  |  |  |  | is |  |  |  |  |  | equivalent |  |  |  |  |  | to |  |  |  | 3 | . | 4 | % |  |  |  |  | of |  |  | the |  |  |  |  | global |  |  |  |  | Gross |  |  |  |  |
+| Domestic |  |  |  |  |  |  | Product |  |  |  |  |  |  |  | - |  | NACE |  |  | international |  |  |  |  |  |  |  |  |  |  |  | ( |  | 2013 |  |  |  |  | ) |  |  |  |  |  |  |  |  |  |  |  |  |  |
+
+| Implementing corrosion prevention best practices could result in |  |  |  |  |
+| --- | --- | --- | --- | --- |
+| global savings of 15 | - | 35% of that cost which is about $375 | - | $875 |
+| billion |  |  |  |  |
+
+--- Page 16 ---
+
+Cost of Corrosion
+
+### Developed Countries
+
+**USA:**
+Corrosion cost up to 260 billion US dollars/yr
+- Transportation
+- Power generation etc.
+- Utilities
+
+**India:**
+Corrosion impacts about 4.2 % of the GDP
+
+### Nigeria
+
+- Crude oil processing industry was calculated by engineering economy method and found to be 77 cent/barrel,
+- corrosion cost in food and agro processing industries was calculated by life cycle costing analysis and the total cost was found to be N22,350,600
+- The annualized value of the cost of corrosion Metallic products in Federal University of Agriculture, Abeokuta was estimated to be N 93,791,024 from 2013 -2015
+
+Reference: Orisanmi et al., 2017, IJAER 12 (214) 14141
+
+--- Page 17 ---
+
+More Examples
+
+Pipe Rupture at Surry Nuclear Plant in Virginia kills 4 Workers on December 9 1986
+
+* a valve in a pipe between a steam generator and its turbine inadvertently closed due to a re-assembly error following recent maintenance.
+* The valve’s closure resulted in a low water level inside the steam generator, which triggered the automatic shutdown of the reactor.
+* This led to a break in the pipe and pressurized water in the burst pipe changed to steam and splashed the workers around the area
+
+--- Page 18 ---
+
+Cost of Corrosion
+
+### Direct
+* Expensive materials
+* Overdesign to prevent corrosion
+* Cost of repair/replacement of materials
+* Employment of anti-corrosion methods
+
+### Indirect
+* Cost of labor
+* Loss of productivity delays happening due to failure or replacement
+* Cost of equipment used for corrosion related activity
+
+--- Page 19 ---
+
+What is Corrosion ???
+
+--- Page 20 ---
+
+What is Corrosion?
+
+Corrosion is the destructive result of chemical reaction between a metal /metal alloy and its environment
+
+Corrosion is the degradation of a metal or metal alloy due to its chemical interaction with its environment
+
+Corrosion is a surface phenomenon
+
+Corrosion is a Natural but Controllable Process
+
+Corrosion is the reverse of extractive metallurgy !!!
+
+--- Page 21 ---
+
+Corrosion is the reverse of extractive metallurgy
+
+Hematite Fe2O3
+Magnetite Fe3O4
+
+Rust Fe2O3
+Corrosion
+
+❑ The same amount of energy needed to extract metal from their ores is emitted during chemical energy that produces corrosion
+
+❑ Similar chemical compounds to the ores are produced during corrosion
+
+[DIAGRAM: An arrow runs from 'Mine' (with labels 'Hematite Fe2O3' and 'Magnetite Fe3O4') to a box containing 'Steel mill Reduction Refining Casting Rolling Shaping'; two arrows branch right to 'Sheet' (pointing to 'Auto body (atmosphere)') and 'Pipe' (pointing to 'Underground pipeline (soil and water)'); lines from both converge via 'Corrosion' to 'RUST FE2O3' and '(hydrated iron oxide)'.]
+
+--- Page 22 ---
+
+Role of Engineers and scientist In Corrosion Monitoring and Controls
+
+Corrosion Science – scientist study the chemical reaction and metallurgical processes that occur during corrosion
+
+Corrosion Engineering – design and application of methods to prevent corrosion
+
+--- Page 23 ---
+
+Electrochemical nature of Corrosion
+
+Corrosion is an electrochemical process in aqueous media involving the transfer of electrons from one electrode to another
+
+Consider a piece of Zinc metal immersed in a beaker full of Conc Hydrochloric Acid
+
+--- Page 24 ---
+
+Consider a piece of Zinc metal immersed in a beaker full of Conc Hydrochloric Acid
+
+[DIAGRAM: Top text 'Consider a piece of Zinc metal immersed in a beaker full of Conc Hydrochloric Acid' sits above equation 'Zn + 2 HCl -> ZnCl2 + H2'; on the left is a photo of coiled metal in a test tube with bubbles; a blue right-pointing arrow leads from the photo to a diagram labelled 'Zinc'; in the diagram, an arrow points from a surface notch to circled 'Zn²', dotted lines labelled 'e⁻' lead through 'Zinc' to two circled 'H⁺' ions at the surface; arrows from the surface 'H⁺' ions point to a circled 'H2' with a curved exit arrow; right-side circled 'H⁺' ions have left-pointing arrows toward the surface.]
+
+--- Page 25 ---
+
+Oxidation
+
+Reduction
+
+Oxidation occurs at the anode
+Reduction occurs at the cathode
+
+Anodic reaction
+Cathodic reaction
+
+[DIAGRAM: Top shows equation "Zn + 2 HCl ---> ZnCl2 + H2"; middle text reads "Zn -> Zn2+ + 2e- Oxidation", "2H+ + 2e- -> H2 ↑ Reduction", "Oxidation occurs at the anode", "Reduction occurs at the cathode", "Zn -> Zn2+ + 2e- Anodic reaction", and "2H+ + 2e- -> H2 ↑ Cathodic reaction"; left illustration shows a metal region labelled "Zinc" with a recess from which an arrow points right to a circle labelled "Zn²⁺"; dotted lines labelled "e⁻" run inside "Zinc" down to surface sites with circles labelled "H⁺"; arrows from the surface "H⁺" circles point to a circle labelled "H₂", which has an arrow pointing away; external circles labelled "H⁺" have arrows pointing toward the surface.]
+
+--- Page 26 ---
+
+Consider a piece of Zinc metal immersed in a beaker full of Conc Hydrochloric Acid
+
+Corrosion is an electrochemical process in aqueous media involving the transfer of electrons from one electrode to another
+
+For Corrosion to occur:
+✔ Electrode – cathode and Anode
+✔ Electrolyte (Environment)
+✔ Electrical circuit
+
+--- Page 27 ---
+
+Class work
+
+Give the cathodic and Anodic reactions for Iron corroding in Tetraoxosulphate (VI) acid
+
+--- Page 28 ---
+
+UNIFORM CORROSION
+
+[DIAGRAM: "UNIFORM CORROSION" sits at the top above three photos positioned side by side]
+
+--- Page 29 ---
+
+UNIFORM CORROSION
+
+❖ Uniform corrosion can be measured in the laboratory
+
+❑ This form of corrosion involves a uniform regular removal of metal from the surface
+❑ Uniform corrosion of metals is the simplest and most frequently observed form of corrosion, being found when items are exposed to the atmosphere, the soil, and an enormous variety of a aqueous solutions.
+❑ Uniform corrosion normally affects metallic surfaces that have a uniform chemical composition and a microstructure with homogeneous access to the corrosive solution, which itself needs to be uniform.
+❑ The corroded surface may become covered with the corrosion products or completely clean, depending on many factors.
+❑ The uniform corrosion rate normally increases with temperature.
+❑ Concentration of the corrosive chemical in the solution has a strong effect on corrosion rate.
+
+--- Page 30 ---
+
+Measures to control uniform Corrosion
+
+* Selection of materials that can are corrosion resistant, which means the corrosion rate is small enough for the application. The resistance of these materials to corrosion usually is a result of passivation.
+* Introduction of a barrier between the metal and the corrosive environment – Surface modification the use coatings and surface treatments .
+  * For example : Painting is an organic barrier; Chrome plating, an inorganic barrier.
+* When adopting this type of strategy for corrosion control, always consider that coatings are not perfect i.e the coatings could have pinholes that can affect its performance
+  * E.g. A defect on a chrome coating creates an anodic spot that suffers a high corrosion rate, because the ratio between anodic to cathodic areas results in a high density of anodic current.
+  * The same defect on a galvanized plate does not create an anodic spot, because zinc is anodic relative to steel, and the region below the damaged coating is protected from corrosion.
+
+Reference: Luiz Otávio Amaral Affonso, in Machinery Failure Analysis Handbook, 2006
+
+--- Page 31 ---
+
+Examples of uniform corrosion
+
+* Atmospheric corrosion
+  * Rusting of steel
+  * Darkening of silver in contact with the atmosphere
+* Corrosion due to the exposure of metal to an aqueous medium
+  * e.g Steel storage tanks containing water
+
+The figure shows a photograph of general corrosion on the gate from a gate valve used in a chemical transfer pipeline. The solution being transferred through the valve was an aqueous solution that caused extensive uniform corrosion. The corrosion also reduced the thickness of the pin that attached the gate to the valve shaft so that the pin was too thin to support the gate’s weight and it fell into the bottom of the valve body.
+
+Reference: William Stephen Tait, in Handbook of Environmental Degradation of Materials (Second Edition), 2012
+
+[DIAGRAM: 'Gate pin is missing' sits at the top above a downward arrow pointing to a dashed line spanning the top opening of the corroded object; a large gray arrow points from the text towards the photograph.]
+
+--- Page 32 ---
+
+Measures to control uniform Corrosion (Continued)
+
+* Modifications of the corrosive medium via introduction of corrosion inhibitors
+  * Corrosion inhibitors may reduce the corrosion rate to an acceptable level. This strategy is commonly used in the processing industry.
+* Cathodic protection: This involves forcing the metal to assume an electric potential relative to the corrosive medium that will not allow corrosion to take place. This is often done in buried pipelines with the introduction of an external power source to change the aforementioned potential
+* Anodic protection - the introduction of anodes in contact with the main structure and the corrosive medium. This often is done to protect oceangoing ships and other structures. A zinc or aluminum anode is attached to the ship hull and consumed instead of the steel
+
+Reference: Luiz Otávio Amaral Affonso, in Machinery Failure Analysis Handbook, 2006
+
+--- Page 33 ---
+
+PITTING CORROSION
+
+• Pitting corrosion, also known as pitting, is a highly localized and aggressive form of corrosion that occurs on metal surfaces
+• Small areas of the metal corrode preferentially, forming pits, while the rest of the surface remains virtually free from attack.
+• Visually, pitting is characterized by one or several small cavities or holes on the surface of the metal. Pits can come in several shapes and sizes; they can be deep and narrow, shallow and wide, or undercut beneath the surface.
+
+[DIAGRAM: No labels visible in the photo.]
+
+--- Page 34 ---
+
+❑ Pitting corrosion is a localized form of corrosion
+
+❑ Pitting corrosion is more destructive than uniform corrosion is because it is difficult to predict as corrosion products may cover the pits,
+
+❑ It is also difficult to design against the formation of pits, as well as to predict when this type of corrosion may occur
+
+❑ Passive metals are much more prone to pitting corrosion than non-passive metals
+
+❑ The naturally occurring passive films formed over many metallic substrates (such as aluminum, copper, stainless steel, etc.) can provide a considerable corrosion resistance over a long time in corrosive media. However, if corrosion occurs (due to material defects or changes in the surrounding environment), some pits could form.
+
+❑ Pitting is most likely to occur in a halide ion containing media (mostly chloride) in the presence of oxygen or oxidizing agents. Stainless steels are very prone to pitting in chloride containing environments
+
+--- Page 36 ---
+
+Galvanic corrosion
+
+[DIAGRAM: 'Galvanic corrosion' is positioned inside a dark grey box in the bottom right corner; '1 1/4', '125', '200 WOG', and 'FAIRBANKS' are embossed on the fitting in the bottom left photo.]
+
+--- Page 37 ---
+
+Galvanic corrosion
+
+When two dissimilar alloys are coupled in the presence of a corrosive electrolyte, one of the metal will corrode in preference to the other metal which does not corrode.
+
+Example:
+The picture below shows corrosion Aluminum substrate in preference to a graphite coating.
+
+• Cathodic (noble)
+• Anodic (active)
+
+[DIAGRAM: An upward arrow next to "Cathodic (noble)" sits at the top left above a vertical list ordered top-to-bottom: "Pt", "Au", "Graphite", "Titanium", "Silver", "Zirconium", "AISI TYPE 316,317 Stainless steel (passive)", "AISI type 304 stainless steel (passive)", "AISI TYPE 430 STAINLESS STEEL (PASSIVE)", "Nickel (passive)", "Cu-Ni (70-30)", "Bronzes", "Copper", "Brasses", "Ni (active)", "Naval brass", "Sn", "Pb", "AISI TYPE 316,317 Stainless steel (active)", "AISI type 304 stainless steel (active)", "AISI TYPE 430 STAINLESS STEEL (active)", "Cast Fe", "Steel or Iron", "Al alloy 2024", "Cadmium", "Al alloy 1100", "Zinc", and "Magnesium and magnesium alloys"; an upward arrow next to "Anodic (active)" sits at the bottom left; a photo at the bottom right shows two coated plates with circular exposed corroded areas.]
+
+--- Page 38 ---
+
+Stainless steel bolts
+Iron
+Coated Copper
+
+[DIAGRAM: A photograph shows a metal assembly with labels: an arrow from "Iron plate which was originally painted in white colour" points to the circular plate; an arrow from "Stainless steel nuts and bolts" points to a bolt on the upper left; an arrow from "Copper tape with a coating of paint" points to a vertical strap below the plate; an orange arrow from "Stainless steel bolts" points to a bolt on the upper right; an orange arrow from "Iron" points to the circular plate; an orange arrow from "Coated Copper" points to the vertical strap below; captioned "Fig. 2. A multi-metal contact point (copper, iron and stainless steel) with paint coating layers, a copper conductor attached to painted iron plate with stainless steel nuts and bolts." below.]
+
+--- Page 39 ---
+
+Another example of galvanic corrosion is copper and steel tubing joined in a domestic water heater, the steel will corrode in the vicinity of the joint
+
+[DIAGRAM: An orange arrow containing the text 'Corrosion at copper to steel joint' points to a corroded joint on a pipe.]
+
+--- Page 40 ---
+
+CREVICE CORROSION
+
+[DIAGRAM: The text "CREVICE CORROSION" sits to the right of three unlabeled photos of metal parts.]
+
+--- Page 41 ---
+
+CREVICE CORROSION
+
+❑ Crevice corrosion is a type of localized corrosion, that occurs at narrow spaces (gaps/crevices) formed by two joining surfaces.
+
+❑ The crevice can be formed between two metals or between a metal and non-metal material (e.g. metal/gasket interface)
+
+❑ Outside the Crevice or without the crevice, both metals are resistant to corrosion i.e it is the gap between the two surfaces that facilitate the corrosion
+
+❑ A crevice shields part of the surface and thereby enhances the formation of differential aeration cells and chloride concentration cells
+
+❑ Crevice corrosion is initiated by a difference in concentration of some chemical constituents, usually oxygen in the crevice. This concentration difference facilitate the formation of an electrochemical concentration cell (differential aeration cell in the case of oxygen).
+
+--- Page 42 ---
+
+❑ Usually, the electrolyte in the crevice (gap) is in a stagnant state (see the diagram) and the oxygen concentration in the crevice is much lower than its concentration outside the crevice (gap). This impairs passivity making the crevice an initiation site for metal dissolution (corrosion)
+
+❑ As a result, the metal surface in the crevice (gap) acts as an anode, and the adjacent outer metal surface plays the role of a cathode ( see the diagram) If the crevice attack begins, it progresses very quickly.
+
+[DIAGRAM: "Steel" forms the bottom metal layer with a pit under a "Shielding object"; "O2 from air" is at the top with a downward arrow entering the electrolyte; "O2" with a downward arrow to "OH-" is located left of the "Shielding object"; "Na+" and "Cl-" are in the electrolyte to the left; another "Na+" is near the "Shielding object"; "Cl-" has a curved arrow entering the pit under the "Shielding object"; "Fe2+" has a vertical arrow pointing up from "Steel" inside the pit; "H+" and "Cl-" are inside the pit; a dashed arrow labeled "e-" points from inside the pit to the outer metal surface near "OH-"]
+
+--- Page 43 ---
+
+❑ Crevice corrosion can also result from retention of water or corrosive solution within a crevice, while the outer surface is dried or exposed only to a relatively non-corrosive environment
+
+❑ A corrosive environment may be formed by deposits or wet packing materials
+
+❑ Example : thermal insulation coverings used to maintain temperature in piping and containment vessels. Themal cycling leads to condensation, evaporation and concentration of solutes leads to general corrosion of carbonsteel and in some cases SCC of stainless steel under insulation
+
+--- Page 44 ---
+
+• Example
+  • In the Figure, a type 316 stainless steel tube and tube sheet from a heat exchanger in a seawater reverse osmosis (SWRO) desalination plant suffered crevice corrosion due to the presence of crevice (gap) between the tube and tube sheet.
+    ❑ Outside of the crevice (the cathode), the oxygen content and the pH are higher - but chlorides are lower while the reverse is the case inside the crevice (anode), hence, the metal in the crevice begins to corrode
+
+[DIAGRAM: A photograph showing a metal tube inserted into a tube sheet with a blue line pointing near the edge, but no text labels are present.]
+
+--- Page 45 ---
+
+Prevention
+
+❑ Generally, environmental conditions such as pH, oxygen concentration, chloride concentration and temperature also play major role in initiation and propagation of crevice corrosion.
+❑ As a rule, corrosion is more intense in chloride environments.
+
+All passive metal/metal alloys whose corrosion resistance depend on the stability of passive films are particularly susceptible to crevice corrosion. Examples are all grades of stainless steels and aluminium alloys.
+
+Crevice corrosion can be designed out of the system:
+• Use welded butt joints instead of riveted or bolted joints in new equipment
+• Eliminate crevices in existing lap joints by continuous welding or soldering
+• Avoid creating stagnant conditions and ensure complete drainage in vessels
+• Use solid, non-absorbent gaskets such as Teflon.
+• Use higher alloys for increased resistance to crevice corrosion
+
+--- Page 46 ---
+
+Intergranular Corrosion, IGC
+
+❑ IGC is an attack that occurs at the grain boundaries of a metal or alloy due to the precipitation of a secondary phase.
+❑ IGC occurs when the metal on or adjacent to the grain boundaries dissolves, or corrodes preferentially to the grain interiors.
+❑ The grain boundary region acts as an anode with the grain interior being a cathode, forming a galvanic cell with a large cathode and a small anode in which rapid corrosion occurs at the anode
+
+[DIAGRAM: 'Chromium carbide precipitation' sits above the diagram with lines pointing to dark regions along the grain boundaries; 'Chromium depletion region (anode)' sits to the right with lines pointing to shaded areas along the grain boundaries; 'Grain (cathode)' is located inside a grain interior.]
+
+--- Page 47 ---
+
+❑ Intergranular corrosion (IGC) can seriously weaken the bonding force between crystal grains and the mechanical strength of metals and alloys would be markedly damaged due to IGC. The combination of stress and IGC, for some alloys/environment systems will cause intergranular stress corrosion cracking (IGSCC) (Zhou and Zuo, 2015).
+
+EXAMPLES OF Intergranular Corrosion, IGC
+1. In aluminum-copper alloys, precipitation of Al2Cu particles at the grain boundaries leaves the adjacent solid solution (i.e the grains) anodic and more prone to corrosion.
+2. In austenitic stainless steel precipitation of chromium carbides at the grain boundaries results in IGC
+
+--- Page 48 ---
+
+Intergranular Corrosion, IGC
+
+❑ IGC is an attack that occurs at the grain boundaries of a metal or alloy due to the precipitation of a secondary phase.
+
+❑ Corrosion activity may develop because of some heterogeneity in the grain boundary structure
+
+For Example:.
+1. In aluminium-copper alloys, precipitation of Al2Cu particles at the grain boundaries leaves the adjacent solid solution (i.e the grains) anodic and more prone to corrosion.
+2. In austenitic stainless steel precipitation of chromium carbides at the grain boundaries results in IGC
+
+❑ Intergranular corrosion is caused by a difference in the electrochemical potentials between the bulk of the grain and the grain boundaries where intermetallic phases precipitate
+
+--- Page 49 ---
+
+Intergranular corrosion of Austenitic Stainless steel - Sensitization
+
+❑ Austenitic stainless steels are non-magnetic stainless steels that contain high levels of chromium and nickel and low levels of carbon.
+
+❑ Austenitic SS are the 300 series e.g. 304SS, 316SS, 904 SS
+
+❑ Austenitic SS when heated to between 425oC to 800oC, insoluble chromium carbides precipitate at the grain boundaries
+
+❑ The Cr depleted region in the GB then becomes less corrosion resistance than the surrounding grains
+
+❑ The chromium depleted zone becomes the preferential path for corrosion attack or crack propagation if under tensile stress
+
+❑ < 425oC ..carbon diffusion is low so that carbides cannot be formed but above 815oC The chromium carbide formed is soluble
+
+[DIAGRAM: 'Chromium carbide precipitation' sits at the top left with lines pointing to dark precipitates along the grain boundaries; 'Chromium depletion region (anode)' sits at the top right with lines pointing to the shaded zones surrounding the grain boundaries; 'Grain (cathode)' sits inside a grain interior on the right side.]
+
+--- Page 50 ---
+
+The chromium depleted zone becomes the preferential path for corrosion attack or crack propagation if under tensile stress .
+
+Intergranular corrosion usually requires microstructural examination under a microscope although sometimes it is visually recognizable as in the case of weld decay
+
+[DIAGRAM: A circle schematic showing grain boundaries with labels 'Grain Boundary', 'Cr Carbide precipitates', 'Cr Depeletd zone', and a cross-section line marked 'A' and 'A''; an adjacent plot titled 'Cross section of AA' : Sensitized' has a vertical axis 'Cr Content 11~18%' and horizontal axis 'Distance', featuring a curve with a peak labeled 'Carbide' and a dip labeled 'Cr depletion'; to the right, a micrograph shows grain boundaries with scale labels '720X' and '20 µm'.]
+
+--- Page 51 ---
+
+PREVENTION OF IGC in AUSTENITIC STAINLESS STEEL
+
+❑ Use low carbon (e.g. 304L, 316L) grade of stainless steels
+❑ Use stabilized grades alloyed with titanium (for example type 321) or niobium (for example type 347). Titanium and niobium are strong carbide-formers. They react with the carbon to form the corresponding carbides thereby preventing chromium depletion.
+❑ Use post-weld heat treatment.
+
+--- Page 52 ---
+
+ENVIRONMENTALLY INDUCED CRACKING
+
+❑ Failure of a metal alloy in the presence of an environment that causes minimal uniform corrosion
+❑ It is the brittle failure of a ductile material due to the combined effect of corrosion and tensile stress
+❑ Environmentally induced cracking occurs very rapidly and can be catastrophic
+
+--- Page 53 ---
+
+ENVIRONMENTALLY INDUCED CRACKING
+
+- Stress corrosion cracking
+- Hydrogen induced cracking
+- Corrosion fatigue cracking
+
+--- Page 54 ---
+
+STRESS CORROSION CRACKING
+
+[DIAGRAM: Text reading 'STRESS CORROSION CRACKING' sits to the left of an unlabelled photo.]
+
+--- Page 55 ---
+
+STRESS CORROSION CRACKING
+
+• Stress corrosion cracking (SCC) is defined as the growth of cracks due to the simultaneous action of a stress (nominally static and tensile) and a reactive environment.
+• SCC is the result of the combined and synergistic interactions of mechanical stress and corrosion/oxidation reactions.
+
+Stress corrosion cracking occurs when a susceptible material is subjected to an environment that causes stress corrosion cracking and the application of a tensile stress.
+
+[DIAGRAM: A Venn diagram with three overlapping circles labeled Material, Environment, and Stress, Strain; the Material circle lists composition, heat treatment, microstructure, and surface condition; the Environment circle lists composition, temperature, electrode potential, and flow rate; the Stress, Strain circle lists service stress, fit-up stress, residual stress, and strain rate; the overlap between Material and Environment is labeled corrosion; the overlap between Material and Stress, Strain is labeled fatigue; the overlap between Environment and Stress, Strain is labeled corrosion-fatigue; the center overlap of all three circles is labeled SCC.]
+
+--- Page 56 ---
+
+STRESS CORROSION CRACKING
+
+❑ The tensile stresses may be in the form of directly applied stresses or in the form of residual stress
+❑ Operation such as Cold deformation and forming, welding, heat treatment, machining and grinding can introduce residual stresses
+❑ Usually, the fine cracks penetrate into the material while most of the surface of the component remains unattacked,
+❑ SCC is characterized by fine cracks which lead to failure of components
+❑ Failures due to SCC are more often sudden and unpredictable which may occur after as little as few months or years of previously satisfactory service
+
+--- Page 57 ---
+
+intergranular SCC
+
+❑ SCC is in 3 stages :
+    ✔ Crack initiation
+    ✔ Crack growth
+    ✔ Brittle fracture
+
+❑ SCC is initiated by stress concentration at defects.
+    ✔ The defect could be an existing one in the material or one caused by pitting corrosion or intergranular corrosion or crevice corrosion
+
+❑ The cracks initiated by these defects, propagate either through the grains (transgranular) or through the grain boundaries (intergranular).
+
+Intergranular SCC in copper alloy
+
+[DIAGRAM: 'intergranular SCC' sits above the top photo; 'Intergranular SCC in copper alloy' sits above the bottom photo.]
+
+--- Page 58 ---
+
+❑ Macroscopically, SCC fractures have a brittle appearance.
+
+❑ SCC is classified as a catastrophic form of corrosion, as the detection of such fine cracks can be very difficult, and the damage not easily predicted.
+
+❑ An example of a real-life SCC damage was the The Flixborough explosion, UK 1974
+
+❑ There were 28 fatalities as well as the near complete destruction of the NYPRO plant in North Lincolnshire by blast and then fire.
+
+[DIAGRAM: A photograph with a caption below reading "6.5 Fracture of a high strength steel bar because of stress corrosion cracking."]
+
+--- Page 59 ---
+
+PREVENTION OF SCC
+
+1) Choose a materials that is not prone to SCC in the given environment –
+   ✔ pure metals are comparatively more resistant to SCC;
+   ✔ Avoid combination of some metals in certain environment
+      ❖ E.g austenitic stainless steels in hot aqueous chloride solutions
+      ❖ Copper alloys (e.g Cold worked brass : found in ammunition cartridges in ammonia containing solutions
+      ❖ Carbon steel in hydroxide and nitrates containing solutions
+
+2) Reduce stresses
+      ❖ Residual stresses in fabricated components can be removed by stress relief annealing
+      ❖ Introduce surface compressive stresses e.g. shoot peening or grit blasting (esp. wedded surfaces)
+
+3) Remove critical environmental species such as hydroxides, chlorides, and oxygen.
+
+4) Avoid stagnant areas and crevices in heat exchangers where chloride and hydroxide might become concentrated.
+
+--- Page 61 ---
+
+CORROSION FATIGUE CRACKING
+
+❑ Corrosion fatigue is ‘the process in which a metal fractures prematurely under conditions of simultaneous corrosion and repeated cyclic loading at lower stress levels or fewer cycles than would be required in the absence of the corrosive environment.’ (ASTM standard definition ASTM, 1986, p. 180),
+
+❑ The fatigue process is thought to cause rupture of the protective passive film for passive metals, upon which corrosion is accelerated. If the metal is simultaneously exposed to a corrosive environment, the failure can take place at even lower loads and after shorter time.
+
+❑ Corrosion fatigue crack usually forms more slowly and corrosion products are more likely to be present in the crack
+
+❑ The fatigue fracture is brittle and the cracks are most often transgranular, as in stress-corrosion cracking, but not branched.
+
+--- Page 62 ---
+
+PREVENTION
+
+❑ Minimize or eliminate cyclic stresses
+
+❑ Reduce stress concentration or redistribute stress (balance strength and stress throughout the component)
+   ✔ Stress raisers such as notches of surface roughness increases susceptibility to corrosion fatigue
+
+❑ Select the correct shape of critical sections
+
+❑ Provide against rapid changes of loading, temperature or pressure
+
+❑ Avoid internal stress
+
+❑ Limit corrosion factor in the corrosion-fatigue process (more resistant material / less corrosive environment).
+
+❑ Cathodic protection
+
+--- Page 63 ---
+
+# HYDROGEN INDUCED CRACKING
+
+* Hydrogen-induced cracking (HIC) is generally a common problem encountered in steel exposed to hydrogen rich environments such as hydrogen sulfide environments found in sour oil and gas wells and some power plants
+* High strength structural steels which are welded are exposed to a certain hydrogen pick-up which means a risk at fracture and blistering due to HIC.
+  * During welding, hydrogen is absorbed by the weld pool from the arc atmosphere.
+  * During cooling, much of this hydrogen escapes from the solidified bead by diffusion but some also diffuses into the HAZ and the parent metal.
+  * The amount of hydrogen gas which does so depends on several factors such as the original amount absorbed, the size of the weld, the decreasing solubility, and the time-temperature conditions of cooling.
+* Hydrogen sulfide, H2S acts as a catalyst for hydrogen ingress in the steels.
+* Hydrogen-induced cracking can occur on a very wide variety of steel equipment: drill strings, underground hydrocarbon extraction tubes (Oil Country Tubular Goods), pipelines, casing maintenance pieces,s
+
+--- Page 64 ---
+
+**HIC occurs without external application of stress**
+
+* The presence of hydrogen atoms in a metal degrades some of its mechanical properties, especially its ductility, leading in some cases to embrittlement.
+* Additionally, hydrogen atoms diffuse through metals and coalesce to form hydrogen molecules at certain preferred locations such as inclusions.
+* Hydrogen atoms are soluble in ferrite (which is the major phase of most steels). At discrete inclusions in the steel (e.g. manganese sulphide, which is present in many steels)
+* The hydrogen atoms combine to form hydrogen molecules.
+* Hydrogen molecules are insoluble in the steel lattice and these molecules associate, producing high tensile stresses which can initiate hydrogen cracking.
+* When laminations are present in the steel, hydrogen molecules form at the interface between them, creating blisters.
+
+--- Page 65 ---
+
+* At high temperatures hydrogen atoms can react with carbides in the steel producing methane gas.
+* Methane is insoluble in the steel structure and causes blistering or cracking. In clean steels containing none of these features the hydrogen atoms pass straight through the steel, causing no damage.
+* The main factor that promotes the entry of hydrogen into a metal is the presence on the metal of a surface poison such as sulphide or other species which inhibit the hydrogen recombination reaction.
+* HIC develops without applied stresses. Cracking results both from the stresses induced by the internal pressure due to the recombination of hydrogen on specific sites in the microstructure, and from the hydrogen embrittling effect, weakening the cohesive forces within the metal.
+
+--- Page 66 ---
+
+HYDROGEN INDUCED CRACKING
+
+* Hydrogen-induced cracking (HIC) is generally a common problem encountered in steel exposed to various hydrogen rich environment such as hydrogen sulfide environments found in sour oil and gas wells and some power plants
+* Also high strength structural steels which are welded are exposed to a certain hydrogen pick-up which means a risk at fracture and blistering due to HIC.
+* Hydrogen-induced cracking (HIC) is most commonly encountered in steels but other metals are susceptible, as shown in Table 33.3.
+* In the case of carbon and low alloy steels, two main forms of hydrogen embrittlement can be distinguished: hydrogen induced cracking (HIC) and hydrogen assisted cracking (HAC). In H2S containing solutions, HAC is referred to as sulphide stress cracking (SSC), an acronym traditionally used in the international standards dedicated to the oil and gas industry.
+
+--- Page 67 ---
+
+PREVENTION OF HIC
+
+* Minimize joint stress
+* Use proper preheat and post-weld heat
+* Select the appropriate filler metal
+* Store and handle filler metals properly
+* Modify environment to reduce hydrogen charging
+* Use steel with low levels of impurities
+* Use surface coatings and effective inhibitors
+* Post process heating to cause hydrogen egress from the metal
+
+--- Page 68 ---
+
+DEALLOYING
+
+* Also called Selective Leaching
+* Dealloying occurs when one or more elements of an alloy are more susceptible to corrosion than the other elements, thus facilitating preferential dissolution
+* The susceptible alloying elements are generally more active Electrochemically and are anodically dissolved in galvanic contact with the more noble elements
+* Dealloying is traditionally regarded as a destructive process in electrochemistry field, which frequently leads to materials failure, such as stress corrosion cracking
+
+--- Page 69 ---
+
+EXAMPLES OF DEALLOYING - DEZINCIFICATION
+
+• Dezincification - is the selective leaching of Zinc from Cu-Zn alloys containing greater than 15% zinc after extended service in water containing dissolved oxygen with high concentration of CO2 and/or chlorides
+• Dezincification is favoured by slow moving or stagnant water
+• Removal of Zn leaves behind a porous, weak layer of Cu and copper oxide corrosion product
+• The 70-30 brass, with its yellow colour, loses Zn selectively and its colour turns to red (the colour of copper).
+
+[DIAGRAM: An arrow labelled "Plug Type Dezinc." points toward a corroded area on a metal surface]
+
+--- Page 70 ---
+
+EXAMPLES OF DEALLOYING
+DEZINCIFICATION
+
+Dezincification of a Plumbing Systems made from yellow brass copper water lines
+
+Dezincification of brass, zinc is preferentially leached out of the copper-zinc alloy, leaving behind a copper-rich surface layer that is porous and brittle.
+
+[DIAGRAM: Text "EXAMPLES OF DEALLOYING DEZINCIFICATION" sits above a photo showing a copper pipe and brass valve; text "Dezincification of a Plumbing Systems made from yellow brass copper water lines" sits below the photo; red text "Dezincification of brass, zinc is preferentially leached out of the copper-zinc alloy, leaving behind a copper-rich surface layer that is porous and brittle." sits below.]
+
+--- Page 71 ---
+
+GRAPHITIC CORROSION
+
+❑ Graphitic corrosion occurs exclusively in gray cast iron
+❑ Graphitic corrosion refers to the deterioration of grey cast iron pipes, in which the metallic constituents are leached or turned into corrosion products, leaving the graphite intact and exposed.
+❖ Gray cast iron has a continuous graphite network in its microstructure
+❖ The graphite acts as the cathode and accelerates anodic dissolution of nearby iron, leaving behind the graphite network which is brittle
+
+❑ What Causes Graphitic Corrosion?
+
+Graphitic corrosion is caused by prolonged exposure of gray cast iron to minerals and compounds found in soils and in water. It is commonly found in cast Fe pipes that are exposed to salt water, acidic mine water, dilute acids, and soils; especially those that contain chlorides from deicing salt or sulphate reducing bacteria.
+
+--- Page 72 ---
+
+❑ Graphitic corrosion is often found in cast iron piping used for water mains and sewage systems. Such piping is usually buried in damp soil where the corrosion is unnoticed until there is a catastrophic leak.
+
+❑ Graphitic corrosion is also common in fire sprinkler valves, steam system heat exchangers, and marine exhaust systems made of cast fe.
+
+The presence of graphitic corrosion can be difficult to determine before a failure. Rust bleeding from the part, corrosion that extends beneath the normal surface corrosion present on cast iron, and a loss of attraction to a magnet are symptoms indicative of galvanic corrosion.
+
+[DIAGRAM: no labels visible]
+
+--- Page 73 ---
+
+GRAPHITIC CORROSION is not the same as graphitization
+
+NOTE!!
+
+* **Graphitization:**
+  Graphitization is the decomposition of carbide into graphite as the result of exposure to extreme heat.
+
+* **Graphitic corrosion:**
+  Graphitic corrosion is usually a form of galvanic corrosion that takes place in wet or moist environments where water acts as an electrolyte and allows a weak electrical current created by dissimilarities in the iron and graphite to remove the iron from the more cathodic graphite.
+
+Cast iron that failed by graphitic corrosion
+the elbow Severe graphitic corrosion had also reduced the wall thickness of the piping in some locations to 1/16-inch or less, creating holes and leak sites, which in some locations, appeared as tubercle leak sites.
+
+[DIAGRAM: In the left image, the label 'GRAPHITIZATION' has two arrows pointing down to a corroded cylinder; in the right image, a curved pipe fitting has the embossed label 'TITAN' next to a ruler labeled 'Flexible', above caption text starting with 'Cast iron that failed by graphitic corrosion'.]
+
+--- Page 74 ---
+
+PREVENTION OF DEALLOYING
+
+❑ Select metals/alloys that are more resistant to dealloying.
+For example,
+- low Zn red brass (< 15% Zn) is more resistant to dezincification than alpha brass,
+- Ductile iron is more resistant to graphitic corrosion than gray cast iron.
+
+❑ Control the environment to minimize the selective leaching
+
+❑ Use sacrificial anode cathodic protection or impressed current cathodic protection
+
+--- Page 75 ---
+
+ALLOYS SUSPECTIBLE TO DEALLOYING
+
+[DIAGRAM: Table titled "ALLOYS SUSPECTIBLE TO DEALLOYING" with columns "Alloy", "Environment", and "Element removed". Rows list: "Brasses" | "Many waters, especially under stagnation conditions" | "Zinc (dezincification)"; "Gray iron" | "Soils, many waters" | "Iron (graphitic corrosion)"; "Aluminum bronzes" | "Hydrofluoric acid, acids containing chloride ions" | "Aluminum"; "Silicon bronzes" | "Not reported" | "Silicon"; "Copper nickels" | "High heat flux and low water velocity (in refinery condenser tubes)" | "Nickel (de-nickelification)"; "Monels" | "Hydrofluoric and other acids" | "Copper in some acids, and nickel in others".]
+
+--- Page 76 ---
+
+ALLOYS SUSPECTIBLE TO DEALLOYING
+
+[DIAGRAM: A table titled "ALLOYS SUSPECTIBLE TO DEALLOYING" with column headers "Alloy", "Environment", and "Element removed", listing various alloys alongside their environments and removed elements such as "Alloys of gold or platinum with nickel, copper or silver", "High-nickel alloys", "Cobalt-tungsten-chromium alloys", "Medium-carbon and high-carbon steels", "Iron-chromium alloys", and "Nickel-molybdenum alloys".]
+
+--- Page 77 ---
+
+EROSION CORROSION – Flow accelerated corrosion
+
+❑ Corrosion bought about by a rapidly flow solution on a surface
+
+[DIAGRAM: "Water flow" sits at the top with a leftward arrow; "Corrosion film" points to the top surface layer on the left; "Impingement corrosion pits" has arrows pointing to pitted areas on the surface; "Original metal surface" points with an arrow to a dashed surface line; "Metal-tube wall" is labeled inside the cross-hatched metal base; captioned "Fig.1. Mechanism of erosion-corrosion of metal^6."]
+
+--- Page 79 ---
+
+EROSION CORROSION
+
+This type of corrosion is common in metals tubes carrying moving fluids
+
+• Erosion-corrosion is a phenomenon whereby the metal surface is continuously washed away by corrosive, rapidly flowing solutions due to the interaction of chemical reaction and mechanical erosion.
+
+[DIAGRAM: 'Water flow' is accompanied by a left-pointing arrow above the surface; 'Corrosion film' has an arrow pointing to the top layer on the left; 'Impingement corrosion pits' has arrows pointing to pitted areas in the worn surface; 'Original metal surface' has an arrow pointing to the intact surface level on the right; 'Metal-tube wall' is labeled inside the cross-hatched base.]
+
+--- Page 80 ---
+
+EROSION CORROSION – Flow accelerated corrosion
+
+❑ Erosion–corrosion is a common challenge in the oil and gas industry as well as in chemical processing plants
+
+❑ Starting with a metal surface relatively protected from corrosion due to a thin oxide film, the rapid flow of solutions (which may or may not be carrying solid abrasive particles) can remove the oxide layer and expose the unprotected active metal.
+
+* Oxide Film
+* Metal tube wall
+* Oxide film is damaged, and corrosion of bare metal continues
+
+❑ The metal may passivate but the continuous rapid flow of the solution continues the removal of the oxide.
+
+❑ Thinning or removal of surface films by erosion from the flowing stream results in accelerated corrosion, called erosion-corrosion
+
+[DIAGRAM: On the left, 'Oxide Film' points with an arrow to the top layer above 'Metal tube wall', with 'Water flow' and a left-pointing arrow above it; a central arrow points from this left diagram to a right diagram showing 'Water flow' with a left-pointing arrow above, 'Impingement corrosion pits' pointing to pitted areas on the surface above 'Metal-tube wall', and a blue cloud overlay containing the text 'Oxide film is damaged, and corrosion of bare metal continues']
+
+--- Page 81 ---
+
+EROSION CORROSION – Flow accelerated corrosion
+
+❑ In cases of non-passive metals, corrosion of metal surface may result in corrosion products which cover the surface as shown below
+
+❑ However, continuous flow of the solution will cause erosion of the corrosion deposit and initiate more corrosion
+
+❑ Corrosion –erosion attack is often accelerated at elbows, tube constrictions, burrs, and other structural features that alter flow direction or velocity, increase turbulence.
+
+[DIAGRAM: An arrow pointing left is labelled "Water flow" above a cross-section; "Original metal surface" points via an arrow to the dashed line of the original tube surface; "Impingement corrosion pits" points via two arrows to pitted areas in the metal; "Corrosion film" points to the layer above the metal surface; "Metal-tube wall" is positioned inside the hatched metal region below.]
+
+--- Page 82 ---
+
+EROSION CORROSION – Flow accelerated corrosion
+
+• Erosion –corrosion produces a distinsitive surface finish : grooves, waves, gullies, holes etc all oriented with respect to the fluid flow
+
+[DIAGRAM: The label 'The corroded pump impellers' sits below the left impeller photo; the label 'Close-up of the corrosion on an impellers' sits below the right impeller photo; a text box at the bottom contains 'EROSION CORROSION – Flow accelerated corrosion' on the left, separated by a vertical line from 'Erosion –corrosion produces a distinctive surface finish : grooves, waves, gullies, holes etc all oriented with respect to the fluid flow' on the right.]
+
+--- Page 83 ---
+
+❑ Erosion corrosion is caused by mechanical abrasion due to the relative movement between metal surfaces and corrosive fluids.
+
+❑ In this case, the surface of metal gets deteriorated gradually by the abrasion of fast-moving fluids and cavities are also formed.
+
+❑ This type of corrosion commonly seen in metal tubes carrying moving fluids in it.
+
+[DIAGRAM: Label 'Corrosion – erosion process on stainless steel' is positioned below the left photo.]
+
+--- Page 84 ---
+
+CAVITATION CORROSION
+
+❑ Cavitation corrosion is a form of corrosive attack similar to erosion corrosion
+
+❑ Cavitation results from collapsing bubbles created by pressure changes across metallic surfaces exposed to high velocity liquid flow.
+
+❑ Flow across a curved surface will produce a pressure drop that would cause local boiling in the high velocity liquid if the pressure is reduced below the vapour pressure of the liquid
+
+❑ The difference in pressure leads to the formation of gas bubbles
+
+❑ When the bubbles land on the surface and collapse, the repeated pressure impacts are sufficient to erode or cavitate the surface
+
+❑ The cavity formed on the surface could then turn into pits, initiating cracking
+
+--- Page 85 ---
+
+Cavitation is common on ship propeller, pump impellers and turbine runner subjected to high velocity liquid flow
+
+Cavitation erosion is the major failure mechanism of many fluid machinery components
+
+[DIAGRAM: A blue callout box at the top right contains the text "Cavitation is common on ship propeller,pump impellers and turbine runner subjected to high velocity liquid flow"; a blue callout box at the bottom left contains the text "Cavitation erosion is the major failure mechanism of many fluid machinery components"; an image at the bottom right shows a red double-headed arrow labeled "Cavitation erosion" pointing to the left and right interior surfaces of a cylindrical metal part.]
+
+--- Page 86 ---
+
+PREVENTION
+
+❑ Cathodic protection
+
+❑ Removal of dissolved air as dissolved gases may easily nucleate cavitating bubbles at lesser pressure reduction
+
+❑ Use of alloyed materials that are generally more resistant to abrasion/erosion to achieve a higher base hardness.
+  ✔ Coated or surface treated austenitic or duplex stainless steels are relatively resistant to cavitation
+  ✔ coatings, used for such purposes include stellite armor
+  ✔ Surface treatment : Low temperature carburizing or nitrocarburizing ( note that high temperature carburizing or nitrocarburizing can lead to sensitization)
+
+--- Page 87 ---
+
+ANIMATION OF CAVITATION CORROSION IN PUMPS
+
+PLS TURN TO SLIDE SHOW for the animation to show
+
+Reference:
+https://www.tlv.com/global/SG/steam-theory/cavitation-in-condensate-pumps.html
+
+[DIAGRAM: Top-left image shows a pump with a legend for "Vapor (flash steam)" and "Condensate", captioned "Pump oscillates due to cavitation"; top-right image shows an impeller detail with a line from "Erosion" to the blade, captioned "Damage caused to impeller"; bottom diagram shows a pressure gauge with a line pointing to "Saturated Steam Pressure", positioned above a syringe graphic linked to the pump graphic, labelled "Mechanism of Cavitation and Resulting Damage" with text explaining condensate pressure, vapor cavities, and impeller damage.]
+
+--- Page 88 ---
+
+FRETTING CORROSION
+
+❑ Fretting corrosion is a wear process enhanced by corrosion
+
+❑ Fretting involves wear of any alloy contacting any surface in dry or humid air
+
+❑ Fretting corrosion is a form of corrosion that, like crevice corrosion, involves corrosion where two different surfaces have an interface that brings them into quite close proximity.
+
+❑ It is not so much electrolyte chemistry that plays an influential role. Rather, mechanical load effects such as vibration are the cause of fretting corrosion.
+
+❑ Fretting occurs from abrasive wear of surface oxide films, which forms on contacting surfaces under load in air
+
+--- Page 89 ---
+
+❑ Materials with hard oxides, including stainless steels and Al and Ti alloys are particularly susceptible to this form of attack
+
+❑ Fretting damage is characterized by Pits or grooves and oxide debris.
+
+❑ Frettling is typically found in machinery, bolted assemblies and ball or roller bearings. Contact surfaces exposed to vibration during transportation are exposed to the risk of fretting corrosion.
+
+[DIAGRAM: "Fretting Corrosion" sits at the bottom left; an arrow points from "Fretting Corrosion" to the inner surface of a gear above it; an arrow points from "Fretting Corrosion" to the outer surface of a roller bearing to the right]
+
+--- Page 90 ---
+
+PREVENTION OF FRETTING CORROSION
+
+- Lubrication of contacting surfaces
+- Insertion of an insulating and cushion in materials between surfaces as a sealant, coating or loose gasket
+- Reduced load between fretting surfaces etc
+
+--- [Slide Continuation] ---
+
+--- Page 1 ---
+
+ELECTROCHEMISTRY & CORROSION
+MME 311/412
+Thermodynamics of Corrosion
+
+Dr. A. M. Oladoye
+Dept of Metallurgical & Materials Engineering
+University of Lagos, Nigeria
+
+MME 412 - ELECTROCHEMISTRY AND CORROSION 1
+
+| MME 311/412 |  |  | ELECTROCHEMISTRY & CORROSION Thermodynamics of Corrosion Dr. A. M. Oladoye Dept of Metallurgical & Materials Engineering University of Lagos, Nigeria MME 412 - ELECTROCHEMISTRY AND CORROSION 1 |  |
+| --- | --- | --- | --- | --- |
+|  |  |  |  |  |
+|  | MME |  | ELECTROCHEMISTRY & CORROSION Thermodynamics of Corrosion Dr. A. M. Oladoye Dept of Metallurgical & Materials Engineering University of Lagos, Nigeria |  |
+|  |  |  |  |  |
+|  |  |  |  | Dr. A. M. Oladoye Dept of Metallurgical & Materials Engineering University of Lagos, Nigeria |
+|  |  |  |  | MME 412 - ELECTROCHEMISTRY AND CORROSION 1 |
+|  |  |  |  |  |
+
+--- Page 2 ---
+
+Text
+
+1. Principles and Prevention of Corrosion by Denny A. Jones
+
+2. Principles of Corrosion Engineering and Corrosion Control by Zaki Ahmad
+
+MME 412 - Electrochemistry and Corrosion 2
+
+--- Page 3 ---
+
+Fundamentals
+
+MME 412 - Electrochemistry and Corrosion 3
+
+--- Page 4 ---
+
+Basic Concept of corrosion
+
+For metallic components to corrode, the formation of a corrosion cell on the metallic surface is essential.
+
+A corrosion cell is essentially comprised of the following components:
+
+• Anode
+• Cathode
+• Electrolyte
+• Metallic path
+
+MME 412 - Electrochemistry and Corrosion 4
+
+[DIAGRAM: "Current carrying electrolyte" has an arrow pointing into the surrounding liquid; "Non-corroding area" has an arrow pointing to the metal below the left "Cathode"; "Corroding area" has an arrow pointing to a pit labelled "Anode metal"; a second "Cathode" sits on the right metal surface; curved arrows point from the pit through the liquid to both "Cathode" areas.]
+
+--- Page 5 ---
+
+Every corrosion reaction can be subdivided into Anodic and Cathodic reaction Fe
+
+MME 412 - Electrochemistry and Corrosion 5
+
+[DIAGRAM: 'water' is above 'iron'; an 'anodic site' with equation 'Fe(s) -> Fe2+(aq) + 2e-' shows an arrow pointing to 'Fe2+' and a curved arrow with 'e-' pointing to 'cathodic site' with equation 'O2(g) + 4H+(aq) + 4e- -> 2H2O(l)'; arrows from 'Fe2+' and 'O2' point to 'Rust' / 'Fe2O3·xH2O'; an arrow runs from 'O2' to 'H2O' at the 'cathodic site']
+
+--- Page 6 ---
+
+MME 412 - Electrochemistry and Corrosion
+ANODIC REACTIONS
+CATHODIC REACTIONS
+
+6
+
+| MME 412 - Electrochemistry and Corrosion ANODIC REACTIONS ANODIC REACTIONS CATHODIC REACTIONS 6 |  | MME 412 - Electroc ANODIC REACTIONS ANODIC REACTIONS CATHODIC REACTION |  |  |  |  |  |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+|  |  |  |  |  |  | hemistry and Corrosion |  |
+|  |  |  |  | MME 412 - Electroc CATHODIC REACTION | MME 412 - Electroc | hemistry an |  |
+|  |  |  |  |  |  | S |  |
+|  |  |  |  |  |  |  |  |
+
+--- Page 7 ---
+
+**Anodic reactions are characterised by:**
+1. Oxidation of metal to an ion (Metal M losses n electron)
+2. Release of electrons
+3. Shift to a higher valence state (M increases it valency from 0 to +n)
+
+**Cathodic reactions are characterised by:**
+1. Gain of electrons
+2. Reduction of an oxidised ion in solution
+3. Shift to lower valence state (Fe changes valency form +3 to +2)
+
+MME 412 - Electrochemistry and Corrosion 7
+
+|  | Anodic reactions are characterised by: 1. Oxidation of metal Metal M to an ion losses n electron 2. Release of electrons 3. Shift to a higher valence state M increases i valency from MME 412 - Electrochemistry and Corrosion to +n |  |  |  |  | Cathodic reactions are characterised by: 1. Gain of electrons 2. Reduction of an oxidised ion in solution 3. Shift to lower valence state Fe changes t valency form +3 to 0 7 +2 |
+| --- | --- | --- | --- | --- | --- | --- |
+|  |  | Anodic reactions are characterised by: 1. Oxidation of metal Met to an ion loss elec 2. Release of electrons 3. Shift to a higher valence state M incr |  |  |  |  |
+|  |  |  |  |  | M incr | t 0 |
+|  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |
+|  | MME 412 - El |  | ectrochemistry and Corrosion |  |  |  |
+
+--- Page 8 ---
+
+Today's Class
+
+THERMODYNAMICS OF CORROSION
+
+MME 412 - Electrochemistry and Corrosion 8
+
+--- Page 9 ---
+
+Introduction
+
+❑ Every corrosion reaction involves electron transfer
+--- electrons is transferred from the anode to the cathode
+
+which of these is anodic , which is cathodic ?
+
+❑ The availability of electron on the metal surface has significant effect on the rate at which corrosion will proceed
+
+In other words.. If there are few electrons ejected by the metal, there will beew electrons transferred to the cathode
+
+MME 412 - Electrochemistry and Corrosion 9
+
+--- Page 10 ---
+
+Introduction
+
+❑ for each of these reactions there are energies involved
+❑ we will be learning about the energies involved in corrosion reaction otherwise called Thermodynamics of corrosion.
+❑ In other words , thermodynamics give an understanding of the energy changes involved in the electrochemical reactions in corrosion.
+❑ Thermodynamics show how conditions may be adjusted to make corrosion impossible.
+
+10
+MME 412 - Electrochemistry and Corrosion
+
+❑ However, thermodynamics cannot predict how fast or how slow corrosion reaction will be
+
+| Introduction for each of these reactions there are energies involved ❑ ❑ we will be learning about the energies involved in corrosion reaction otherwise called Thermodynamics of corrosion. ❑ In other words , thermodynamics give an understanding of the energy changes involved in the electrochemical reactions in corrosion. ❑ Thermodynamics show how conditions may be adjusted to make corrosion impossible. 10 MME 412 - Electrochemistry and Corrosion |  | Introduction |  |  |
+| --- | --- | --- | --- | --- |
+|  | Introducti for each of these reactions there are energies involved ❑ ❑ we will be learning about the energies involved in corrosion reaction otherwise called Thermodynamics of corrosion. ❑ In other words , thermodynamics give an understanding of the energy changes involved in the electrochemical reactions in corrosion. ❑ Thermodynamics show how conditions may be adjusted to make corrosion impossible. 10 MME 412 - Electrochemistry and Corrosion | Introducti |  |  |
+|  |  |  |  |  |
+|  | ❑ However, thermodynamics cannot predict how fast or how slow corrosion reaction will be |  |  |  |
+
+--- Page 11 ---
+
+Free Energy and Electrode Potential
+
+❑ The free energy (ΔG) is the driving force for chemical reactions
+
+❑ We know from elementary chemistry that chemical reactions at constant temperature and pressure will only occur if there is an overall decrease in the free energy (ΔG) of the system during the reaction
+change in G can be used to predict the feasibility of a reaction
+
+When change in G is negative
+When change in G is zero
+When change in G is positive
+
+MME 412 - Electrochemistry and Corrosion 11
+
+--- Page 12 ---
+
+Consider the spontaneous reaction that occurs when a piece of zinc is immersed in HCl reaction:
+
+Equation for the reaction is given as
+
+When zinc is immersed in HCl a dynamic equilibrium is established across the interface with a potential difference between Zn metal and electrolyte
+
+How?
+
+MME 412 - Electrochemistry and Corrosion 12
+
+--- Page 13 ---
+
+Zn dissolves by losing its electron
+
+Zn²⁺ goes in to the solution (adjacent to the surface of the metal), leaving the remaining metal surface negatively charged (because the lost electrons stay on the metal surface as shown in the Fig B)
+
+MME 412 - Electrochemistry and Corrosion 13
+
+--- Page 14 ---
+
+Figure B
+
+The positively charged metal ions, Zn²⁺ (aq), in the electrolyte are attracted back towards the negatively charged metal surface
+
+The metal surface becomes negatively charged because the electrons stay on its surface
+
+Thus, a potential difference and dynamic equilibrium between the metal and the solution is established.
+
+MME 412 - Electrochemistry and Corrosion 14
+
+|  |  | 2+ The positively charged metal ions, Zn (aq), in the electrolyte are attracted back towards the negatively charged metal surface The metal surface becomes negatively charged because the electrons stay on its surface Thus, a potential difference and dynamic equilibrium between the metal and the solution is established. |  |  |
+| --- | --- | --- | --- | --- |
+|  |  |  | 2+ The positively charged metal ions, Zn |  |
+|  |  |  | (aq), in the electrolyte are attracted |  |
+| (a b m T ch it T e so |  | (a b m T ch it T e so | (a |  |
+|  |  |  | b | ack towards the negatively charged |
+|  |  |  | m | etal surface |
+|  |  |  |  |  |
+
+| T | he metal surface becomes negatively |
+| --- | --- |
+| ch | arged because the electrons stay on |
+| it | s surface |
+
+| T | hus, a potential difference and dynamic |
+| --- | --- |
+| e | quilibrium between the metal and the |
+| so | lution is established. |
+
+[DIAGRAM: 'Figure B' sits at top; an arrow points from 'Electrons on metal surface' down to the metal bar; an arrow points from 'Metal ions adjacent to surface' to positive ions next to the metal surface; 'Solution' is labelled in a box inside the liquid; '(B) First stage of formation of electrical double layer' is positioned below the diagram]
+
+--- Page 15 ---
+
+❑ The positively charged metal ions, Zn²⁺ (aq), in the electrolyte are attracted back towards the negatively charged metal surface (Fig. B).
+
+❑ Thus, a potential difference and dynamic equilibrium between the metal and the solution is established.
+
+MME 412 - Electrochemistry and Corrosion 15
+
+[DIAGRAM: Three panels from left to right: (A) labeled '(A) At the instant of immersion.' showing 'Metal' immersed in 'Solution'; (B) labeled '(B) First stage of formation of electrical double layer' with an arrow from 'Electrons on metal surface' pointing to 'e⁻' on the metal and an arrow from 'Metal ions adjacent to surface' pointing to positive ions next to the metal in 'Solution'; (C) labeled '(C) Complete double layer' with brackets indicating 'Layer of positive ions immediately adjacent to surface' and 'Diffused layer of ions'.]
+
+--- Page 16 ---
+
+❑ The excess electrons on the zinc surface orient themselves opposite to a layer of zinc ions of equal and opposite charge on the electrolyte side of the zinc/HCl interface (Fig. B) leading to the formation of an electrical double layer of about 1 nm thickness along the metal/solution interface (Fig. C).
+
+MME 412 - Electrochemistry and Corrosion 16
+
+[DIAGRAM: Three panels labeled "(A) At the instant of immersion.", "(B) First stage of formation of electrical double layer", and "(C) Complete double layer"; in panel (A), "Metal" sits above a vertical bar, and "Solution" is inside the adjacent liquid; in panel (B), "Electrons on metal surface" points with an arrow to negative charges at the edge of the metal bar, "Metal ions adjacent to surface" points with an arrow to positive ions in the liquid adjacent to the metal, and "Solution" sits inside the liquid; in panel (C), "Layer of positive ions immediately adjacent to surface" points via a bracket to a column of positive ions next to the metal, and "Diffused layer of ions" points via a bracket to positive and negative ions further into the solution.]
+
+--- Page 17 ---
+
+MME 412 - Electrochemistry and Corrosion
+
+❑ The double layer shown in Figs B and C was formed as a result of attraction between the negative ions (anions) and positive ions (cations) on one hand, and repulsion between similarly, charged ion, anions or cations on the other hand.
+
+❑ As a result of the above interactions, cations diffuse amongst the anions until an equilibrium is established between the metal and solution, and between the bulk of the solution and the layer adjacent to the metal surface. The plane passing through the ions absorbed on the metal surface is called the Inner Helmholtz plane
+
+17
+
+--- Page 18 ---
+
+❑ On the other hand, the plane passing through the centre of solvated cation is called the Outer Helmholtz plane, which also marks the beginning of a diffuse layer when an excess of charges is neutralized
+
+❑ The double layer described above is responsible for the establishment of potential difference between the metal and solution, and this potential difference is referred to as 'Electrode Potential’
+
+MME 412 - Electrochemistry and Corrosion 18
+
+--- Page 19 ---
+
+Derivation of Electrode Potential
+MME 412 - Electrochemistry and Corrosion
+
+……….. Equation 1
+
+For this reaction to be spontaneous, the driving force, free energy change ΔG MUST BE NEGATIVE
+
+Equation 1 can be broken down into two half reactions to represent the cathodic and anodic Rxn:
+
+Anodic Rxn: Zn → Zn²⁺ + 2e⁻ …………….(2)
+Cathodic Rxn: 2H⁺ + 2e⁻ → H₂ …………… (3)
+
+For each half cell reaction to spontaneous, ΔG must be negative for each half cell reaction
+
+Also: ΔG = -nFE ………………….. (4)
+
+Remember:
+Where ΔG = change in Gibbs free energy of a cell in joules per mole
+n = number of electrons involved in the reaction, E = electrode potential
+F = Faraday’s constant = 96 500 C
+
+For ΔG to be negative then in Equation 4 E, electrode potential must be positive and CANNOT BE NEGATIVE
+
+19
+
+--- Page 20 ---
+
+MME 412 - Electrochemistry and Corrosion
+
+❑ For each half cell equation, an electrode potential exists designated as $E_a$ and $E_c$ for anodic and cathodic reaction as shown below:
+
+Half cell free energy:
+$\Delta G_a = -nFE_a$
+(Half cell electrode: $E_a$)
+
+Half cell free energy:
+$\Delta G_c = -nFE_c$
+(Half cell electrode: $E_c$)
+
+$\Delta G = -nFE_a + (-nFE_c)$
+
+$\Delta G = -nF(E_a + E_c)$
+
+Therefore E for the reaction = $E_a + E_c$
+
+20
+
+|  | ΔG = - nFE c l free energy |
+| --- | --- |
+| Half cell free energy | l free energy |
+
+[DIAGRAM: An arrow runs from 'Zn' to 'Zn2+ + 2e .'; an arrow points from 'Half cell electrode' to 'E_a' in 'ΔG = - nFE_a'; 'Half cell free energy' sits below 'ΔG'; an arrow runs from '2H+ + 2e-' to 'H2'; an arrow points from 'Half cell electrode' to 'E_c' in 'ΔG = - nFE_c'; an arrow runs from 'Zn + 2HCl' to 'ZnCl2 + H2'; an arrow points from 'ΔG = -nFE' to 'ΔG = - n F (E_a + E_c)'.]
+
+--- Page 21 ---
+
+Class on 21/12/2021
+
+MME 412 - Electrochemistry and Corrosion 21
+
+--- Page 22 ---
+
+When a metal dissolves in an electrolyte, metal ions are released and the metal surface becomes negatively charged due to the presence of the electron from the dissolution reaction on the metal surface.
+
+At some point, there is a build up of negative and positive charges opposite such others as shown on the Figure D. The build up of positive and negative charges can be likened to a capacitor. Hence, a potential difference is created between the metal and the electrolyte.
+
+Figure D
+
+MME 412 - Electrochemistry and Corrosion 22
+
+[DIAGRAM: 'Metal' labels the vertical surface on the left; vertical dashed lines above are labeled 'phi 1' and 'phi 2'; a bracket at the bottom is labeled 'i', and a horizontal arrow to its right is labeled 'd'; within the fluid region, labels include 'Diffuse layer' at top, 'Solvated cation' with an arrow pointing to a circle containing '+' surrounded by circles, 'Specifically adsorbed anion' with an arrow pointing to a circle containing '-', and a legend showing an empty circle '= Solvent molecule'; the diagram is labeled 'Figure D' at the bottom left.]
+
+--- Page 23 ---
+
+MME 412 - Electrochemistry and Corrosion           
+Given the reaction below:
+
+For each half cell equation, an electrode potential exist designated as E_a and E_c for anodic and cathodic reaction as shown above
+
+Total Gibbs energy for the corroding system
+                                                                                                                         23
+
+| MME 412 - Electrochemistry and Corrosion Given the reaction below: For each half cell equation , an electrode potential exist designated as E and E for anodic and cathodic reaction as shown above c Total Gibbs energy for the corroding system 23 |  |  |  |  |
+| --- | --- | --- | --- | --- |
+|  | For each half cell equation , an electrode potential exist designated as E and E for anodic and cathodic reaction as shown above c |  |  | a |
+|  |  | m 23 |  |  |
+
+[DIAGRAM: "MME 412 - Electrochemistry and Corrosion" sits at top right; "Given the reaction below:" sits below it; equation "Zn + 2HCl -> ZnCl2 + H2" sits above half-reactions "Zn -> Zn2+ + 2e ." with "ΔG = - nFE_a" and "2H+ + 2e- -> H2" with "ΔG = - nFE_c"; red label "Half cell free energy" sits below "ΔG", and red text "Half cell electrode" has arrows pointing to "E_a" and "E_c"; below a line, overall reaction "Zn + 2HCl -> ZnCl2 + H2" has "ΔG = - nFE_a + (- n F E_c)" and "ΔG = -nFE" with a red arrow pointing to "ΔG = - n F (E_a + E_c)"; text "For each half cell equation , an electrode potential exist designated as E_a and E_c for anodic and cathodic reaction as shown above" sits above a repeated bottom equation line where a red thought bubble labelled "Total Gibbs energy for the corroding system" points to "ΔG = -nFE"]
+
+--- Page 24 ---
+
+But how do I measure E_a and E_c
+
+E_a and E_c CANNOT BE MEASURED SEPERATELY
+
+ONE MUST BE A PRIMARY ELECTRODE ANS USED AS A REFERENCE TO MEASURE THE OTHER ONE
+
+In corrosion thermodynamics.
+
+Has been chosen as the primary reference electrode and given a vale of 0 V
+                                                    MME 412 - Electrochemistry and Corrosion                             24
+
+--- Page 25 ---
+
+Using the hydrogen reduction reaction as reference, half cell electrode potentials of other metals can be measured
+
+The half cell potential of other metals measured with reference to the standard hydrogen potential (assumed to be zero) is called Standard Electrode potential
+
+Standard electrode potentials of most metals can be found in the Electromotive force series, EMF series which is a list of standard half cell electrode potentials for metals
+
+                                                    MME 412 - Electrochemistry and Corrosion                             25
+
+--- Page 26 ---
+
+Reaction
+Standard electrode potential. V vs SHE
+
+Noble
+
+EMF SERIES
+Source: principles and prevention of corrosion by Denny .A. Jones
+
+Please do not memorise the tables, the values will be made available with the question when needed
+
+Active
+
+MME 412 - Electrochemistry and Corrosion 26
+
+[DIAGRAM: A vertical upward-pointing arrow runs from 'Active' at the bottom to 'Noble' at the top, to the left of a table with headers 'Reaction' and 'Standard electrode potential. V vs SHE'; to the right of the table, a green cloud contains 'EMF SERIES' and 'Source: principles and prevention of corrosion by Denny .A. Jones', above a red dashed cloud containing 'Please do not memorise the tables, the values will be made available with the question when needed'.]
+
+--- Page 27 ---
+
+❑ Standard electrode potentials of most metals can be found in the Electromotive force series, EMF series which is a list of standard half cell electrode potentials for metals
+
+❑ The listed potentials are also called reduction potential because the reactions are in the reduction mode (electron gain)
+
+❑ It is impossible to measure the absolute value of any half cell electrode potentials
+
+❑ Only cell potentials consisting of two half-cell electrode (anode and cathode are measurable and one of such must be designated as the primary reference
+
+MME 412 - Electrochemistry and Corrosion 27
+
+--- Page 28 ---
+
+❑ In the EMF series, is selected as the primary reference and its potential Is assumed to be zero for convenience
+
+❑ All other electrochemical potential measurements are with reference to the reference half cell potential
+
+❑ The reference half cell potential is also known as Standard hydrogen Electrode (SHE)
+SHE
+
+❑ The standard hydrogen electrode is Used to measure the electrode potential Of other metals
+E = 0 V
+
+MME 412 - Electrochemistry and Corrosion 28
+
+--- Page 29 ---
+
+Standard Hydrogen Electrode
+
+❑ The standard hydrogen electrode consists of a platinum wire immersed in unit activity acid solution (a_H+ = 1) through which hydrogen gas at 1 atm pressure is bubbled. As seen below
+
+Platinum acts a catalyst for the reaction:
+
+Note: A porous platinized platinum coating is often deposited on the surface to provide a larger area for the hydrogen reactions
+
+29
+MME 412 - Electrochemistry and Corrosion
+
+[DIAGRAM: An arrow points left from "H2(g) 100 kPa 298 K" to an inlet tube above a beaker; a line connects "Inert Pt electrode" to a block labelled "Pt"; a line connects "1 mol dm⁻³ H⁺(aq)" to the solution inside the beaker; "2H⁺(aq) + 2e⁻ ⇌ H2(g)" sits below the beaker.]
+
+--- Page 30 ---
+
+Using Standard Hydrogen Electrode to measure Other electrode potential
+
+SHE
+
+Note that:
+1. the potential of the hydrogen electrode is given by:
+
+2. Standard electrode potential (E°) as given in the EMF series is the electrode potential of a given metal compared to that of the standard hydrogen electrode (SHE)
+
+3. Eo for a given metal can be measured by connecting it to SHE as shown in the diagram
+
+30
+MME 412 - Electrochemistry and Corrosion
+
+| SHE MME 412 - |  |  |
+| --- | --- | --- |
+|  | MME 412 - | Electrochemistry and Corrosion |
+
+--- Page 31 ---
+
+Things to note about EMF series
+
+❑ A metal with a more negative potential has a higher tendency to corrode (dissolve) than a metal with a less negative potential.
+
+E.g If Al and Zn electrodes were immersed in an electrolyte,
+E°_Al = -1.66 V,
+E°_Zn = -0.763 V
+Al has a greater tendency to corrode before Zn will do
+
+❑ ALLOYS are not considered in the EMF series; only electrode potentials of pure metals are given.
+
+❑ The EMF series gives an indication of how active the metal is but does not necessarily predict corrosion.
+
+MME 412 - Electrochemistry and Corrosion                             31
+
+--- Page 32 ---
+
+When corrosion systems are in standard state (STP), the half cell electrode potential of the reaction can be found in the EMF SERIES
+
+however
+
+When corrosion systems are not in standard state, the half cell electrode potential of the reaction can be calculated using the Nernst Equation
+
+MME 412 - Electrochemistry and Corrosion 32
+
+--- Page 33 ---
+
+Class on 23/12/2021
+
+MME 412 - Electrochemistry and Corrosion 33
+
+--- Page 34 ---
+
+NERNST EQUATION
+
+❑ When corrosion reactions are not in standard state, the half cell electrode potential of the reaction can be calculated using the Nernst Equation.
+
+At 25 °C Nernst equation in the IUPAC convention is given as
+
+Standard electrode potential
+
+MME 412 - Electrochemistry and Corrosion 34
+
+--- Page 35 ---
+
+NERNST EQUATION
+
+Examples: contd.
+
++
+
++ -
+
+2
+Nernst Equation for
+
++
+
+1
+2
+
++
+
+MME 412 - Electrochemistry and Corrosion 35
+
+|  | NERNST EQUATION Examples: contd. + + - 2 Nernst Equation for + 1 2 + 35 MME 412 - Electrochemistry and Corrosion |
+| --- | --- |
+| MME 412 - Electrochemistry and Corrosion | MME 412 - Electrochemistry and Corrosion |
+
+--- Page 36 ---
+
+MME 412 - Electrochemistry and Corrosion 36
+
+--- Page 37 ---
+
+Reaction direction by free Energy Determination
+
+To predict the spontaneous direction of an electrochemical reaction
+- Separate the reaction into its half cell reaction
+
+Zn + HCl → ZnCl2 + H2
+
+Half cells reactions:
+Zn → Zn2+ + 2e-          E = 0.762V
+(it is positive because the reaction shown is the reverse of the Reaction shown in the Emf series)
+
+                         E = 0 V
+
+When E = —ve , the direction of the reaction is reversed
+
+Positive E correspond to –ve ΔG which is required for the reaction to be spontaneous
+
+MME 412 - Electrochemistry and Corrosion 37
+
+| Reaction direction by free Energy Determination To predict the spontaneous direction of an electrochemical reaction - Separate the reaction into its half cell reaction it is positive because the reaction shown is Zn + HCl ZnCl + H 2 2 the reverse of the Reaction shown in the Emf series E = 0.762V 2+ - Half cells reactions Zn Zn + 2e E = 0 V When E = —ve , the direction of the reaction is reversed |  |  |  |  |  |  |
+| --- | --- | --- | --- | --- | --- | --- |
+|  | When E = —ve , the direction of the reaction is reversed |  |  |  |  |  |
+| P | ositive E correspond to –ve ΔG which is required for the reaction to be spontaMnMeEo 41u2s - Electrochemistry and Corrosion 37 | spontaMnMeEo 41u2s - Elect | rochemistry and Corrosion | 37 |  |  |
+|  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |
+
+--- Page 38 ---
+
+Reaction direction by free Energy Determination Contd.
+
+Example 2
+
+Assuming standard state for all reactants and products predict the spontaneous direction of the reaction below by calculating the cell potential
+CuCl2 + H2 = Cu + HCl
+
+Step 1 : Half cell equations
+Cu2+ + 2e- = Cu    E = -0.744 V
+H2 = 2H+ + 2e-     E = 0 V
+
+E = -0.744 + 0 V = -0.744V
+
+When E = —ve , the direction of the reaction is reversed
+
+Therefore the reaction will be written as
+CuCl2 + H2               Cu + HCl     alternatively
+as Cu + HCl                   CuCl2 + H2
+
+MME 412 - Electrochemistry and Corrosion                             38
+
+| Reaction direction by free Energy Determination Contd. Example 2 Assuming standard state for all reactants and products predict the spontaneous direction of the reaction below by calculating the cell potential CuCl + H = Cu + HCl 2 2 Step 1 : Half cell equations When E = —ve , 2+ Cu +2e- = Cu E= -0.744 V the direction of + H = 2H + 2e- E = 0 V 2 the reaction is reversed E = -0.744 + 0 V = -0.744V Therefore the reaction will be written as CuCl + H Cu + HCl alternatively 2 2 MME 412 - Electrochemistry and Corrosion 38 |  |  |  |
+| --- | --- | --- | --- |
+|  | Example 2 Assuming standard state for all reactants and products predict the spontaneous direction of the reaction below by calculating the cell potential CuCl + H = Cu + HCl 2 2 |  |  |
+|  |  |  |  |
+|  |  | Step 1 : Half cell equations W 2+ Cu +2e- = Cu E= -0.744 V th + H = 2H + 2e- E = 0 V 2 t E = -0.744 + 0 V = -0.744V Therefore the reaction will be written as CuCl + H Cu + HCl alternatively 2 2 MME 412 - Electrochemistry and Corrosion | hen E = —ve , e direction of he reaction is reversed 38 |
+|  |  | as Cu + HCl CuCl + H 2 2 |  |
+
+--- Page 39 ---
+
+MME 412 - Electrochemistry and Corrosion                             39
+
+--- Page 40 ---
+
+Experimental Measurement of Electrode potentials of Metals
+
+❑ Previously, measurement of Standard electrode potentials of metals in the EMF series was described . This method can also be used to measure the electrode potential of a system not in standard state.
+
+❑ We have learnt that corrosion reactions involve two half cell reactions
+
+❑ It is possible to determine the electrode potential of a metal or an alloy in the Laboratory by making one of the half cell a known reference half cell otherwise called Reference electrode
+
+Measurement of standard electrode potential previously described:
+- Metal in standard state
+- SHE
+
+MME 412 - Electrochemistry and Corrosion                             40
+
+|  | Experimental Measurement of Electrode potentials of Metals |
+| --- | --- |
+| Experimental Measurement o ❑ Previously, measurement of Standard electrode potentials of metals in the EMF series was described . This method can also be used to measure the electrode potential of a system not in standard state. ❑ We have learnt that corrosion reactions involve two half cell reactions ❑ It is possible to determine the electrode potential of a metal or an alloy in the Laboratory by making one of the half cell a known reference half cell otherwise called Reference electrode | Experimental Measurement o |
+|  |  |
+
+--- Page 41 ---
+
+Experimental Measurement of Electrode potentials of Metals
+
+**Standard electrode potential measurement**
+* SHE
+* Metal in standard state
+
+**Measuring corrosion potential of metals not in standard state**
+* Method 1
+* Secondary reference electrode
+* Electrolyte
+
+Note that in the laboratory measurements, SHE is replaced with secondary reference electrode of known electrode potential
+
+41
+
+[DIAGRAM: Left setup shows 'High resistance voltmeter' labeled 'E' wired to 'Platinum electrode' in 'H2SO4 (1m)' with 'H+' and an inlet for 'Hydrogen gas at 1 atmosphere and 298° K', separated by 'Porous separator' with '(1m)' from 'Test electrode' in '(solution)' with 'Mz+ (1m)'; callout 'SHE' points to the left compartment and callout 'Metal in standard state' points to 'Test electrode'. Right setup shows 'Voltmeter' wired to a metal plate and an electrode inside a beaker, with callout 'Secondary reference electrode' pointing to the electrode and callout 'Electrolyte' pointing to the liquid; box labeled 'Method 1' sits between the setups; text at the bottom reads 'Note that in the laboratory measurements, SHE is replaced with secondary reference electrode of known electrode potential'.]
+
+--- Page 42 ---
+
+Method 2 Using a potentiostat
+
+SHE is replaced with Secondary reference electrode
+
+MME 412 - Electrochemistry and Corrosion 42
+
+--- Page 43 ---
+
+MME 412 - Electrochemistry and Corrosion
+What are Secondary Reference Electrodes
+
+❑ Standard hydrogen electrode is known as the primary reference electrode
+* Primary Reference electrode
+
+❑ However, it is cumbersome and cannot be used in the laboratory for electrode potential measurement thus secondary reference electrodes have been developed
+
+❑ The electrode potentials of these secondary reference electrode have been measured with respect to the SHE
+* Secondary Reference electrode
+  * Saturated Calomel Reference Electrode (SCE)
+  * Silver-silver chloride Reference Electrode (Ag/AgCl)
+  * Mercury–Mercurous Reference Electrode (Hg/HgSO4)
+  * Copper-Copper sulphate Reference electrode (Cu/CuSO4)
+
+43
+
+|  | MME 412 - Electrochemistry and Corrosion |
+| --- | --- |
+| MME What are Secondary Reference Electrodes | MME |
+
+--- Page 44 ---
+
+MME 412 - Electrochemistry and Corrosion
+                          Reference           Electrodes                                                                            
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+                       Name                            Half   cell  reaction              Potential                                 
+                                                                                                                                    
+                                                                                                                                    
+                                                                                         (V  vs  SHE)                               
+                                                                                                                                    
+                                                                                                                                    
+        Standard    hydrogen      Electrode               2H+   +2e   - =  H                 0 .000                                 
+                                                                             2                                                      
+              (Primary     reference                                                                                                
+                                                                                                                                    
+                    electrode)                                                                                                      
+                                                                                                                                    
+                                                                                                                                    
+               Saturated     Calomel                 Hg   Cl  +2e   = 2Hg   +2Cl-            0.241                                  
+                                                         2  2                                                                       
+                                                                                                                                    
+                                                                                                                                    
+              Silver/silver   chloride                  AgCl    + e- = Ag   + Cl            +0.222                                  
+                                                                                                                                44  
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+           Copper-copper        sulphate            CuSO     +  2e- =  Cu  + SO   2-         0.318                                  
+                                                           4                     4                                                  
+                                                                                                                                    
+                                                                                                                                    
+             Mercury     –Mercurous                 HgSO     +  2e- = Hg   + SO   2-         0.615                                  
+                                                            4                    4                                                  
+                     Sulphate                                                                                                       
+                                                                                                                                    
+             (for  field application)                                                                                               
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+
+| Name | Half cell reaction | Potential (V vs SHE) |
+| --- | --- | --- |
+| Standard hydrogen Electrode (Primary reference electrode) | 2H+ +2e - = H 2 | 0 .000 |
+| Saturated Calomel | Hg Cl +2e = 2Hg +2Cl- 2 2 | 0.241 |
+| Silver/silver chloride | AgCl + e- = Ag + Cl | +0.222 |
+| Copper-copper sulphate | CuSO + 2e- = Cu + SO 2- 4 4 | 0.318 |
+| Mercury –Mercurous Sulphate (for field application) | HgSO + 2e- = Hg + SO 2- 4 4 | 0.615 |
+
+--- Page 45 ---
+
+Saturated        Calomel      electrode                        
+      ❑     SCE   is  the   most    popular     secondary                                                                           
+                                                                                                                                    
+            electrode      for   common        laboratory                                                                           
+                                                                                                                                    
+            use.                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+      ❑     It  consists     of   mercurous       chloride                                                                          
+                                                                                                                                    
+            HgCl    mixed    in a  mercury     paste   on   a                                                                       
+                  2                                                                                                                 
+            pool    of  liquid    mercury      in  contact                                                                          
+                                                                                                                                    
+            with   a saturated     KCl.                                                                                             
+                                                                                                                                    
+      ❑     Electrical    contact     is  made      via   an                                                                        
+                                                                                                                                    
+                                                                                                                                    
+            inert    platinum      wire    immersed        in                                                                       
+                                                                                                                                    
+            mercury                                                                                                                 
+                                                                                                                                    
+      ❑      SCE   should    be  stored    in just  slightly                                                                        
+                                                                                                                                    
+            less  than   saturated    KCl  solution.                                                                                
+                                                                                                                                    
+      ❑     SCE   is affected     by  temperature       and                                                                         
+                                                                                                                                    
+                                                                                                                                    
+            is      not        recommended               for                                                                        
+                                             o                                                                                      
+            measurements         above    50  C                                                                           45        
+                                                                                                                                    
+                                                                    MME 412 - Electrochemistry and Corrosion
+
+--- Page 46 ---
+
+MME 412 - Electrochemistry and Corrosion                                46
+
+--- Page 47 ---
+
+Silver-     silver    chloride        Electrode                                                     
+                                                                                                                                    
+                                                                                                                                    
+                                                                    ❑    Ag/AgCl       electrode       is prepared                  
+                                                                                                                                    
+                                                                         by  electrolytically        oxidising      a               
+                                                                                                                                    
+                                                                                                                                    
+                                                                         silver   wire   or   an  electroplated                     
+                                                                                                                                    
+                                                                         silver   coating     on   platinum       wire              
+                                                                                                                                    
+                                                                                                                                    
+                                                                         in HCl    .                                                
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+                                                                    ❑    Ag/AgCl       can   be   used    for                       
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                              o                     
+                                                                         measurements            up   to  70   C                    
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+                                                                                                                                    
+                                                                MME 412 - Electrochemistry and Corrosion                            
+                                                                                                                                    
+                                                                                                                         47         
+                                                                                                                                    
+
+|  | Silver- silver chloride Electrode |  |  |
+| --- | --- | --- | --- |
+| Silver- silver chlo | Silver- silver chlo |  |  |
+|  |  |  |  |
+|  |  |  |  |
+
+--- Page 48 ---
+
+48           
+                                                    MME 412 - Electrochemistry and Corrosion
+
+
+
+--- Page 49 ---
+
+MME 412 - Electrochemistry and Corrosion
+
+Copper – saturated copper sulphate electrode
+
+❑ Commonly used in field measurements to measure potentials on underground structures and structures exposed to fresh water
+
+❑ Consist of a copper rod immersed in a saturated CuSO4 solution with electrolytic contact to the cell through a porous wooden plug
+
+Commercial copper/copper sulphate reference electrode.
+
+| Commercial copper/copper sulp |  |  |  |
+| --- | --- | --- | --- |
+|  |  |  | 49 |
+|  | Commercial copper/copper sulp | hate reference electrode. |  |
+
+--- Page 50 ---
+
+Mercury - Mercurous sulphate electrode
+
+❑ A chemical analogy of the calomel electrode
+
+❑ Hg/HgSO4 electrode find use when possible contamination by chloride is undesirable
+
+MME 412 - Electrochemistry and Corrosion
+50
+
+--- Page 51 ---
+
+Reference Electrode conversion
+
+❑ Electrode potentials can be reported in the scale of the particular secondary reference used for measurement e.g. 2.34V vs SCE or 4.5 V Vs Ag/AgCl.
+
+❑ There are different methods
+
+❑ In the next slide, a simple conversion process is explained adapted from https://curtin-corrosion-centre.com/knowledge/resources/conversion-of-reference-electrode-potentials
+
+MME 412 - Electrochemistry and Corrosion
+51
+
+--- Page 52 ---
+
+MME 412 - Electrochemistry and Corrosion
+
+SSC – silver/ silver chloride
+MMS – Mercury /mercury sulphate
+CCS – copper/copper sulphate
+SHE – standard hydrogen electrode
+
+52
+
+--- Page 53 ---
+
+MME 412 - Electrochemistry and Corrosion                            53
+
+--- Page 54 ---
+
+MME 412 - Electrochemistry and Corrosion                             54
+
+--- Page 55 ---
+
+Pourbaix (E-pH) Diagram
+
+❑ Pourbaix diagram show the stability of a metal as a function of potential and pH.
+
+❑ Stable phases of a given metal at a particular combination of pH and potential can be determined from the Pourbaix diagram.
+
+❑ In Pourbaix diagrams, the redox potential of the corroding system is plotted on a vertical axis and the pH on a horizontal axis.
+
+❑ Pourbaix diagram are derived from the Nernst equations and solubility data for metal and its species e.g. Fe, Fe2O3, FeO, Fe3O4
+
+MME 412 - Electrochemistry and Corrosion 55
+
+[Axes: Redox potential, V vs. pH]
+
+|  | Pourbaix (E-pH ) Diagram |  |  |  |  |  |  |  |  |  |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ❑ Pourbaix diagram show the stability of a metal as a function of potential and pH. ❑ Stable phases of a given metal at a particular combination of pH and potential can be , determined from the Pourbaix diagram. ❑ In Pourbaix diagrams, the redox potential of the corroding system is plotted on a vertical axis and the pH on a horizontal axis. ❑ Pourbaix diagram are derived from the Nernst equations and solubility data for metal and its species e,g. Fe, Fe O , FeO , Fe O 2 3 3 4 MME 412 - E |  |  |  |  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |  |  |  |  |
+|  |  |  |  | V ,laitnetop xodeR |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |  |  |  |  |
+|  |  | 3 4 MME 412 - E |  | lectrochemistry and Corros |  | ion | p | H | 55 |  |
+|  |  |  |  |  |  |  |  |  |  |  |
+
+--- Page 56 ---
+
+Pourbaix (E-pH) Diagram                         MME 412 - Electrochemistry and Corrosion
+
+❑ In every Pourbaix diagram, the oxygen line representing the reaction
+
+and the hydrogen line representing the Rxn:
+
+are superimposed showing conditions in which corrosion will cause hydrogen evolution or will reduce any dissolved oxygen present.
+
+The H2 and O2 lines were constructed form Nernst Equation for the reactions shown above,
+
+Recall from page 18 that E for these reactions were:
+
+E O2/H2O                                              E H+/H2 = - 0.059pH
+                                                                                                                         56
+
+|  |  |  |  | Pourbaix (E-pH ) Diagram |  |  |  |  |  |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ❑ In every Pourbaix diagram , the oxygen l representing the reaction and the hydrogen line representing the Rx are superimposed showing conditions in wh corrosion will cause hydrogen evolution or reduce any dissolved oxygen present. |  |  |  |  |  |  |  |  |  |
+|  |  |  |  |  |  | ine n: ich will |  |  |  |
+|  |  |  |  |  |  |  |  |  |  |
+| The H and O lines were constructed form Nernst |  |  |  |  |  | Equation |  |  |  |
+| 2 2 for the reactions shown above , |  |  |  |  |  |  |  |  |  |
+| Recall from page 18 that E for these reacti |  |  |  |  |  | ons were: |  |  |  |
+|  | E O /H 0 2 2 |  |  |  | E = - 0.059pH H+/H2 | .059pH |  |  |  |
+
+--- Page 57 ---
+
+Pourbaix (E-pH) Diagram                         MME 412 - Electrochemistry and Corrosion
+
+                                                                                                                              57    
+❑ There are three regions in a typical Pourbaix diagram :
+- Immunity ( the metal is in its free state e.g. Al, Fe as in the diagrams below)
+- Passivation (The metal exist in the oxide state with no charges )
+- Corrosion ( The metal is in the combined state so it carries a charge)
+
+These 3 regions are very useful in prediction of tendency of metals to corrode
+
+Fe Pourbaix diagram                                           Al Pourbaix diagram
+
+--- Page 58 ---
+
+Question on Pourbaix diagram
+MME 412 - Electrochemistry and Corrosion
+
+The bipolar plates of a proton exchange membrane electrolyser typically operate under anodic potentials of between 1.6 and 1.8 V in a highly acidic environment. Given the Pourbaix diagram for metal A and B in Fig 1 and 2 below.
+
+58
+
+--- Page 59 ---
+
+MME 412 - Electrochemistry and Corrosion
+
+Answer: None of the metals will be suitable under pH -2 to about 0.5 as BO2+ and A2+ exist and correspond to corrosion.
+
+However, under pH 1 to 2 which can still be considered highly acidic environment, Metal B can be considered.
+
+Answer: Region A – immunity region
+
+( c ) What does line 1 and 2 represent ? Give the reactions represented by each line
+
+Answer: Line 1 – oxygen line , line 2 – Hydrogen line
+
+Check the previous pages for the equations
+
+59
+noisorroc
+Passivation
+
+|  | MME 412 - Electrochemistry and Corrosion |
+| --- | --- |
+| MME 412 - Electrochemistry and Corrosion Answer: None of the metals will be suitable noisorroc 2+ 2+ exist under pH -2 to about 0.5 as BO and A and correspond to corrosion Passivation However, under pH 1 to 2 which can still be considered highly acidic environment , Metal B can be considered. Answer: Region A – immunity region ( c ) What does line 1 and 2 represent ? Give the reactions represented by each line Answer: Line 1 – oxygen line , line 2 – Hydrogen line Check the previous pages for the equations 59 | MME 412 - Electrochemistry and Corrosion |
+
+--- Page 60 ---
+
+Passivation
+
+Immunity
+
+MME 412 - Electrochemistry and Corrosion
+60
+
+noisorroC
+Passivation
+Corrosion
+Passivation
+Corrosion
+Immunity
+Passivation
+
+--- Page 61 ---
+
+Limitation of the Pourbaix diagram
+
+❑ Pourbaix diagrams are purely based on thermodynamic data and do not provide any information on the reactions. The thermodynamic stability may not be achieved to the kinetics of the reaction. No information is provided on the rates of reaction.
+
+❑ Consideration is given only to equilibrium conditions in specified environment and factors, such as temperature and velocity are not considered in the Pourbaix diagram. These factors are known to have significant effect on the corrosion rate.
+
+❑ Pourbaix diagrams deal with pure metals which are not of much interest to the engineers.
+
+MME 412 - Electrochemistry and Corrosion                             61
+
+--- Page 62 ---
+
+Experimental Measurement of Electrode potentials of Metals
+
+MME 412 - Electrochemistry and Corrosion
+
+❑ Previously, measurement of Standard electrode potentials of metals in the EMF series was described. This method can also be used to measure the electrode potential of a system not in standard state.
+
+❑ We have learnt that corrosion reactions involve two half cell reactions
+
+❑ It is possible to determine the electrode potential of a metal or an alloy in the Laboratory by making one of the half cell a known reference half cell otherwise called Reference electrode
+
+Measurement of standard electrode potential previously described:
+* Metal in standard state
+* SHE
+
+62
+
+|  | Experimental Measurement of Electrode potentials of Metals |
+| --- | --- |
+| Experimental Measurement o ❑ Previously, measurement of Standard electrode potentials of metals in the EMF series was described . This method can also be used to measure the electrode potential of a system not in standard state. ❑ We have learnt that corrosion reactions involve two half cell reactions ❑ It is possible to determine the electrode potential of a metal or an alloy in the Laboratory by making one of the half cell a known reference half cell otherwise called Reference electrode | Experimental Measurement o |
+|  |  |
+
+--- Page 63 ---
+
+Experimental Measurement of Electrode potentials of Metals
+
+### Standard electrode potential measurement
+* Metal in standard state
+* SHE
+
+### Measuring electrode potential of metals not in standard state
+**Method 1**
+* Secondary reference electrode
+* Electrolyte
+
+Note that in the laboratory measurements, SHE is replaced with secondary reference electrode of known electrode potential.
+
+63
+
+--- Page 64 ---
+
+Method 2 Using a potentiostat
+
+SHE is replaced with Secondary reference electrode
+
+A video on such measurements in the laboratory will be upload
+
+MME 412 - Electrochemistry and Corrosion 64
+
+| A video on such measurements in the laboratory will be upload MME 412 - Electrochemistry and Corrosion 6 |  |  |
+| --- | --- | --- |
+|  | atory MME | will be upload 412 - Electrochemistry and Corrosion 6 |
+|  |  |  |
+
+--- Page 65 ---
+
+MME 412 - Electrochemistry and Corrosion
+What are Secondary Reference Electrodes
+
+Primary Reference electrode
+❑ Standard hydrogen electrode is known as the primary reference electrode
+
+❑ However, it is cumbersome and cannot be used in the laboratory for electrode potential measurement thus secondary reference electrodes have been developed
+
+Secondary Reference electrode
+❑ The electrode potentials of these secondary reference electrode have been measured with respect to the SHE
+
+• Saturated Calomel Reference Electrode (SCE)
+• Silver-silver chloride Reference Electrode (Ag/AgCl)
+• Mercury –Mercurous Reference Electrode (Hg/HgSO4)
+• Copper-Copper sulphate Reference electrode (Cu/CuSO4)
+
+65
+
+|  | MME 412 - Electrochemistry and Corrosion |
+| --- | --- |
+| MME What are Secondary Reference Electrodes | MME |
+
+--- Page 66 ---
+
+MME 412 - Electrochemistry and Corrosion
+Reference Electrodes
+
+Name | Half cell reaction | Potential (V vs SHE)
+Standard hydrogen Electrode (Primary reference electrode) | 2H+ + 2e- = H2 | 0.000
+Saturated Calomel | Hg2Cl2 + 2e- = 2Hg + 2Cl- | 0.241
+Silver/silver chloride | AgCl + e- = Ag + Cl- | +0.222
+Copper-copper sulphate | CuSO4 + 2e- = Cu + SO4 2- | 0.318
+Mercury –Mercurous Sulphate (for field application) | HgSO4 + 2e- = Hg + SO4 2- | 0.615
+
+66
+
+| Name | Half cell reaction | Potential (V vs SHE) |
+| --- | --- | --- |
+| Standard hydrogen Electrode (Primary reference electrode) | 2H+ +2e - = H 2 | 0 .000 |
+| Saturated Calomel | Hg Cl +2e = 2Hg +2Cl- 2 2 | 0.241 |
+| Silver/silver chloride | AgCl + e- = Ag + Cl | +0.222 |
+| Copper-copper sulphate | CuSO + 2e- = Cu + SO 2- 4 4 | 0.318 |
+| Mercury –Mercurous Sulphate (for field application) | HgSO + 2e- = Hg + SO 2- 4 4 | 0.615 |
+
+--- Page 67 ---
+
+Saturated Calomel electrode
+
+❑ SCE is the most popular secondary electrode for common laboratory use.
+❑ It consists of mercurous chloride HgCl2 mixed in a mercury paste on a pool of liquid mercury in contact with a saturated KCl.
+❑ Electrical contact is made via an inert platinum wire immersed in mercury
+❑ SCE should be stored in just slightly less than saturated KCl solution.
+❑ SCE is affected by temperature and is not recommended for measurements above 50 oC
+
+MME 412 - Electrochemistry and Corrosion                                67
+
+--- Page 68 ---
+
+MME 412 - Electrochemistry and Corrosion                                68
+
+--- Page 69 ---
+
+Silver- silver chloride Electrode
+
+❑ Ag/AgCl electrode is prepared by electrolytically oxidising a silver wire or an electroplated silver coating on platinum wire in HCl.
+❑ Ag/AgCl can be used for measurements up to 70 oC
+
+MME 412 - Electrochemistry and Corrosion                                69
+
+|  | Silver- silver chloride Electrode |  |  |
+| --- | --- | --- | --- |
+| Silver- silver chlo | Silver- silver chlo |  |  |
+|  |  |  |  |
+|  |  |  |  |
+
+--- Page 70 ---
+
+MME 412 - Electrochemistry and Corrosion                                70
+
+--- Page 71 ---
+
+MME 412 - Electrochemistry and Corrosion
+
+Copper – saturated copper sulphate electrode
+
+❑ Commonly used in field measurements to measure potentials on underground structures and structures exposed to fresh water
+❑ Consist of a copper rod immersed in a saturated CuSO4 solution with electrolytic contact to the cell through a porous wooden plug
+
+Commercial copper/copper sulphate reference electrode.                                71
+
+| Commercial copper/copper sulp |  |  |  |
+| --- | --- | --- | --- |
+|  |  |  | 71 |
+|  | Commercial copper/copper sulp | hate reference electrode. |  |
+
+--- Page 72 ---
+
+Mercury - Mercurous sulphate electrode
+
+❑ A chemical analogy of the calomel electrode
+
+❑ Hg/HgSO4 electrode find use when possible contamination by chloride is undesirable
+
+72
+MME 412 - Electrochemistry and Corrosion
+
+--- Page 73 ---
+
+Reference Electrode conversion
+
+❑ Electrode potentials can be reported in the scale of the particular secondary reference used for measurement e.g. 2.34V vs SCE or 4.5 V Vs Ag/AgCl.
+
+❑ There are different methods
+
+❑ In the next slide, a simple conversion process is explained adapted from https://curtin-corrosion-centre.com/knowledge/resources/conversion-of-reference-electrode-potentials
+
+MME 412 - Electrochemistry and Corrosion 73
+
+--- Page 74 ---
+
+MME 412 - Electrochemistry and Corrosion
+
+-0.84 + 0.2415
+
+SSC – silver/ silver chloride
+MMS – Mercury /mercury sulphate
+CCS – copper/copper sulphate
+SHE – standard hydrogen electrode
+
+74
+
+--- Page 75 ---
+
+MME 412 - Electrochemistry and Corrosion                            75
+
+--- Page 76 ---
+
+Next Class
+
+Kinetics of corrosion
+
+MME 412 - Electrochemistry and Corrosion 76
+
+--- Page 77 ---
+
+MME 412 - Electrochemistry and Corrosion 77

@@ -277,7 +277,7 @@ def split_weeks_by_topic(slide_id):
     return f"{slide.course_code}: {count} non-empty topic chunks saved"
 
 
-def run_topic_split(slide_id):
+def run_topic_split(slide_id, full=False):
     _fresh_db()
     from .models import SlideDocument
     from .slide_topic_extractor import (
@@ -288,14 +288,26 @@ def run_topic_split(slide_id):
     if not slide.extracted_topics or not slide.extracted_text.strip():
         raise RuntimeError("No extracted topics or text saved for this slide.")
 
-    _success, count = split_slide_by_extracted_topics(slide)
-    empty = list(slide.topic_chunks.filter(is_empty=True).values_list("topic_name", flat=True))
-    if empty:
-        _fresh_db()
-        retry_missing_topic_splits(slide, topic_names=empty)
-        still_empty = list(
+    done = set(
+        slide.topic_chunks.filter(is_empty=False).values_list("topic_name", flat=True)
+    )
+    todo = [t for t in slide.extracted_topics if t not in done]
+
+    if full or not done:
+        _success, count = split_slide_by_extracted_topics(slide)
+        todo = list(
             slide.topic_chunks.filter(is_empty=True).values_list("topic_name", flat=True)
         )
+    else:
+        count = len(done)
+
+    if todo:
+        _fresh_db()
+        retry_missing_topic_splits(slide, topic_names=todo)
+        still_empty = [
+            t for t in todo
+            if not slide.topic_chunks.filter(topic_name=t, is_empty=False).exists()
+        ]
         if still_empty:
             raise RuntimeError(
                 f"{slide.course_code}: {count} topics saved, but {len(still_empty)} still "

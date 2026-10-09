@@ -324,14 +324,6 @@
     #dashboardRoot .hero-stat-val{ font-size:1.05rem; }
     #dashboardRoot .hero-stat-lbl{ font-size:.7rem; white-space:nowrap; overflow:visible; }
   }
-    #dashboardRoot .test-alert{
-    display:flex;gap:12px;align-items:flex-start;
-    border-radius:var(--radius-md);padding:16px 18px;margin-bottom:14px;
-    border:1px solid rgba(235,174,69,.35);background:var(--amber-soft);
-  }
-  #dashboardRoot .test-alert strong{color:var(--heading);}
-  #dashboardRoot .test-alert p{margin:4px 0 0;font-size:.86rem;color:var(--ink-soft);}
-  #dashboardRoot .test-alert .ta-emoji{font-size:1.2rem;line-height:1.3;}
   #dashboardRoot .test-due-card::before{background:linear-gradient(180deg,var(--coral),var(--amber));}
 </style>
 
@@ -410,16 +402,6 @@
         {% else %}
         <span class="badge badge-amber">Being prepared</span>
         {% endif %}
-      </div>
-    </div>
-    {% endfor %}
-
-    {% for h in test_heads_up %}
-    <div class="test-alert">
-      <span class="ta-emoji">📋</span>
-      <div>
-        <strong>{{ h.entry.course_code }}: test at week {{ h.test_week }}</strong>
-        <p>You're on week {{ h.entry.week_number }}. After week {{ h.covers_to }} you'll take a compulsory test covering weeks 1–{{ h.covers_to }}. You can't move on to week {{ h.next_week }} until you've taken it.</p>
       </div>
     </div>
     {% endfor %}

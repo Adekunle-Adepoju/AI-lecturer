@@ -397,7 +397,7 @@ def dashboard_view(request):
             and not _at_test_week(profile, e)
     ]
     other_courses = [e for e in entries if e not in todays_courses and not e.is_completed]
-    pending_tests, test_heads_up = _test_context(profile, entries)
+    pending_tests, _ = _test_context(profile, entries)
     is_rest_day = not scheduled_today
 
     week_by_code = {t.course_code: t.week_number for t in timetable}
@@ -426,7 +426,6 @@ def dashboard_view(request):
         "is_rest_day": is_rest_day,
         "other_courses": other_courses,
         "pending_tests": pending_tests,
-        "test_heads_up": test_heads_up,
     })
 
 
@@ -557,6 +556,18 @@ def _test_context(profile, entries):
                 "test_week": tw, "covers_to": tw - 1, "next_week": tw + 1,
             })
     return pending, heads_up
+
+def _course_test_heads_up(profile, entry):
+    """Heads-up for ONE course, shown on its session page.
+    None unless the test is 1-3 weeks away."""
+    if entry.is_completed:
+        return None
+    level = _course_level(entry.course_code, profile)
+    tw = _test_week_for(entry.course_code, level)
+    if tw is None or not (1 <= tw - entry.week_number <= HEADS_UP_WINDOW):
+        return None
+    return {"test_week": tw, "covers_to": tw - 1, "next_week": tw + 1}
+
 
 TOTAL_TEACHING_WEEKS = 15  # fixed course length in teaching rounds
 
@@ -1127,6 +1138,7 @@ def session_view(request, course_code):
             "chat_mode": False,
             "upcoming_topics": topics,
             "overview": _course_overview(profile, course_code, topics),
+            "test_heads_up": _course_test_heads_up(profile, entry),   # ← add this
         })
 
     action = request.POST.get("action")

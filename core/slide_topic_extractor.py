@@ -217,24 +217,31 @@ def _call_gemini_with_retry(client, model, contents, config, course_code, chunk_
     return None
 
 def _get_or_create_extraction_chunks(slide):
-    """Ensure SlideExtractionChunk rows exist for this slide's macro-chunks.
-    Only creates them once — on later calls (retries), returns the existing
-    rows unchanged, so chunk boundaries and prior progress are preserved."""
-    existing = list(slide.extraction_chunks.all())
-    if existing:
-        return existing
+    """Rows are built once per deck. If a later deck was appended after the rows
+    were built, rows are added for that deck only; finished rows are never touched."""
+    existing = list(slide.extraction_chunks.order_by("chunk_index"))
+    text = slide.extracted_text or ""
 
-    chunks_text = _macro_chunk_text(slide.extracted_text)
-    created = []
-    for idx, chunk_text in enumerate(chunks_text):
-        obj = SlideExtractionChunk.objects.create(
-            slide=slide,
-            chunk_index=idx,
-            chunk_text=chunk_text,
-            status="PENDING",
-        )
-        created.append(obj)
-    return created
+    if not existing:
+        created = []
+        for idx, chunk_text in enumerate(_macro_chunk_text(text)):
+            created.append(SlideExtractionChunk.objects.create(
+                slide=slide, chunk_index=idx, chunk_text=chunk_text, status="PENDING",
+            ))
+        return created
+
+    decks = [d for d in CONTINUATION_RE.split(text) if d.strip()]
+    next_index = max(c.chunk_index for c in existing) + 1
+    for deck in decks[1:]:
+        head = deck.strip()[:300]
+        if any(head in c.chunk_text for c in existing):
+            continue
+        for chunk_text in _macro_chunk_text(deck):
+            existing.append(SlideExtractionChunk.objects.create(
+                slide=slide, chunk_index=next_index, chunk_text=chunk_text, status="PENDING",
+            ))
+            next_index += 1
+    return existing
 
 
 def extract_topics_for_slide_resumable(slide):

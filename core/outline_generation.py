@@ -10,7 +10,7 @@ import time
 
 from django.db import close_old_connections
 
-from .prompt import OUTLINE_LECTURE_PROMPT, OUTLINE_SCOPE_VERIFIER_PROMPT
+from .language_profile import lecture_system_prompt, scope_verifier_prompt
 
 SOURCE_SLIDES = "slides"
 SOURCE_OUTLINE = "outline"
@@ -149,13 +149,13 @@ def _trim_to_clean_end(text):
     return text
 
 
-def _generate_lecture(message, label):
+def _generate_lecture(message, label, course_code=None):
     """Returns (text, still_truncated, continuation_passes_used)."""
     from .views import _call_generation_model
 
     def call(contents, tag):
         return _call_generation_model(
-            contents=contents, system_instruction=OUTLINE_LECTURE_PROMPT,
+            contents=contents, system_instruction=lecture_system_prompt(course_code),
             max_output_tokens=16000, temperature=0.3, label=f"{label}{tag}",
         )
 
@@ -196,7 +196,7 @@ def _scope_report(course, section, topic, others, lecture):
     from .views import _call_generation_model
 
     prompt = (
-        OUTLINE_SCOPE_VERIFIER_PROMPT
+        scope_verifier_prompt(course.course_code)
         .replace("__LEVEL__", f"{course.get_level_display()} {course.get_department_display()}")
         .replace("__TOPIC__", topic)
         .replace("__OTHER_TOPICS__", "\n".join(f"- {t}" for t in others) or "- (none)")
@@ -242,6 +242,7 @@ def _scope_check_and_fix(course, topic, section, others, opening, text):
     text2, hit2, _ = _generate_lecture(
         _build_message(course, topic, section, others, opening, fix_notes="\n".join(issues)),
         f"Outline lecture (rewrite) — {topic}",
+        course.course_code,
     )
     if hit2 or not text2.strip():
         return text, ["scope checker flagged: " + " ".join(issues[:5])]
@@ -275,6 +276,7 @@ def pregenerate_outline_lesson(course, week_number, topic, topic_index, total_to
     text, hit, extra_passes = _generate_lecture(
         _build_message(course, topic, section, others, opening),
         f"Outline lecture — {topic}",
+        course.course_code,
     )
     if not text.strip():
         raise RuntimeError(f"{topic}: AI returned an empty response.")
