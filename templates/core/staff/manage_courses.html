@@ -139,14 +139,18 @@
   </p>
   <form method="POST" class="add-form">
     {% csrf_token %}
-    <div class="field-grid">
-      {% for field in form %}
-      <div class="{% if field.field.widget.input_type == 'checkbox' %}field-full{% endif %}">
-        <label class="field-label">{{ field.label }}</label>
-        {{ field }}
+      {% if form.non_field_errors %}
+      <div class="message" style="margin-bottom:14px;background:rgba(217,106,69,.1);border-color:rgba(217,106,69,.3);color:var(--coral);">{{ form.non_field_errors.0 }}</div>
+      {% endif %}
+      <div class="field-grid">
+        {% for field in form %}
+        <div class="{% if field.field.widget.input_type == 'checkbox' %}field-full{% endif %}">
+          <label class="field-label">{{ field.label }}</label>
+          {{ field }}
+          {% for error in field.errors %}<div style="color:var(--coral);font-size:.76rem;margin-top:5px;">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
       </div>
-      {% endfor %}
-    </div>
     <button type="submit" class="btn btn-primary" style="margin-top:16px;">Add course →</button>
   </form>
 
@@ -180,7 +184,7 @@
         </summary>
         <div class="course-grid">
           {% for course in group.list %}
-          <div class="course-card" id="course-row-{{ course.id }}" data-search="{{ course.course_code|lower }} {{ course.course_title|lower }}">
+          <div class="course-card" id="course-row-{{ course.id }}" data-search="{{ course.course_code|lower }} {{ course.course_title|lower }} {{ course.get_department_display|lower }}">
             <div class="cc-top">
               <input type="checkbox" name="course_ids" value="{{ course.id }}">
               <div>
@@ -188,13 +192,13 @@
                   {{ course.course_code }} — {{ course.course_title }}
                   {% if course.is_elective %}<span class="badge badge-amber">Elective</span>{% else %}<span class="badge badge-green">Compulsory</span>{% endif %}
                 </div>
-                <div class="cc-meta">Level {{ course.level }} · Semester {{ course.semester }} · {{ course.units }} units</div>
+                <div class="cc-meta">{{ course.get_department_display }} · Level {{ course.level }} · Semester {{ course.semester }} · {{ course.units }} units</div>
               </div>
             </div>
             <div class="cc-actions">
               <a href="{% url 'staff_edit_course' course.id %}" class="btn">Edit</a>
-              <button type="button" class="btn btn-warn" onclick="resetCourseProgress('{{ course.id }}', '{{ course.course_code }}')">↺ Reset progress</button>
-              <button type="button" class="btn btn-danger" onclick="deleteSingle('{{ course.id }}', '{{ course.course_code }}')">Delete</button>
+              <button type="button" class="btn btn-warn" onclick="resetCourseProgress('{{ course.id }}', '{{ course.course_code }} ({{ course.get_department_display|escapejs }})')">↺ Reset progress</button>
+              <button type="button" class="btn btn-danger" onclick="deleteSingle('{{ course.id }}', '{{ course.course_code }} ({{ course.get_department_display|escapejs }})')">Delete</button>
             </div>
           </div>
           {% endfor %}

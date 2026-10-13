@@ -31,6 +31,7 @@ from .simulator_draw import draw_test, NotEnoughQuestions, TEST_MODES
 from .simulator_bank import get_topic_availability, process_topic
 from .simulator_bank_prompts import SIMULATOR_STRICT_GRADING_PROMPT
 from django_q.models import Task, OrmQ
+from .departments import siwes_applies
 
 
 from .forms import SignupForm, OnboardingForm, ProfileEditForm, ElectiveSelectionForm
@@ -361,7 +362,7 @@ def dashboard_view(request):
     profile = request.user.profile
 
         # Redirect to SIWES if 400L Sem 2
-    if profile.level == "400" and profile.semester == "2":
+    if siwes_applies(profile.department, profile.level, profile.semester):
         return redirect("siwes")
 
     timetable = profile.timetable.all()
@@ -371,7 +372,8 @@ def dashboard_view(request):
     course_defs = {
         c.course_code: c
         for c in CourseDefinition.objects.filter(
-            course_code__in=timetable.values_list("course_code", flat=True)
+            department=profile.department,
+            course_code__in=timetable.values_list("course_code", flat=True),
         )
     }
     courses = [
@@ -384,7 +386,8 @@ def dashboard_view(request):
         for t in timetable
     ]
     recent_sessions = profile.sessions.all()[:5]
-    leaderboard = StudentProfile.objects.select_related("user").order_by("-xp")[:10]
+    leaderboard = (StudentProfile.objects.select_related("user")
+               .filter(department=profile.department).order_by("-xp")[:10])
     sessions_done = profile.sessions.count()
 
     today = _today_lagos()
@@ -1326,7 +1329,9 @@ def _render_chat_session(request, entry, profile, session, off_week=False):
     # ── Check for pre-generated content ──────────────────────────────────────
     lesson = (
         PreGeneratedLesson.objects
-        .filter(course__course_code=session.course_code, topic_title=topic_name, is_published=True)
+        .filter(course__course_code=session.course_code,
+                course__department=profile.department,
+                topic_title=topic_name, is_published=True)
         .order_by("-updated_at")
         .first()
     )
@@ -1521,6 +1526,7 @@ def _attach_quiz(topic_session):
         return True
     lesson = PreGeneratedLesson.objects.filter(
         course__course_code=topic_session.session.course_code,
+        course__department=topic_session.session.student.department,
         week_number=topic_session.session.week_number,
         topic_title=topic_session.topic_name,
         is_published=True,
@@ -1668,9 +1674,14 @@ def next_topic_view(request):
 
 @login_required
 def leaderboard_view(request):
-    top_students = StudentProfile.objects.select_related("user").order_by("-xp")[:20]
-    my_level = request.user.profile.level if hasattr(request.user, "profile") else None
-    return render(request, "core/leaderboard.html", {"top_students": top_students, "my_level": my_level})
+    profile = getattr(request.user, "profile", None)
+    students = StudentProfile.objects.select_related("user")
+    if profile:
+        students = students.filter(department=profile.department)
+    return render(request, "core/leaderboard.html", {
+        "top_students": students.order_by("-xp")[:20],
+        "my_level": profile.level if profile else None,
+    })
 
 
 # ─── Timetable ─────────────────────────────────────────────────────────────────
@@ -1730,6 +1741,7 @@ def profile_edit_view(request):
     profile = request.user.profile
     old_level = profile.level
     old_semester = profile.semester
+    old_department = profile.department
 
     if request.method == "POST":
         form = ProfileEditForm(request.POST, instance=profile, user=request.user)
@@ -1737,10 +1749,12 @@ def profile_edit_view(request):
             updated_profile = form.save(commit=False)
             level_changed = updated_profile.level != old_level
             semester_changed = updated_profile.semester != old_semester
+            department_changed = updated_profile.department != old_department
             updated_profile.save()
 
-            if level_changed or semester_changed:
-                # Clear old timetable and sessions, keep XP and streak
+            if level_changed or semester_changed or department_changed:
+                if department_changed:
+                    profile.elective_courses.clear()
                 TimetableEntry.objects.filter(student=profile).delete()
                 Session.objects.filter(student=profile).delete()
                 _generate_timetable(profile)
@@ -1748,8 +1762,7 @@ def profile_edit_view(request):
             else:
                 messages.success(request, "Profile updated successfully.")
 
-            # Redirect to SIWES if 400L Sem 2
-            if profile.level == "400" and profile.semester == "2":
+            if siwes_applies(profile.department, profile.level, profile.semester):
                 return redirect("siwes")
             return redirect("dashboard")
     else:
@@ -1791,12 +1804,11 @@ def account_settings_view(request):
 
 # ─── Review ────────────────────────────────────────────────────────────────────
 
-def _lesson_pages(course_code, topic_name):
-    """The published lesson for a topic, cut into the same ~1800-char pages
-    the live chat uses. Empty list if no lesson is published."""
+def _lesson_pages(course_code, topic_name, department):
     lesson = (
         PreGeneratedLesson.objects
-        .filter(course__course_code=course_code, topic_title=topic_name, is_published=True)
+        .filter(course__course_code=course_code, course__department=department,
+                topic_title=topic_name, is_published=True)
         .order_by("-updated_at")
         .first()
     )
@@ -1828,7 +1840,7 @@ def _topic_read_context(profile, course_code, topic_name, entry):
         total_parts = len(ts.chunks or []) or sum(1 for m in messages_out if m["is_pregenerated"])
     else:
         text = (ts.lecture_content if ts else "") or ""
-        pages = _split_into_pages(text, target_chars=1800) if text.strip() else _lesson_pages(course_code, topic_name)
+        pages = _split_into_pages(text, target_chars=1800) if text.strip() else _lesson_pages(course_code, topic_name, profile.department)
         messages_out = [{"role": "ai", "content": p, "is_pregenerated": True, "image_url": ""} for p in pages]
         total_parts = len(pages)
 
@@ -2101,7 +2113,7 @@ def siwes_view(request):
     if not hasattr(request.user, "profile"):
         return redirect("onboarding")
     profile = request.user.profile
-    if not (profile.level == "400" and profile.semester == "2"):
+    if not siwes_applies(profile.department, profile.level, profile.semester):
         return redirect("dashboard")
     return render(request, "core/siwes.html", {"profile": profile})
 
@@ -2799,6 +2811,7 @@ def _refresh_lesson_for_students(lesson):
     quiz result, but their review text is updated to the new lecture."""
     base = TopicSession.objects.filter(
         session__course_code=lesson.course.course_code,
+        session__student__department=lesson.course.department,
         session__week_number=lesson.week_number,
         topic_name=lesson.topic_title,
     )
@@ -3009,9 +3022,10 @@ def _call_simulator_model(prompt, max_output_tokens=4000, max_retries=3, tempera
     raise RuntimeError(f"Simulator question generation failed after {max_retries} attempts: {last_error}")
 
 def _course_level(course_code, profile):
-    """A carry-over student's course can belong to an earlier level than
-    their own, and the bank/slides are keyed by the course's level."""
-    course = CourseDefinition.objects.filter(course_code=course_code).first()
+    course = (
+        CourseDefinition.objects.filter(course_code=course_code, department=profile.department).first()
+        or CourseDefinition.objects.filter(course_code=course_code).first()
+    )
     return course.level if course else profile.level
 
 @login_required
@@ -3266,9 +3280,9 @@ def staff_sim_bank_view(request):
 
     course_code = request.GET.get("course_code", "")
     status = request.GET.get("status", "pending_review")
-    course_choices = list(
+    course_choices = list(dict.fromkeys(
         CourseDefinition.objects.order_by("level", "course_code").values_list("course_code", flat=True)
-    )
+    ))
 
     topic_rows, questions = [], []
     if course_code:
@@ -3530,10 +3544,12 @@ def staff_reset_course_view(request, course_id):
     course = get_object_or_404(CourseDefinition, id=course_id)
 
     lessons_deleted, _ = PreGeneratedLesson.objects.filter(course=course).delete()
-    sessions_deleted, _ = Session.objects.filter(course_code=course.course_code).delete()
-    entries_updated = TimetableEntry.objects.filter(course_code=course.course_code).update(
-        week_number=1, is_completed=False
-    )
+    sessions_deleted, _ = Session.objects.filter(
+        course_code=course.course_code, student__department=course.department,
+    ).delete()
+    entries_updated = TimetableEntry.objects.filter(
+        course_code=course.course_code, student__department=course.department,
+    ).update(week_number=1, is_completed=False)
 
     messages.success(
         request,
@@ -3641,7 +3657,8 @@ def progress_view(request):
     course_defs = {
         c.course_code: c
         for c in CourseDefinition.objects.filter(
-            course_code__in=timetable.values_list("course_code", flat=True)
+            department=profile.department,
+            course_code__in=timetable.values_list("course_code", flat=True),
         )
     }
     courses = [

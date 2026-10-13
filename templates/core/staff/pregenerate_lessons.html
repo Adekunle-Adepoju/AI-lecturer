@@ -128,7 +128,7 @@
         <select name="course_id" required>
           <option value="">— Select a course —</option>
           {% for course in courses %}
-          <option value="{{ course.id }}">{{ course.course_code }} — {{ course.course_title }} (Level {{ course.level }})</option>
+          <option value="{{ course.id }}">{{ course.course_code }} — {{ course.course_title }} (Level {{ course.level }}) · {{ course.get_department_display }}</option>
           {% endfor %}
         </select>
       </div>
@@ -157,7 +157,7 @@
         <option value="">— Filter by course —</option>
         {% for course in courses %}
         <option value="{{ course.id }}" {% if filter_course_id == course.id|stringformat:"s" %}selected{% endif %}>
-          {{ course.course_code }} — {{ course.course_title }}
+          {{ course.course_code }} — {{ course.course_title }} · {{ course.get_department_display }}
         </option>
         {% endfor %}
       </select>
@@ -208,10 +208,10 @@
   <div class="lesson-list" id="lessonList">
     {% for lesson in lessons %}
     <div class="lesson-card {% if lesson.is_published %}is-published{% else %}is-draft{% endif %}"
-         data-search="{{ lesson.course.course_code|lower }} {{ lesson.topic_title|lower }}">
+         data-search="{{ lesson.course.course_code|lower }} {{ lesson.topic_title|lower }} {{ lesson.course.get_department_display|lower }}">
       <div>
         <div class="lesson-title">{{ lesson.course.course_code }} — Week {{ lesson.week_number }} — {{ lesson.topic_title }}</div>
-        <div class="lesson-meta">Generated {{ lesson.generated_at|date:"d M Y H:i" }} · {{ lesson.content_chunk|length }} characters</div>
+        <div class="lesson-meta">{{ lesson.course.get_department_display }} · Generated {{ lesson.generated_at|date:"d M Y H:i" }} · {{ lesson.content_chunk|length }} characters</div>
       </div>
       <div class="lesson-actions">
         {% if lesson.is_published %}

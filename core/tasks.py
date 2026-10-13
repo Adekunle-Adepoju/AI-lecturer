@@ -245,9 +245,13 @@ def retry_topic_extraction(slide_id):
 def retry_cleanup(slide_id):
     _fresh_db()
     from .models import SlideDocument
-    from .slide_topic_extractor import _cleanup_mangled_text_with_ai
+    from .slide_topic_extractor import (
+        _cleanup_mangled_text_with_ai, extract_topics_for_slide_resumable,
+        split_all_weeks_by_topic,
+    )
 
     slide = SlideDocument.objects.get(pk=slide_id)
+    was_unfinished = not slide.parsed
     reset_count = slide.cleanup_chunks.exclude(error_message="").update(
         status="PENDING", error_message="",
     )
@@ -256,6 +260,25 @@ def retry_cleanup(slide_id):
     )
     slide.extracted_text = cleaned
     slide.save(update_fields=["extracted_text"])
+
+    if was_unfinished:
+        # The original upload never reached its last steps, so finish them here.
+        _fresh_db()
+        slide.parsed = True
+        slide.save(update_fields=["parsed"])
+        try:
+            extract_topics_for_slide_resumable(slide)
+        except Exception as e:
+            print(f"[{slide.course_code}] topic extraction crashed: {e}")
+            slide.topics_incomplete = True
+            slide.save(update_fields=["topics_incomplete"])
+        _fresh_db()
+        try:
+            split_all_weeks_by_topic(slide)
+        except Exception as e:
+            print(f"[{slide.course_code}] topic split crashed: {e}")
+        slide.refresh_from_db()
+        return _slide_report(slide, "unfinished upload completed")
 
     still_failed = slide.cleanup_chunks.exclude(error_message="").count()
     msg = f"{slide.course_code}: cleanup reprocessed {reset_count} chunk(s)"
@@ -366,7 +389,9 @@ def generate_sim_topic(course_code, topic, force=False):
     from .models import CourseDefinition
     from .simulator_bank import process_topic
 
-    course = CourseDefinition.objects.get(course_code=course_code)
+    course = CourseDefinition.objects.filter(course_code=course_code).first()
+    if course is None:
+        raise RuntimeError(f"No course defined with code {course_code}.")
     logs = []
     outcome = process_topic(
         course.course_code, course.course_title, course.level, topic,

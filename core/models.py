@@ -2,28 +2,29 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.conf import settings       
+from .departments import DEPARTMENT_CHOICES, department_label
 
 LEVEL_CHOICES = [("100", "100 Level"), ("200", "200 Level"), ("300", "300 Level"), ("400", "400 Level"), ("500", "500 Level")]
 SEMESTER_CHOICES = [("1", "First Semester"), ("2", "Second Semester")]
 SCHOOL_CHOICES = [("unilag", "University of Lagos")]
-DEPARTMENT_CHOICES = [("petroleum", "Petroleum & Gas Engineering")]
 class CourseDefinition(models.Model):
     """Admin-defined course catalogue — compulsory or elective"""
-    course_code = models.CharField(max_length=10, unique=True)
+    course_code = models.CharField(max_length=10)
     course_title = models.CharField(max_length=100)
     level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
     semester = models.CharField(max_length=1, choices=SEMESTER_CHOICES)
     school = models.CharField(max_length=50, choices=SCHOOL_CHOICES, default="unilag")
-    department = models.CharField(max_length=50, choices=DEPARTMENT_CHOICES, default="petroleum")
+    department = models.CharField(max_length=50, choices=DEPARTMENT_CHOICES)
     units = models.IntegerField(default=3)
     is_elective = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["level", "semester", "is_elective", "course_code"]
+        unique_together = [("course_code", "department")]
 
     def __str__(self):
         tag = "Elective" if self.is_elective else "Compulsory"
-        return f"{self.course_code} — {self.course_title} ({tag})"
+        return f"{self.course_code} — {self.course_title} ({tag}) [{department_label(self.department)}]"
 
 class PreGeneratedLesson(models.Model):
     SOURCE_CHOICES = [("slides", "Lecturer slides"), ("outline", "Course outline only")]
@@ -54,7 +55,7 @@ class StudentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     matric_number = models.CharField(max_length=20, blank=True)
     school = models.CharField(max_length=50, choices=SCHOOL_CHOICES, default="unilag")
-    department = models.CharField(max_length=50, choices=DEPARTMENT_CHOICES, default="petroleum")
+    department = models.CharField(max_length=50, choices=DEPARTMENT_CHOICES)
     level = models.CharField(max_length=3, choices=LEVEL_CHOICES)
     semester = models.CharField(max_length=1, choices=SEMESTER_CHOICES)
     is_staff_member = models.BooleanField(default=False)

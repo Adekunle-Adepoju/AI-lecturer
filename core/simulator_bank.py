@@ -50,29 +50,48 @@ def _cap_source(text):
     return text[:cut] if cut > 0 else text[:MAX_SOURCE_CHARS]
 
 
+def _is_shared_course(course_code):
+    return CourseDefinition.objects.filter(course_code=course_code).values("department").distinct().count() > 1
+
+
 def resolve_topic_source(course_code, level, topic_name):
-    """Returns (source_type, text). source_type is '' when there is nothing."""
-    lesson = (
-        PreGeneratedLesson.objects
-        .filter(course__course_code=course_code, topic_title=topic_name,
-                is_published=True, is_truncated=False)
-        .exclude(content_chunk="")
-        .order_by("-updated_at")
-        .first()
-    )
-    if lesson and lesson.content_chunk.strip():
-        return "lecture", _cap_source(lesson.content_chunk)
+    """Returns (source_type, text). A course taught to several departments uses
+    the slide chunk first, because each department has its own lecture wording.
+    Only without a slide chunk does it fall back to one fixed lecture
+    (the earliest course row), never "whichever was edited last"."""
+    shared = _is_shared_course(course_code)
 
-    chunk = (
-        SlideTopicChunk.objects
-        .filter(slide__course_code=course_code, slide__level=level, slide__parsed=True,
-                topic_name=topic_name, is_empty=False)
-        .order_by("-updated_at")
-        .first()
-    )
-    if chunk and chunk.chunk_text.strip():
-        return "slide", _cap_source(chunk.chunk_text)
+    def from_lecture():
+        ordering = ("course_id", "-updated_at") if shared else ("-updated_at",)
+        lesson = (
+            PreGeneratedLesson.objects
+            .filter(course__course_code=course_code, topic_title=topic_name,
+                    is_published=True, is_truncated=False)
+            .exclude(content_chunk="")
+            .order_by(*ordering)
+            .first()
+        )
+        if lesson and lesson.content_chunk.strip():
+            return "lecture", _cap_source(lesson.content_chunk)
+        return None
 
+    def from_slide():
+        chunk = (
+            SlideTopicChunk.objects
+            .filter(slide__course_code=course_code, slide__level=level, slide__parsed=True,
+                    topic_name=topic_name, is_empty=False)
+            .order_by("-updated_at")
+            .first()
+        )
+        if chunk and chunk.chunk_text.strip():
+            return "slide", _cap_source(chunk.chunk_text)
+        return None
+
+    order = (from_slide, from_lecture) if shared else (from_lecture, from_slide)
+    for getter in order:
+        found = getter()
+        if found:
+            return found
     return "", ""
 
 
