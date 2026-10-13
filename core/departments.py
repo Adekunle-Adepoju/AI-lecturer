@@ -16,7 +16,7 @@ DEPARTMENTS = {
     "cbg": {
         "label": "Cell Biology & Genetics",
         "faculty": "Science",
-        "open": False,            # flip to True once its courses and lessons are ready
+        "open": True,
         "siwes": None,            # not confirmed yet
     },
 }
