@@ -58,6 +58,35 @@
   .stat span{font-size:11px;letter-spacing:.18em;color:#7f93a8;text-transform:uppercase}
   .stat.tier b{color:#f5a623}
 
+  /* Live rooms checkbox, How to play button, hub panels, modal */
+  .pub{display:flex;gap:8px;align-items:center;font-size:14px;color:#9fb3c8;margin-bottom:12px}
+  .howto-btn{margin-top:14px;background:none;border:1px solid rgba(255,255,255,.2);color:#cfe0f2;
+    font-family:inherit;font-size:14px;letter-spacing:.12em;text-transform:uppercase;padding:6px 16px;cursor:pointer;border-radius:999px}
+  .howto-btn:hover{border-color:#f5a623;color:#f5a623}
+  .hub{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;max-width:760px;margin:22px auto 0}
+  .panel{background:rgba(9,19,31,.85);border:1px solid rgba(255,255,255,.09);padding:16px}
+  .panel.wide{grid-column:1/-1}
+  .panel h3{margin:0 0 10px;font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:#9fb3c8}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid rgba(255,255,255,.06)}
+  .row-main{min-width:0}.row-main small{color:#7f93a8;font-size:12px}
+  .vs{font-size:15px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vs i{color:#7f93a8;font-style:normal;margin:0 4px}.ta{color:#00c2ff}.tb{color:#ff6a5f}
+  .mini{border:0;cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;letter-spacing:.08em;
+    text-transform:uppercase;padding:7px 14px;color:#04121d;background:#27c8ff}
+  .mini.amber{background:#f5a623;color:#0b1727}
+  .empty{color:#6c8097;font-size:14px;margin:6px 0 0}
+  .res{font-weight:700;font-size:12px;letter-spacing:.1em;padding:3px 8px;text-transform:uppercase}
+  .res.win{background:rgba(74,222,128,.15);color:#4ade80}
+  .res.loss{background:rgba(255,59,48,.15);color:#ff6a5f}
+  .res.draw{background:rgba(255,255,255,.1);color:#cfd8e3}
+  dialog#howto{max-width:560px;width:calc(100% - 32px);max-height:85vh;padding:0;border:1px solid rgba(245,166,35,.4);
+    background:#0b1727;color:#e8eef6;font-family:'Rajdhani',sans-serif}
+  dialog#howto::backdrop{background:rgba(0,0,0,.7)}
+  .howto-in{padding:22px 24px}
+  .howto-in h4{margin:18px 0 6px;font-size:18px;letter-spacing:.1em;text-transform:uppercase;color:#f5a623}
+  .howto-in ol,.howto-in ul{margin:0;padding-left:20px;font-size:16px;line-height:1.5;color:#cfd8e3}
+  .howto-x{float:right;background:none;border:0;color:#9fb3c8;font-size:26px;cursor:pointer}
+
   @media(max-width:640px){.doors{grid-template-columns:1fr}.arena-title{font-size:36px}}
   @media(prefers-reduced-motion:reduce){.ember,.emblem{animation:none}.ember{display:none}.door{transition:none}}
 </style>
@@ -87,6 +116,7 @@
       </svg>
       <h1 class="arena-title">Enter the Arena</h1>
       <div class="arena-tag">Who knows the course best?</div>
+      <button type="button" class="howto-btn" onclick="document.getElementById('howto').showModal()">? How to play</button>
     </div>
 
     <div class="doors">
@@ -95,6 +125,7 @@
         <p>Open a room, pick your squad and share the code.</p>
         <form method="POST">
           {% csrf_token %}
+          <label class="pub"><input type="checkbox" name="public"> Show in Live Rooms</label>
           <button type="submit" class="door-btn">Create Room →</button>
         </form>
       </div>
@@ -119,6 +150,71 @@
       <div class="stat"><b>{{ battle_stats.current_streak }}</b><span>Streak</span></div>
     </div>
     {% endif %}
+
+    <div class="hub">
+      <section class="panel">
+        <h3>Active battles</h3>
+        {% for r in active %}
+        <div class="row">
+          <div class="row-main">
+            <div class="vs"><span class="ta">{{ r.a|join:", "|default:"—" }}</span><i>vs</i><span class="tb">{{ r.b|join:", "|default:"—" }}</span></div>
+            <small>{{ r.mode|title }} · {{ r.spectators }} watching</small>
+          </div>
+          <form method="POST" action="{% url 'battle_join_room' %}">{% csrf_token %}
+            <input type="hidden" name="code" value="{{ r.code }}"><button class="mini">Spectate</button></form>
+        </div>
+        {% empty %}<p class="empty">No battles in progress.</p>{% endfor %}
+      </section>
+
+      <section class="panel">
+        <h3>Live rooms</h3>
+        {% for r in live %}
+        <div class="row">
+          <div class="row-main">
+            <div class="vs">{{ r.host }}'s room</div>
+            <small>{{ r.players }} player{{ r.players|pluralize }} waiting</small>
+          </div>
+          <form method="POST" action="{% url 'battle_join_room' %}">{% csrf_token %}
+            <input type="hidden" name="code" value="{{ r.code }}"><button class="mini amber">Join</button></form>
+        </div>
+        {% empty %}<p class="empty">No open rooms. Tick "Show in Live Rooms" when hosting.</p>{% endfor %}
+      </section>
+
+      <section class="panel wide">
+        <h3>Your history</h3>
+        {% for h in history %}
+        <div class="row">
+          <div class="row-main">
+            <div class="vs">vs {{ h.opponents|join:", "|default:"—" }}</div>
+            <small>{{ h.mode|title }} · {{ h.score }} · {{ h.when }}</small>
+          </div>
+          <span class="res {{ h.result }}">{{ h.result }}</span>
+        </div>
+        {% empty %}<p class="empty">No battles yet. Your first one will show up here.</p>{% endfor %}
+      </section>
+    </div>
   </div>
+
+  {# Kept outside .arena so `.arena>*{position:relative}` doesn't break the modal's fixed positioning #}
+  <dialog id="howto">
+    <div class="howto-in">
+      <button type="button" class="howto-x" onclick="this.closest('dialog').close()" aria-label="Close">×</button>
+      <h4 style="margin-top:0">The basics</h4>
+      <ul>
+        <li>The host creates a room and shares the code. Friends join with it.</li>
+        <li>Pick Alpha or Bravo in the lobby. Up to 5 players per team, plus spectators.</li>
+        <li>The host picks the mode and starts. Once it starts, nobody new can play. Late arrivals can only watch.</li>
+        <li>Questions come from your department, at levels below your own. In a mixed room, the lowest level decides.</li>
+        <li>If a whole team disconnects for 45 seconds, the other team wins.</li>
+        <li>Every player on the winning team earns a win. Winners get up to 200 XP (less after 2 wins today or rematching the same opponents). Everyone else gets 10.</li>
+      </ul>
+      <h4>Alternating mode</h4>
+      <ol>{% for r in rules_alt %}<li>{{ r }}</li>{% endfor %}</ol>
+      <h4>Buzzer mode</h4>
+      <ol>{% for r in rules_buzz %}<li>{{ r }}</li>{% endfor %}</ol>
+      <h4>Tiers</h4>
+      <ul>{% for needed, name in tier_list %}<li><b>{{ name }}</b> — {{ needed }} win{{ needed|pluralize }}</li>{% endfor %}</ul>
+    </div>
+  </dialog>
 </div>
 {% endblock %}

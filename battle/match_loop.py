@@ -79,8 +79,9 @@ class MatchLoop:
     consumer's channel layer so every connected participant (players and
     spectators) sees the same state."""
 
-    def _player_levels_sync(self, ids):
-        return list(StudentProfile.objects.filter(id__in=ids).values_list("level", flat=True))
+    def _player_info_sync(self, ids):
+        rows = list(StudentProfile.objects.filter(id__in=ids).values_list("level", "department"))
+        return [r[0] for r in rows], sorted({r[1] for r in rows if r[1]})
 
     async def _any_connected(self, student_ids):
         def _q():
@@ -129,12 +130,12 @@ class MatchLoop:
             QUESTIONS_PER_TEAM_MODE1 * 2 if mode == "alternating" else TOTAL_QUESTIONS_MODE2
         )
         all_ids = team_a_ids + team_b_ids
-        levels = levels_for_room(
-            await database_sync_to_async(self._player_levels_sync)(all_ids)
-        )
+        raw_levels, departments = await database_sync_to_async(self._player_info_sync)(all_ids)
+        levels = levels_for_room(raw_levels)
         questions = await database_sync_to_async(select_match_questions)(
-            all_ids, total_questions, levels=levels,
+            all_ids, total_questions, levels=levels, departments=departments,
         )
+
 
         if len(questions) < total_questions:
             await self._broadcast({
@@ -152,6 +153,7 @@ class MatchLoop:
         state = await self.state.initialize(mode, team_a_ids, team_b_ids, questions)
         state["phase"] = "intro"
         state["levels"] = list(levels)
+        state["departments"] = departments
         await self.state.save(state)
         await self._broadcast({
             "type": "match_intro", "mode": mode,
@@ -421,19 +423,17 @@ class MatchLoop:
     async def _start_sudden_death(self, state):
         used = [q["question_id"] for q in state["questions"]]
         extra = await database_sync_to_async(select_match_questions)(
-            state["team_a_players"] + state["team_b_players"], 1, exclude_ids=used,
+            state["team_a_players"] + state["team_b_players"], 1,
+            levels=tuple(state.get("levels", ("100",))),
+            departments=state.get("departments"), exclude_ids=used,
         )
         if not extra:
-            await self._finalize(state)  # can't break the tie — ties as-is
+            await self._finalize(state)
             return
         state["questions"].append(extra[0])
         await self.state.save(state)
         await self._broadcast({"type": "sudden_death"})
         await self._serve_question(state)
-        extra = await database_sync_to_async(select_match_questions)(
-            state["team_a_players"] + state["team_b_players"], 1,
-            levels=tuple(state.get("levels", ("100",))), exclude_ids=used,
-        )
 
     async def _finalize(self, state, forced_winner=None):
         if forced_winner:

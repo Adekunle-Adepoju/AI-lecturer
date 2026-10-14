@@ -195,6 +195,7 @@ class BattleRoom(models.Model):
     mode = models.CharField(max_length=15, choices=MODE_CHOICES, null=True, blank=True)
     status = models.CharField(max_length=15, choices=ROOM_STATUS_CHOICES, default="waiting")
     created_at = models.DateTimeField(auto_now_add=True)
+    is_public = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-created_at"]

@@ -5,6 +5,9 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 
 from .models import BattleRoom
+from .landing import landing_context
+from .models import BattleRoom, BattleStats
+from .tiers import tier_for
 
 
 def _generate_room_code():
@@ -15,15 +18,21 @@ def _generate_room_code():
 def create_room_view(request):
     if not hasattr(request.user, "profile"):
         return redirect("onboarding")
+    profile = request.user.profile
 
     if request.method == "POST":
         code = _generate_room_code()
         while BattleRoom.objects.filter(code=code).exists():
             code = _generate_room_code()
-        room = BattleRoom.objects.create(code=code, leader=request.user.profile)
+        room = BattleRoom.objects.create(
+            code=code, leader=profile, is_public=bool(request.POST.get("public")),
+        )
         return redirect("battle_room_lobby", room_code=room.code)
 
-    return render(request, "battle/create_room.html")
+    stats = BattleStats.objects.filter(student=profile).first()
+    ctx = landing_context(request)
+    ctx.update({"battle_stats": stats, "tier": tier_for(stats.wins) if stats else None})
+    return render(request, "battle/create_room.html", ctx)
 
 
 @login_required

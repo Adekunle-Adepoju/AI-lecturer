@@ -7,6 +7,7 @@ from channels.db import database_sync_to_async
 from core.models import StudentProfile
 from .models import BattleRoom, BattleParticipant
 from .match_loop import MatchLoop, FORFEIT_GRACE_SECONDS
+from .match_state import MatchState
 
 _background = set()
 
@@ -20,6 +21,16 @@ def _spawn(coro):
 logger = logging.getLogger(__name__)
 MAX_PLAYERS_PER_TEAM = 5
 MAX_SPECTATORS = 10
+HOST_GRACE_SECONDS = 20
+
+
+def _retire_room(room):
+    """Rooms with match history are kept as 'finished'; empty ones are deleted."""
+    if room.matches.exists():
+        room.status = "finished"
+        room.save(update_fields=["status"])
+    else:
+        room.delete()
 
 
 class BattleConsumer(AsyncJsonWebsocketConsumer):
@@ -71,15 +82,23 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
     async def disconnect(self, close_code):
         if not getattr(self, "joined", False):
             return
+        try:
+            room = await self._get_room()
+            if room is not None:
+                await self._mark_disconnected(room)
+                await self._broadcast_room_state(room)
 
-        room = await self._get_room()
-        if room is not None:
-            await self._mark_disconnected(room)
-            await self._broadcast_room_state(room)
-            if room.status == "in_progress":
-                _spawn(self._forfeit_after_grace())
-
-        await self.channel_layer.group_discard(self.group_name, self.channel_name)
+                if room.status == "in_progress":
+                    _spawn(self._forfeit_after_grace())   # scheduled first so a snapshot error can't skip it
+                    snap = await self._match_snapshot()
+                    if snap:
+                        await self.send_json(snap)
+                elif room.status == "waiting" and room.leader_id == self.profile.id:
+                    _spawn(self._close_if_host_gone())
+        except Exception:
+            logger.exception("Disconnect cleanup failed in room %s", self.room_code)
+        finally:
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     async def _forfeit_after_grace(self):
         try:
@@ -113,6 +132,9 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
 
     async def _handle_assign_team(self, content):
         room = await self._get_room()
+        if room.status != "waiting":
+            await self.send_json({"type": "error", "message": "The match has already started."})
+            return
         profile = await self._get_profile()
 
         target_team = content.get("team")
@@ -127,6 +149,9 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
 
     async def _handle_set_mode(self, content):
         room = await self._get_room()
+        if room.status != "waiting":
+            await self.send_json({"type": "error", "message": "The match has already started."})
+            return
         profile = await self._get_profile()
 
         if room.leader_id != profile.id:
@@ -185,9 +210,19 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
         if room.leader_id != profile.id:
             await self.send_json({"type": "error", "message": "Only the room leader can close the room."})
             return
+        if room.status == "in_progress":
+            await self.send_json({"type": "error", "message": "You can't close a room during a match."})
+            return
         await self.channel_layer.group_send(self.group_name, {"type": "room.closed"})
-        await self._delete_room(room)
+        await self._close_or_delete(room)
 
+    @database_sync_to_async
+    def _close_or_delete(self, room):
+        if room.battlematch_set.exists():      # keep history; just retire the room
+            room.status = "finished"
+            room.save(update_fields=["status"])
+        else:
+            room.delete()
     # ── Broadcast relays (called by group_send) ─────────────────────
 
     async def room_event(self, event):
@@ -220,8 +255,14 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
             existing.connection_status = "connected"
             existing.save(update_fields=["connection_status"])
             return existing
-
-        if BattleParticipant.objects.filter(room=room).count() >= MAX_PLAYERS_PER_TEAM * 2 + MAX_SPECTATORS:
+        if room.status == "finished":
+            return None
+        specs = BattleParticipant.objects.filter(room=room, role="spectator").count()
+        total = BattleParticipant.objects.filter(room=room).count()
+        if room.status == "in_progress":
+            if specs >= MAX_SPECTATORS:
+                return None
+        elif total >= MAX_PLAYERS_PER_TEAM * 2 + MAX_SPECTATORS:
             return None
         return BattleParticipant.objects.create(
             room=room, student=profile, role="spectator", connection_status="connected",
@@ -299,3 +340,19 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
     @database_sync_to_async
     def _delete_room(self, room):
         BattleRoom.objects.filter(pk=room.pk).delete()
+
+    async def _match_snapshot(self):
+        state = await MatchState(self.room_code).get()
+        if not state or state["phase"] == "intro":
+            return None
+        q = state["questions"][state["current_index"]]
+        return {
+            "type": "match_sync", "index": state["current_index"],
+            "stem": q["stem"], "options": q["options"], "mode": state["mode"],
+            "phase": state["phase"],
+            "team_a_score": state["team_a_score"], "team_b_score": state["team_b_score"],
+            "answering_student_id": state.get("answering_student_id"),
+            "bonus_team": state.get("bonus_team"),
+            # only revealed once the question is over, so spectators can't leak answers
+            "correct_index": q["correct_index"] if state["phase"] == "revealing" else None,
+        }
