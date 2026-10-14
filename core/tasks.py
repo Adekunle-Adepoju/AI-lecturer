@@ -366,19 +366,33 @@ def parse_past_questions(pq_id):
 
 # ─── Battle + simulator bank ──────────────────────────────────────────────────
 
-def generate_battle_questions(course_code=None, retry_failed=False, limit=None):
+def generate_battle_questions(level, department, course_code, retry_failed, limit):
     _fresh_db()
     from battle.generation import run_battle_question_generation
 
     capped = min(limit, BATTLE_CHUNKS_PER_JOB) if limit else BATTLE_CHUNKS_PER_JOB
     logs = []
+
+    def live_log(msg):
+        logs.append(msg)
+        print(f"[battle] {msg}", flush=True)
+
     result = run_battle_question_generation(
+        level=level,
+        department=department,
         per_chunk=8, sleep_seconds=3.5,
         course_filter=course_code or None,
-        retry_failed=retry_failed, limit=capped, log=logs.append,
+        retry_failed=retry_failed, limit=capped, log=live_log,
     )
+    if result["chunks_processed"] == 0:
+        return (
+            f"WARNING: no lessons to generate from for {department} {level}L"
+            + (f" {course_code}" if course_code else "")
+            + ". Generate the lessons first, or everything is already done "
+              "(tick 'Retry failed' to redo failures)."
+        )
     ok = result["chunks_processed"] - result["chunks_failed"]
-    msg = f"{result['questions_generated']} question(s) from {ok} chunk(s) (pending_review)"
+    msg = f"{result['questions_generated']} question(s) from {ok} lesson(s) (pending_review)"
     if result["failures"]:
         raise RuntimeError(msg + " | failures: " + "; ".join(result["failures"][:5]))
     return msg

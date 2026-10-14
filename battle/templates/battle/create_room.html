@@ -1,24 +1,124 @@
 {% extends "core/base.html" %}
-{% block title %}Create Battle Room — Rovea{% endblock %}
+{% block title %}Battle — Rovea{% endblock %}
 {% block body_attrs %} data-back-target="{% url 'dashboard' %}"{% endblock %}
 
 {% block content %}
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  .arena{position:relative;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#e8eef6;
+    border-radius:var(--radius-xl);padding:28px 20px 36px;
+    background:radial-gradient(ellipse 70% 55% at 50% 22%,rgba(245,166,35,.16),transparent 70%),#09131f}
+  .arena::before{content:"";position:absolute;inset:auto 0 0 0;height:55%;
+    background-image:linear-gradient(rgba(80,150,255,.14) 1px,transparent 1px),linear-gradient(90deg,rgba(80,150,255,.14) 1px,transparent 1px);
+    background-size:42px 42px;
+    transform:perspective(420px) rotateX(58deg);transform-origin:bottom;
+    -webkit-mask-image:linear-gradient(transparent,#000 70%);mask-image:linear-gradient(transparent,#000 70%)}
+  .arena>*{position:relative;z-index:1}
+  .ember{position:absolute!important;bottom:-10px;width:4px;height:4px;border-radius:50%;
+    background:#ffb938;box-shadow:0 0 8px 2px rgba(255,185,56,.7);opacity:0;animation:rise 7s linear infinite}
+  @keyframes rise{0%{transform:translateY(0) translateX(0);opacity:0}15%{opacity:.9}100%{transform:translateY(-420px) translateX(24px);opacity:0}}
+  .ember:nth-child(1){left:8%;animation-delay:0s}.ember:nth-child(2){left:22%;animation-delay:2s;animation-duration:8s}
+  .ember:nth-child(3){left:37%;animation-delay:4s}.ember:nth-child(4){left:55%;animation-delay:1s;animation-duration:9s}
+  .ember:nth-child(5){left:70%;animation-delay:3s}.ember:nth-child(6){left:84%;animation-delay:5s;animation-duration:8s}
+  .ember:nth-child(7){left:93%;animation-delay:2.5s}
+
+  .arena-back{display:inline-block;font-size:14px;color:#9fb3c8;text-decoration:none;
+    padding:6px 14px;border:1px solid rgba(255,255,255,.12);border-radius:8px}
+  .arena-hero{text-align:center;margin:18px 0 28px}
+  .emblem{width:112px;height:112px;margin:0 auto 6px;filter:drop-shadow(0 0 18px rgba(245,166,35,.55));animation:glow 3.5s ease-in-out infinite}
+  @keyframes glow{0%,100%{filter:drop-shadow(0 0 12px rgba(245,166,35,.4))}50%{filter:drop-shadow(0 0 26px rgba(245,166,35,.8))}}
+  .arena-title{font-size:46px;font-weight:700;letter-spacing:.04em;margin:0;text-transform:uppercase;line-height:1}
+  .arena-tag{font-size:13px;letter-spacing:.28em;color:#f5a623;text-transform:uppercase;margin-top:8px}
+
+  .doors{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:760px;margin:0 auto}
+  .door{padding:24px 22px;background:linear-gradient(160deg,#122238,#0b1727);
+    border:1px solid rgba(255,255,255,.1);
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%);
+    transition:border-color .2s,transform .2s}
+  .door:hover{transform:translateY(-3px)}
+  .door.host{border-color:rgba(245,166,35,.55)}
+  .door.join{border-color:rgba(0,194,255,.45)}
+  .door h2{font-size:24px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em}
+  .door p{font-size:15px;color:#9fb3c8;margin:0 0 18px;line-height:1.4}
+  .door-btn{width:100%;padding:14px;border:0;cursor:pointer;font-family:inherit;font-size:18px;font-weight:700;
+    letter-spacing:.08em;text-transform:uppercase;
+    clip-path:polygon(3% 0,97% 0,100% 50%,97% 100%,3% 100%,0 50%);transition:filter .2s}
+  .door-btn:hover{filter:brightness(1.12)}
+  .host .door-btn{background:linear-gradient(135deg,#ffb938,#f5a623);color:#0b1727}
+  .join .door-btn{background:linear-gradient(135deg,#27c8ff,#0094d4);color:#04121d}
+  .code-input{width:100%;box-sizing:border-box;margin-bottom:10px;padding:12px;text-align:center;
+    background:#07101b;color:#fff;border:1px solid rgba(0,194,255,.4);
+    font-family:inherit;font-size:22px;font-weight:700;letter-spacing:.3em;text-transform:uppercase}
+  .code-input:focus{outline:none;border-color:#00c2ff;box-shadow:0 0 0 3px rgba(0,194,255,.2)}
+
+  /* Optional stats strip: shows only if the view passes `battle_stats` */
+  .stat-strip{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;max-width:760px;margin:18px auto 0}
+  .stat{padding:8px 16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);text-align:center;min-width:90px}
+  .stat b{display:block;font-size:22px;color:#fff;line-height:1.1}
+  .stat span{font-size:11px;letter-spacing:.18em;color:#7f93a8;text-transform:uppercase}
+  .stat.tier b{color:#f5a623}
+
+  @media(max-width:640px){.doors{grid-template-columns:1fr}.arena-title{font-size:36px}}
+  @media(prefers-reduced-motion:reduce){.ember,.emblem{animation:none}.ember{display:none}.door{transition:none}}
+</style>
+
 <div class="page-container">
-  <a href="{% url 'simulator_home' %}" style="font-size:13px; color:var(--text-secondary)">← Back</a>
+  <div class="arena">
+    <span class="ember"></span><span class="ember"></span><span class="ember"></span><span class="ember"></span>
+    <span class="ember"></span><span class="ember"></span><span class="ember"></span>
 
-  <h2 style="font-family:'Space Grotesk',sans-serif; margin:16px 0 4px">⚔️ Start a Battle</h2>
-  <p style="font-size:13px; color:var(--text-secondary); margin-bottom:24px">
-    Create a room and share the code with whoever you're battling. You'll land in the lobby
-    once the room is created, where you can set the mode and wait for others to join.
-  </p>
+    <a href="{% url 'simulator_home' %}" class="arena-back">← Back</a>
 
-  <form method="POST">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-primary btn-full">Create Room →</button>
-  </form>
+    <div class="arena-hero">
+      <svg class="emblem" viewBox="0 0 120 120" aria-hidden="true">
+        <defs><linearGradient id="blade" x1="0" x2="1"><stop offset="0" stop-color="#f4f8fc"/><stop offset="1" stop-color="#8296ab"/></linearGradient></defs>
+        <g transform="rotate(45 60 60)">
+          <polygon points="60,4 65,14 63,78 57,78 55,14" fill="url(#blade)"/>
+          <rect x="45" y="78" width="30" height="6" rx="3" fill="#f5a623"/>
+          <rect x="57" y="84" width="6" height="16" rx="2" fill="#7a4a12"/>
+          <circle cx="60" cy="104" r="4.5" fill="#f5a623"/>
+        </g>
+        <g transform="rotate(-45 60 60)">
+          <polygon points="60,4 65,14 63,78 57,78 55,14" fill="url(#blade)"/>
+          <rect x="45" y="78" width="30" height="6" rx="3" fill="#f5a623"/>
+          <rect x="57" y="84" width="6" height="16" rx="2" fill="#7a4a12"/>
+          <circle cx="60" cy="104" r="4.5" fill="#f5a623"/>
+        </g>
+      </svg>
+      <h1 class="arena-title">Enter the Arena</h1>
+      <div class="arena-tag">Who knows the course best?</div>
+    </div>
 
-  <p style="margin-top:20px; font-size:13px; color:var(--text-secondary)">
-    Have a code already? <a href="{% url 'battle_join_room' %}" style="color:var(--amber)">Join a room instead →</a>
-  </p>
+    <div class="doors">
+      <div class="door host">
+        <h2>Host a battle</h2>
+        <p>Open a room, pick your squad and share the code.</p>
+        <form method="POST">
+          {% csrf_token %}
+          <button type="submit" class="door-btn">Create Room →</button>
+        </form>
+      </div>
+
+      <div class="door join">
+        <h2>Join a battle</h2>
+        <p>Got a code from a friend? Drop it in.</p>
+        <form method="POST" action="{% url 'battle_join_room' %}">
+          {% csrf_token %}
+          <input class="code-input" type="text" name="code" placeholder="CODE" maxlength="8"
+                 autocomplete="off" autocapitalize="characters" required>
+          <button type="submit" class="door-btn">Join Room →</button>
+        </form>
+      </div>
+    </div>
+
+    {% if battle_stats %}
+    <div class="stat-strip">
+      <div class="stat tier"><b>{{ tier }}</b><span>Tier</span></div>
+      <div class="stat"><b>{{ battle_stats.wins }}</b><span>Wins</span></div>
+      <div class="stat"><b>{{ battle_stats.win_rate }}%</b><span>Win rate</span></div>
+      <div class="stat"><b>{{ battle_stats.current_streak }}</b><span>Streak</span></div>
+    </div>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}

@@ -1,6 +1,7 @@
 import json
 
 from django.conf import settings
+from django.db.migrations import state
 import redis.asyncio as aioredis
 
 _pool = None
@@ -60,3 +61,6 @@ class MatchState:
 
     async def clear(self):
         await self.redis.delete(_key(self.room_code))
+        
+    async def save(self, state):
+        await self.redis.set(_key(self.room_code), json.dumps(state), ex=6 * 3600)

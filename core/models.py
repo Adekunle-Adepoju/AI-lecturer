@@ -176,8 +176,8 @@ class SlideDocument(models.Model):
     topics_incomplete = models.BooleanField(default=False)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     parsed = models.BooleanField(default=False)
-    # New tracking field to count how many slide files have been appended
     append_count = models.IntegerField(default=1)
+    department = models.CharField(max_length=100, blank=True, default="")
 
     class Meta:
         ordering = ["course_code"]

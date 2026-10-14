@@ -1,14 +1,21 @@
-import json
-import random
-import string
 import logging
+import asyncio
 
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from channels.db import database_sync_to_async
 
 from core.models import StudentProfile
 from .models import BattleRoom, BattleParticipant
-from .match_loop import MatchLoop
+from .match_loop import MatchLoop, FORFEIT_GRACE_SECONDS
+
+_background = set()
+
+
+def _spawn(coro):
+    t = asyncio.create_task(coro)
+    _background.add(t)
+    t.add_done_callback(_background.discard)
+
 
 logger = logging.getLogger(__name__)
 MAX_PLAYERS_PER_TEAM = 5
@@ -16,64 +23,70 @@ MAX_SPECTATORS = 10
 
 
 class BattleConsumer(AsyncJsonWebsocketConsumer):
-    """One connection per person in a room. Everything server->client is a
-    broadcast to the room's Channels group; everything client->server is a
-    named event dispatched in receive_json. No match-in-progress state
-    lives here yet — that's the next piece, layered on top of this
-    join/team/disconnect handling once it's confirmed working."""
+    """One connection per person in a room. Server->client is a broadcast to
+    the room's Channels group; client->server is a named event dispatched
+    in receive_json."""
 
     async def connect(self):
         self.room_code = self.scope["url_route"]["kwargs"]["room_code"]
         self.group_name = f"battle_room_{self.room_code}"
         self.student = self.scope["user"]
-        self.joined = False  # only True once we've actually created/reconnected a participant row
+        self.joined = False
 
-        if not self.student.is_authenticated:
-            await self.close(code=4001)
-            return
+        await self.accept()   # finish the handshake before any slow DB work
 
-        room = await self._get_room()
-        if room is None:
-            await self.close(code=4004)  # room doesn't exist
-            return
+        try:
+            if not self.student.is_authenticated:
+                logger.warning("WS reject %s: not authenticated", self.room_code)
+                await self.close(code=4001)
+                return
 
-        if room.status == "finished":
-            await self.close(code=4005)
-            return
+            room = await self._get_room()
+            if room is None:
+                await self.close(code=4004)
+                return
 
-        profile = await self._get_profile()
-        if profile is None:
-            await self.close(code=4001)
-            return
+            if room.status == "finished":
+                await self.close(code=4005)
+                return
 
-        participant = await self._get_or_reconnect_participant(room, profile)
-        if participant is None:
-            await self.close(code=4003)
-            return
+            profile = await self._get_profile()
+            if profile is None:
+                await self.close(code=4001)
+                return
 
-        self.profile = profile
-        self.joined = True
+            participant = await self._get_or_reconnect_participant(room, profile)
+            if participant is None:
+                await self.close(code=4003)
+                return
 
-        await self.channel_layer.group_add(self.group_name, self.channel_name)
-        await self.accept()
-        await self._broadcast_room_state(room)
+            self.profile = profile
+            self.joined = True
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
+            await self._broadcast_room_state(room)
+        except Exception:
+            logger.exception("WS connect crashed in room %s", self.room_code)
+            await self.close(code=4500)
 
     async def disconnect(self, close_code):
         if not getattr(self, "joined", False):
-            return  # never actually joined — nothing to clean up
+            return
 
         room = await self._get_room()
         if room is not None:
             await self._mark_disconnected(room)
             await self._broadcast_room_state(room)
+            if room.status == "in_progress":
+                _spawn(self._forfeit_after_grace())
 
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
-    @database_sync_to_async
-    def _mark_disconnected(self, room):
-        BattleParticipant.objects.filter(room=room, student=self.profile).update(
-            connection_status="disconnected"
-        )
+    async def _forfeit_after_grace(self):
+        try:
+            await asyncio.sleep(FORFEIT_GRACE_SECONDS)
+            await MatchLoop(self, self.room_code).forfeit_check()
+        except Exception:
+            logger.exception("Forfeit check failed in room %s", self.room_code)
 
     async def receive_json(self, content, **kwargs):
         event_type = content.get("type")
@@ -88,6 +101,8 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
                 await self._handle_buzz(content)
             elif event_type == "submit_answer":
                 await self._handle_submit_answer(content)
+            elif event_type == "close_room":
+                await self._handle_close_room()
             else:
                 await self.send_json({"type": "error", "message": f"Unknown event type: {event_type}"})
         except Exception:
@@ -100,7 +115,7 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
         room = await self._get_room()
         profile = await self._get_profile()
 
-        target_team = content.get("team")  # "A", "B", or None for spectator
+        target_team = content.get("team")
         target_role = "spectator" if target_team is None else "player"
 
         ok, error = await self._set_participant_team(room, profile, target_team, target_role)
@@ -135,7 +150,7 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
             return
 
         if room.status != "waiting":
-            return  # match already started: ignore double clicks
+            return
 
         if room.mode is None:
             await self.send_json({"type": "error", "message": "Pick a mode before starting."})
@@ -161,12 +176,32 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
         await match_loop.handle_submit_answer(
             profile.id, content.get("option_index"), content.get("question_index"),
         )
-        
 
-    # ── Broadcast relay (called by group_send) ─────────────────────
+    async def _handle_close_room(self):
+        room = await self._get_room()
+        profile = await self._get_profile()
+        if room is None:
+            return
+        if room.leader_id != profile.id:
+            await self.send_json({"type": "error", "message": "Only the room leader can close the room."})
+            return
+        await self.channel_layer.group_send(self.group_name, {"type": "room.closed"})
+        await self._delete_room(room)
+
+    # ── Broadcast relays (called by group_send) ─────────────────────
 
     async def room_event(self, event):
         await self.send_json(event["event"])
+
+    async def room_closed(self, event):
+        await self.send_json({"type": "room_closed"})
+        await self.close(code=4010)
+
+    async def _broadcast_room_state(self, room):
+        state = await self._get_room_state_snapshot(room)
+        await self.channel_layer.group_send(
+            self.group_name, {"type": "room.event", "event": state}
+        )
 
     # ── DB helpers ───────────────────────────────────────────────────
 
@@ -186,18 +221,10 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
             existing.save(update_fields=["connection_status"])
             return existing
 
-        player_count = BattleParticipant.objects.filter(room=room, role="player").count()
-        spectator_count = BattleParticipant.objects.filter(room=room, role="spectator").count()
-
-        # New joiners default to spectator once both teams could plausibly
-        # be full — actual team slot is assigned explicitly via
-        # assign_team, this just decides whether joining is even possible.
-        if player_count >= MAX_PLAYERS_PER_TEAM * 2 and spectator_count >= MAX_SPECTATORS:
+        if BattleParticipant.objects.filter(room=room).count() >= MAX_PLAYERS_PER_TEAM * 2 + MAX_SPECTATORS:
             return None
-
-        role = "spectator" if player_count >= MAX_PLAYERS_PER_TEAM * 2 else "player"
         return BattleParticipant.objects.create(
-            room=room, student=profile, role=role, connection_status="connected",
+            room=room, student=profile, role="spectator", connection_status="connected",
         )
 
     @database_sync_to_async
@@ -269,9 +296,6 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
             ],
         }
 
-    async def _broadcast_room_state(self, room):
-        state = await self._get_room_state_snapshot(room)
-        await self.channel_layer.group_send(
-            self.group_name,
-            {"type": "room.event", "event": state},
-        )
+    @database_sync_to_async
+    def _delete_room(self, room):
+        BattleRoom.objects.filter(pk=room.pk).delete()

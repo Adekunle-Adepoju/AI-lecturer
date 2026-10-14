@@ -137,7 +137,13 @@
         <div class="room-label">Private Match</div>
         <div class="room-code">{{ room_code }}</div>
       </div>
+      <div style="display:flex; align-items:center; gap:12px">
+      <button id="close-room-btn" class="btn btn-white-outline" onclick="closeRoom()"
+              style="display:none; font-size:12px; padding:6px 12px; border-color:#ff3b30; color:#ff3b30">
+        Close room
+      </button>
       <div id="status">Connecting...</div>
+</div>
     </div>
 
     <div id="lobby-panel" style="display:none">
@@ -216,7 +222,7 @@ ws.onclose = (e) => {
   const s = document.getElementById("status"); s.textContent = "Disconnected"; s.classList.add("disconnected");
 };
 ws.onerror = () => { const s = document.getElementById("status"); s.textContent = "Connection error"; s.classList.add("disconnected"); };
-ws.onmessage = (e) => handleEvent(JSON.parse(e.data));
+ws.onmessage = (e) => { console.log("RAW:", e.data); handleEvent(JSON.parse(e.data)); };
 
 function send(payload) { ws.send(JSON.stringify(payload)); }
 function assignTeam(team) { send({type: "assign_team", team: team}); }
@@ -225,6 +231,11 @@ function onModeChange() {
   if (val) send({type: "set_mode", mode: val});
 }
 function startMatch() { send({type: "start_match"}); }
+function closeRoom() {
+  if (confirm("Close this room permanently? Everyone will be removed.")) {
+    send({type: "close_room"});
+  }
+}
 
 function canPlay() { return myRole === "player" && myTeam !== null; }
 function teamName(t) { return t === "A" ? "Alpha" : "Bravo"; }
@@ -418,6 +429,10 @@ function handleEvent(data) {
       stopTimer("Match over");
       break;
 
+      case "room_closed":
+        alert("This room was closed by the host.");
+        window.location.href = "{% url 'battle_create_room' %}";
+        break;
     case "error":
       alert(data.message);
       break;
@@ -457,6 +472,8 @@ function renderLobby(data) {
     modeSelect.value = "";
     startBtn.disabled = true;
   }
+  document.getElementById("close-room-btn").style.display =
+  data.leader_id === studentId ? "inline-block" : "none";
 }
 
 function renderQuestion(data) {

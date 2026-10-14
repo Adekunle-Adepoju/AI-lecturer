@@ -2,8 +2,55 @@
 {% block title %}Generate Battle Questions — Rovea{% endblock %}
 {% block body_attrs %} data-back-target="{% url 'staff_portal' %}"{% endblock %}
 
-{% csrf_token %}
 {% block content %}
+<style>
+  .bq-card {
+    background: var(--navy-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 24px;
+  }
+  .bq-label {
+    font-size: 12px; font-weight: 700; color: var(--amber);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px;
+  }
+  .bq-form { display: grid; gap: 12px; }
+  .bq-form select,
+  .bq-form input[type="number"] {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 15px;
+    color: var(--text);
+    background: var(--navy-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-sizing: border-box;
+  }
+  .bq-row {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .bq-row .bq-limit { width: 110px; }
+  .bq-check {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; color: var(--text-secondary);
+  }
+  .bq-row .btn { margin-left: auto; }
+  .bq-summary { font-size: 14px; color: var(--text-secondary); margin: 0 0 16px; }
+  .bq-table-wrap { overflow-x: auto; }
+  .bq-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .bq-table th, .bq-table td {
+    text-align: left; padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .bq-table th {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-secondary);
+  }
+  .bq-table td:last-child, .bq-table th:last-child { text-align: right; }
+  .bq-table tr:last-child td { border-bottom: none; }
+</style>
+
 <div class="page-container">
   <a href="{% url 'staff_portal' %}" style="font-size:13px; color:var(--text-secondary)">← Back to Staff Portal</a>
 
@@ -17,14 +64,15 @@
   </p>
 
   {% if messages %}
-  {% for message in messages %}
-  <div class="message" style="margin-bottom:12px">{{ message }}</div>
-  {% endfor %}
+    {% for message in messages %}
+      <div class="message" style="margin-bottom:12px">{{ message }}</div>
+    {% endfor %}
   {% endif %}
 
-  <div style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-xl); padding:1.25rem 1.5rem; margin-bottom:24px">
-    <div style="font-size:12px; font-weight:700; color:var(--amber); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:10px">Bank Status</div>
-    <p style="font-size:14px; color:var(--text-secondary)">
+  <!-- Bank status -->
+  <div class="bq-card">
+    <div class="bq-label">Bank Status</div>
+    <p class="bq-summary" style="margin:0">
       {{ total_chunks }} eligible chunk(s) total —
       <strong style="color:var(--text)">{{ completed }}</strong> completed,
       <strong style="color:var(--text)">{{ failed }}</strong> failed,
@@ -32,23 +80,63 @@
     </p>
   </div>
 
-  <form method="POST">
-    {% csrf_token %}
-    <div class="form-group" style="margin-bottom:16px">
-      <label style="display:block; font-size:13px; margin-bottom:6px">{{ form.course_code.label }}</label>
-      {{ form.course_code }}
+  <!-- Generate form -->
+  <div class="bq-card">
+    <div class="bq-label">Generate</div>
+    <form method="POST" class="bq-form">
+      {% csrf_token %}
+      <select name="level" required>
+        {% for l in levels %}<option value="{{ l }}" {% if l == level %}selected{% endif %}>{{ l }}L</option>{% endfor %}
+      </select>
+      <select name="department" required>
+        {% for d in departments %}<option value="{{ d }}" {% if d == department %}selected{% endif %}>{{ d }}</option>{% endfor %}
+      </select>
+      <select name="course_code">
+        <option value="">All courses</option>
+        {% for c in course_choices %}<option value="{{ c }}" {% if c == course_code %}selected{% endif %}>{{ c }}</option>{% endfor %}
+      </select>
+
+      <div class="bq-row">
+        <input class="bq-limit" type="number" name="limit" value="10" min="1" max="200" aria-label="Chunk limit">
+        <label class="bq-check"><input type="checkbox" name="retry_failed"> Retry failed</label>
+        <button class="btn btn-primary" type="submit">Generate</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Current selection + bank breakdown -->
+  <div class="bq-card">
+    <div class="bq-label">Question Bank</div>
+    <p class="bq-summary">
+      {{ department }} · {{ level }}L — {{ total_chunks }} chunks ·
+      {{ completed }} done · {{ failed }} failed · {{ never_attempted }} not attempted
+    </p>
+    <div class="bq-table-wrap">
+      <table class="bq-table">
+        <thead>
+          <tr><th>Department</th><th>Level</th><th>Status</th><th>Questions</th></tr>
+        </thead>
+        <tbody>
+          {% for row in bank %}
+          <tr>
+            <td>{{ row.department|default:"(none)" }}</td>
+            <td>{{ row.level }}L</td>
+            <td>{{ row.status }}</td>
+            <td>{{ row.n }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" style="color:var(--text-secondary)">No questions yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-    <div class="form-group" style="margin-bottom:16px">
-      <label style="display:block; font-size:13px; margin-bottom:6px">{{ form.limit.label }}</label>
-      {{ form.limit }}
-      <div style="font-size:12px; color:var(--text-muted); margin-top:4px">{{ form.limit.help_text }}</div>
-    </div>
-    <div class="form-group" style="margin-bottom:20px">
-      <label style="display:flex; align-items:center; gap:8px; font-size:13px">
-        {{ form.retry_failed }} {{ form.retry_failed.label }}
-      </label>
-    </div>
-    <button type="submit" class="btn btn-primary btn-full">Generate →</button>
-  </form>
+  </div>
 </div>
+<script>
+  document.querySelectorAll('select[name="level"], select[name="department"]').forEach(s =>
+    s.addEventListener('change', () => {
+      const f = s.form;
+      location.search = new URLSearchParams({level: f.level.value, department: f.department.value});
+    }));
+</script>
 {% endblock %}

@@ -9,7 +9,9 @@ from django.utils import timezone
 from core.models import StudentProfile
 from .match_state import MatchState
 from .question_selection import select_match_questions
-from .models import BattleRoom, BattleParticipant, BattleMatch, BattleMatchQuestion, StudentQuestionExposure
+from .models import BattleRoom, BattleParticipant, BattleMatch, BattleMatchQuestion, StudentQuestionExposure,BattleMatchPlayer, BattleStats
+from zoneinfo import ZoneInfo
+from .levels import levels_for_room
 
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,7 @@ BUZZ_ANSWER_SECONDS = 10     # buzzer: time to answer after buzzing
 BONUS_ANSWER_SECONDS = 15    # the other team's bonus attempt
 REVEAL_PAUSE_SECONDS = 3     # pause to show the result before the next question
 INTRO_SECONDS = 5            # rules screen shown before the first question
+FORFEIT_GRACE_SECONDS = 45
 
 
 def _timer_fields(seconds):
@@ -76,6 +79,43 @@ class MatchLoop:
     consumer's channel layer so every connected participant (players and
     spectators) sees the same state."""
 
+    def _player_levels_sync(self, ids):
+        return list(StudentProfile.objects.filter(id__in=ids).values_list("level", flat=True))
+
+    async def _any_connected(self, student_ids):
+        def _q():
+            return BattleParticipant.objects.filter(
+                room__code=self.room_code, student_id__in=student_ids,
+                connection_status="connected",
+            ).exists()
+        return await database_sync_to_async(_q)()
+
+    async def forfeit_check(self):
+        """Runs after the grace period. A team with nobody connected loses."""
+        async with _lock_for(self.room_code):
+            state = await self.state.get()
+            if state is None:
+                return
+            a_alive = await self._any_connected(state["team_a_players"])
+            b_alive = await self._any_connected(state["team_b_players"])
+            if a_alive and b_alive:
+                return
+            if not a_alive and not b_alive:
+                await self._abandon()
+                return
+            await self._finalize(state, forced_winner="A" if a_alive else "B")
+
+    async def _abandon(self):
+        """Everyone left. No result, no wins, no stats. Just clean up."""
+        def _close():
+            BattleRoom.objects.filter(code=self.room_code).update(status="finished")
+        await database_sync_to_async(_close)()
+        await self.state.clear()
+        task = _timer_tasks.pop(self.room_code, None)
+        if task and task is not asyncio.current_task():
+            task.cancel()
+        _room_locks.pop(self.room_code, None)
+
     def __init__(self, consumer, room_code):
         self.consumer = consumer
         self.room_code = room_code
@@ -89,7 +129,12 @@ class MatchLoop:
             QUESTIONS_PER_TEAM_MODE1 * 2 if mode == "alternating" else TOTAL_QUESTIONS_MODE2
         )
         all_ids = team_a_ids + team_b_ids
-        questions = await database_sync_to_async(select_match_questions)(all_ids, total_questions)
+        levels = levels_for_room(
+            await database_sync_to_async(self._player_levels_sync)(all_ids)
+        )
+        questions = await database_sync_to_async(select_match_questions)(
+            all_ids, total_questions, levels=levels,
+        )
 
         if len(questions) < total_questions:
             await self._broadcast({
@@ -97,11 +142,16 @@ class MatchLoop:
                 "message": f"Only {len(questions)} question(s) available — bank is thinner than a full match needs.",
             })
             if not questions:
-                await self._broadcast({"type": "match_aborted", "reason": "no_questions_available"})
+                await database_sync_to_async(
+                    BattleRoom.objects.filter(code=self.room_code).update
+                )(status="waiting")
+                await self._broadcast({"type": "match_aborted",
+                                       "reason": "No questions available for this room's level yet."})
                 return
 
         state = await self.state.initialize(mode, team_a_ids, team_b_ids, questions)
         state["phase"] = "intro"
+        state["levels"] = list(levels)
         await self.state.save(state)
         await self._broadcast({
             "type": "match_intro", "mode": mode,
@@ -135,8 +185,10 @@ class MatchLoop:
             team = _team_for_index(idx)
             roster = state["team_a_players"] if team == "A" else state["team_b_players"]
             turn_key = "team_a_turn_index" if team == "A" else "team_b_turn_index"
-            answerer_id = roster[state[turn_key] % len(roster)] if roster else None
-            state[turn_key] = state[turn_key] + 1
+            if roster:
+                answerer_id, state[turn_key] = await self._pick_answerer(roster, state[turn_key])
+            else:
+                answerer_id = None
             state["phase"] = "awaiting_answer"
             state["answering_student_id"] = answerer_id
             timer_seconds = TURN_TIMER_SECONDS
@@ -189,8 +241,6 @@ class MatchLoop:
             if expected_phase == "intro":
                 await self._serve_question(state)
             elif expected_phase == "revealing":
-                await self._advance_now(state)
-            elif state["mode"] == "alternating" and expected_phase == "awaiting_answer":
                 await self._advance_now(state)
             elif state["mode"] == "alternating" and expected_phase == "awaiting_answer":
                 await self._resolve_alternating(state, correct=False, timed_out=True)
@@ -369,8 +419,9 @@ class MatchLoop:
         await self._serve_question(state)
 
     async def _start_sudden_death(self, state):
+        used = [q["question_id"] for q in state["questions"]]
         extra = await database_sync_to_async(select_match_questions)(
-            state["team_a_players"] + state["team_b_players"], 1,
+            state["team_a_players"] + state["team_b_players"], 1, exclude_ids=used,
         )
         if not extra:
             await self._finalize(state)  # can't break the tie — ties as-is
@@ -379,21 +430,31 @@ class MatchLoop:
         await self.state.save(state)
         await self._broadcast({"type": "sudden_death"})
         await self._serve_question(state)
+        extra = await database_sync_to_async(select_match_questions)(
+            state["team_a_players"] + state["team_b_players"], 1,
+            levels=tuple(state.get("levels", ("100",))), exclude_ids=used,
+        )
 
-    async def _finalize(self, state):
-        winner = None
-        if state["team_a_score"] > state["team_b_score"]:
+    async def _finalize(self, state, forced_winner=None):
+        if forced_winner:
+            winner = forced_winner
+        elif state["team_a_score"] > state["team_b_score"]:
             winner = "A"
         elif state["team_b_score"] > state["team_a_score"]:
             winner = "B"
+        else:
+            winner = None
 
         await self._persist_match(state, winner)
         await self._broadcast({
             "type": "match_finished", "team_a_score": state["team_a_score"],
             "team_b_score": state["team_b_score"], "winner": winner,
+            "forfeit": forced_winner is not None,
         })
         await self.state.clear()
-        _timer_tasks.pop(self.room_code, None)
+        task = _timer_tasks.pop(self.room_code, None)
+        if task and task is not asyncio.current_task():
+            task.cancel()
         _room_locks.pop(self.room_code, None)
 
     async def _persist_match(self, state, winner):
@@ -420,7 +481,7 @@ class MatchLoop:
 
         # Exposure tracking for every question actually served, seen or not.
         all_student_ids = state["team_a_players"] + state["team_b_players"]
-        for q in state["questions"]:
+        for q in state["questions"][: state["current_index"] + 1]:
             for sid in all_student_ids:
                 exposure, _ = StudentQuestionExposure.objects.get_or_create(
                     student_id=sid, question_id=q["question_id"],
@@ -430,52 +491,75 @@ class MatchLoop:
                 exposure.save(update_fields=["times_seen", "last_seen_at"])
 
         self._award_xp(state, winner)
+        self._record_stats(match, state, winner)
         room.status = "finished"
         room.save(update_fields=["status"])
 
+    def _lagos_day_start(self):
+        now = timezone.now().astimezone(ZoneInfo("Africa/Lagos"))
+        return now.replace(hour=0, minute=0, second=0, microsecond=0)
+
     def _award_xp(self, state, winner):
-        # XP rules: winners 200 (20 after 2 wins today, or against a repeat
-        # opponent today), losers 10, no daily cap on match count. "Repeat
-        # opponent" is checked against BattleMatchQuestion's answering_team
-        # trail via BattleMatch/BattleParticipant history for today.
-        from datetime import date
-
+        """Winners: 200 XP, or 20 once they already have 2 wins today or have
+        beaten any of these opponents today. Losers: 10. Runs BEFORE this
+        match's player rows are saved, so 'today' only counts earlier matches."""
         if winner is None:
-            return  # true tie after sudden-death exhaustion — no XP either way, undecided by the rules as given
-
+            return
         winning_ids = state["team_a_players"] if winner == "A" else state["team_b_players"]
         losing_ids = state["team_b_players"] if winner == "A" else state["team_a_players"]
-
-        today = date.today()
+        day_start = self._lagos_day_start()
 
         for sid in winning_ids:
-            wins_today = BattleMatch.objects.filter(
-                started_at__date=today, winner=winner,
-                room__participants__student_id=sid, room__participants__team=winner,
-            ).count()
-            already_beat_today = self._already_beat_opponents_today(sid, losing_ids, today)
-            xp = 20 if (wins_today >= 2 or already_beat_today) else 200
+            my_wins_today = BattleMatchPlayer.objects.filter(
+                student_id=sid, won=True, match__ended_at__gte=day_start)
+            beat_them_today = BattleMatchPlayer.objects.filter(
+                won=False, student_id__in=losing_ids,
+                match__in=my_wins_today.values("match"),
+            ).exists()
+            xp = 20 if (my_wins_today.count() >= 2 or beat_them_today) else 200
             StudentProfile.objects.filter(id=sid).update(xp=F_xp(xp))
 
         for sid in losing_ids:
             StudentProfile.objects.filter(id=sid).update(xp=F_xp(10))
 
-    def _already_beat_opponents_today(self, student_id, opponent_ids, today):
-        # Simplified: has this student won ANY match today against ANY of
-        # today's opponents. A precise per-pair check would need per-player
-        # match history joined against opponent rosters — worth tightening
-        # once real usage shows whether this granularity actually matters.
-        return BattleMatch.objects.filter(
-            started_at__date=today,
-            room__participants__student_id__in=opponent_ids,
-        ).exists()
+    def _record_stats(self, match, state, winner):
+        for team, ids in (("A", state["team_a_players"]), ("B", state["team_b_players"])):
+            for sid in ids:
+                won = (winner == team)
+                BattleMatchPlayer.objects.create(match=match, student_id=sid, team=team, won=won)
+                stats, _ = BattleStats.objects.get_or_create(student_id=sid)
+                if winner is None:          # draw: counts as played, streak pauses
+                    stats.draws += 1
+                elif won:
+                    stats.wins += 1
+                    stats.current_streak += 1
+                    stats.best_streak = max(stats.best_streak, stats.current_streak)
+                else:
+                    stats.losses += 1
+                    stats.current_streak = 0
+                stats.save()
 
     async def _broadcast(self, payload):
         await self.consumer.channel_layer.group_send(
             self.consumer.group_name, {"type": "room.event", "event": payload},
         )
 
+    async def _pick_answerer(self, roster, start_turn):
+        """Next connected player in rotation order. Returns (student_id, next_turn_counter)."""
+        def _connected():
+            return set(BattleParticipant.objects.filter(
+                room__code=self.room_code, student_id__in=roster,
+                connection_status="connected",
+            ).values_list("student_id", flat=True))
+        connected = await database_sync_to_async(_connected)()
+        for step in range(len(roster)):
+            sid = roster[(start_turn + step) % len(roster)]
+            if sid in connected:
+                return sid, start_turn + step + 1
+        return None, start_turn + 1
+
 
 def F_xp(amount):
     from django.db.models import F
     return F("xp") + amount
+

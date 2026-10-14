@@ -32,6 +32,7 @@ from .simulator_bank import get_topic_availability, process_topic
 from .simulator_bank_prompts import SIMULATOR_STRICT_GRADING_PROMPT
 from django_q.models import Task, OrmQ
 from .departments import siwes_applies
+from urllib.parse import urlencode
 
 
 from .forms import SignupForm, OnboardingForm, ProfileEditForm, ElectiveSelectionForm
@@ -55,7 +56,7 @@ from .prompt import (
 from .slide_topic_extractor import safe_extract_topics_from_slide, is_reference_table_content
 from .lecture_completeness import detect_likely_duplicate_reteach, is_lecture_truncated, find_safe_cutoff, continue_truncated_lecture, MAX_CONTINUATION_ATTEMPTS
 from .staff_forms import BattleQuestionGenerationForm
-from battle.generation import run_battle_question_generation
+from battle.generation import run_battle_question_generation, eligible_lessons
 from battle.models import BattleQuestionGenerationChunk, BattleQuestion
 from django.urls import reverse
 
@@ -2446,39 +2447,62 @@ def staff_bulk_delete_courses_view(request):
         messages.warning(request, "No courses were selected.")
     return redirect("staff_manage_courses")
 
+BATTLE_LEVELS = ("100", "200", "300", "400", "500")
+
 @staff_required
 def staff_generate_battle_questions_view(request):
-    course_choices = list(
-        SlideTopicChunk.objects.filter(is_empty=False, slide__level__in=["300", "400"])
-        .values_list("slide__course_code", flat=True).distinct().order_by("slide__course_code")
-    )
+    ready = PreGeneratedLesson.objects.filter(is_truncated=False, content_chunk__regex=r"\S")
+    departments = sorted(set(
+        ready.exclude(course__department="").values_list("course__department", flat=True)
+    ))
 
     if request.method == "POST":
-        form = BattleQuestionGenerationForm(request.POST, course_choices=course_choices)
-        if form.is_valid():
+        level = request.POST.get("level", "")
+        department = request.POST.get("department", "")
+        course_code = request.POST.get("course_code", "") or None
+        retry_failed = request.POST.get("retry_failed") == "on"
+        try:
+            limit = max(1, min(int(request.POST.get("limit", 10)), 200))
+        except ValueError:
+            limit = 10
+
+        if level not in BATTLE_LEVELS or department not in departments:
+            messages.error(request, "Pick a valid level and department.")
+        else:
             _queue(
                 request, "generate_battle_questions",
-                form.cleaned_data["course_code"] or None,
-                form.cleaned_data["retry_failed"],
-                form.cleaned_data["limit"],
-                label="Generate battle questions",
+                level, department, course_code, retry_failed, limit,
+                label=f"Generate battle questions {department} {level}L",
             )
-            return redirect("staff_generate_battle_questions")
-    else:
-        form = BattleQuestionGenerationForm(course_choices=course_choices)
+            return redirect(f"{request.path}?{urlencode({'level': level, 'department': department})}")
 
-    total_chunks = SlideTopicChunk.objects.filter(is_empty=False, slide__level__in=["300", "400"]).count()
-    completed = BattleQuestionGenerationChunk.objects.filter(status="COMPLETED").count()
-    failed = BattleQuestionGenerationChunk.objects.filter(status="FAILED").count()
-    attempted = BattleQuestionGenerationChunk.objects.count()
-    never_attempted = max(0, total_chunks - attempted)
+    level = request.GET.get("level") or "300"
+    department = request.GET.get("department") or (departments[0] if departments else "")
+
+    lessons = eligible_lessons(level, department)
+    course_choices = list(
+        lessons.values_list("course__course_code", flat=True)
+        .distinct().order_by("course__course_code")
+    )
+    attempts = BattleQuestionGenerationChunk.objects.filter(
+        source_lesson_id__in=lessons.values("id"),
+    )
+    total_chunks = lessons.count()
+    completed = attempts.filter(status="COMPLETED").count()
+    failed = attempts.filter(status="FAILED").count()
+    never_attempted = max(0, total_chunks - attempts.count())
+
+    bank = (
+        BattleQuestion.objects.exclude(status="retired")
+        .values("department", "level", "status").annotate(n=Count("id"))
+        .order_by("department", "level")
+    )
 
     return render(request, "core/staff/generate_battle_questions.html", {
-        "form": form,
-        "total_chunks": total_chunks,
-        "completed": completed,
-        "failed": failed,
-        "never_attempted": never_attempted,
+        "departments": departments, "course_choices": course_choices,
+        "levels": BATTLE_LEVELS, "level": level, "department": department,
+        "total_chunks": total_chunks, "completed": completed,
+        "failed": failed, "never_attempted": never_attempted, "bank": bank,
     })
 
 def _render_reference_table_lecture(topic_name, chunk_text):
@@ -3717,13 +3741,13 @@ def staff_review_battle_questions_view(request):
     course_filter = request.GET.get("course_code", "")
 
     questions = BattleQuestion.objects.filter(status="pending_review").select_related(
-        "source_chunk"
+        "source_chunk", "source_lesson"
     ).prefetch_related("options").order_by("course_code", "-created_at")
     if course_filter:
         questions = questions.filter(course_code=course_filter)
 
     approved_questions = BattleQuestion.objects.filter(status="approved").select_related(
-        "source_chunk"
+        "source_chunk", "source_lesson"
     ).prefetch_related("options").order_by("course_code", "-created_at")
     if course_filter:
         approved_questions = approved_questions.filter(course_code=course_filter)

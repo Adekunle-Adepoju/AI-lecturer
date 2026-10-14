@@ -8,13 +8,8 @@ from .models import BattleQuestion, StudentQuestionExposure
 EXPOSURE_WINDOW_DAYS = 14
 
 
-def select_match_questions(participant_student_ids, count, levels=("300", "400")):
-    """Random across 300L/400L per the agreed rule — no course selection.
-    Prefers questions no participant has seen recently; falls back to the
-    full approved pool if exposure filtering leaves too few to fill a
-    match. This fallback is the honest state of things right now — with
-    only a handful of approved questions total, exposure filtering will
-    almost always trigger it. It stops mattering once the bank is bigger."""
+def select_match_questions(participant_student_ids, count, levels,
+                           course_codes=None, exclude_ids=()):
     cutoff = timezone.now() - timedelta(days=EXPOSURE_WINDOW_DAYS)
 
     seen_ids = set(
@@ -26,13 +21,17 @@ def select_match_questions(participant_student_ids, count, levels=("300", "400")
 
     base_qs = BattleQuestion.objects.filter(
         status="approved", level__in=levels, question_type="static",
-    ).prefetch_related("options")
+    ).exclude(id__in=list(exclude_ids)).prefetch_related("options")
 
-    pool_list = list(base_qs.exclude(id__in=seen_ids))
-    if len(pool_list) < count:
-        pool_list = list(base_qs)  # exposure filter dropped entirely, not ranked
+    if course_codes:
+        base_qs = base_qs.filter(course_code__in=course_codes)
 
-    random.shuffle(pool_list)
+    # Unseen questions first, then top up with recently seen ones.
+    unseen = list(base_qs.exclude(id__in=seen_ids))
+    seen = list(base_qs.filter(id__in=seen_ids))
+    random.shuffle(unseen)
+    random.shuffle(seen)
+    pool_list = unseen + seen
 
     resolved = []
     for q in pool_list:

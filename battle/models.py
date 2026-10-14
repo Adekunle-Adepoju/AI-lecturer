@@ -1,9 +1,12 @@
 from django.db import models
 from django.contrib.auth.models import User
-from core.models import StudentProfile, SlideTopicChunk
+from core.models import StudentProfile, SlideTopicChunk, PreGeneratedLesson
 
 
-LEVEL_CHOICES = [("300", "300 Level"), ("400", "400 Level")]
+LEVEL_CHOICES = [
+    ("100", "100 Level"), ("200", "200 Level"), ("300", "300 Level"),
+    ("400", "400 Level"), ("500", "500 Level"),
+]
 
 MODE_CHOICES = [
     ("alternating", "Alternating"),
@@ -57,11 +60,33 @@ class BattleQuestion(models.Model):
         related_name="battle_questions",
         help_text="Traceability back to the slide content this question was generated from.",
     )
+    source_lesson = models.ForeignKey(
+        PreGeneratedLesson, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="battle_questions",
+        help_text="The generated lesson this question was written from.",
+    )
+
+    @property
+    def source_text(self):
+        if self.source_lesson_id:
+            return self.source_lesson.content_chunk
+        if self.source_chunk_id:
+            return self.source_chunk.chunk_text
+        return ""
+
+    @property
+    def source_label(self):
+        if self.source_lesson_id:
+            return f"Lesson: {self.source_lesson.topic_title}"
+        if self.source_chunk_id:
+            return f"Slide chunk: {self.source_chunk.topic_name}"
+        return ""
     question_type = models.CharField(max_length=10, choices=QUESTION_TYPE_CHOICES, default="static")
     stem = models.TextField()
     status = models.CharField(max_length=15, choices=QUESTION_STATUS_CHOICES, default="pending_review")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    department = models.CharField(max_length=120, blank=True, db_index=True)
 
     class Meta:
         ordering = ["course_code", "-created_at"]
@@ -143,7 +168,14 @@ class BattleQuestionGenerationChunk(models.Model):
     batch doesn't lose already-generated questions — mirrors the
     SlideTopicSplitChunk pattern used for the lecture pipeline, adapted
     for a standalone manage.py command rather than an HTTP view."""
-    source_chunk = models.ForeignKey(SlideTopicChunk, on_delete=models.CASCADE, related_name="battle_generation_chunks")
+    source_chunk = models.ForeignKey(
+        SlideTopicChunk, null=True, blank=True,
+        on_delete=models.CASCADE, related_name="battle_generation_chunks",
+    )
+    source_lesson = models.OneToOneField(
+        PreGeneratedLesson, null=True, blank=True,
+        on_delete=models.CASCADE, related_name="battle_generation",
+    )
     status = models.CharField(max_length=10, choices=GENERATION_CHUNK_STATUS_CHOICES, default="PENDING")
     questions_generated = models.PositiveIntegerField(default=0)
     error_message = models.TextField(blank=True)
@@ -153,8 +185,7 @@ class BattleQuestionGenerationChunk(models.Model):
         unique_together = ["source_chunk"]
 
     def __str__(self):
-        return f"Generation chunk for {self.source_chunk} ({self.status})"
-
+        return f"Generation chunk for {self.source_chunk or self.source_lesson} ({self.status})"
 
 # ── Rooms and matches ───────────────────────────────────────────────
 
@@ -245,3 +276,20 @@ class BattleMatchPlayer(models.Model):
     class Meta:
         unique_together = ["match", "student"]
         indexes = [models.Index(fields=["student", "won"])]
+
+
+class BattleStats(models.Model):
+    student = models.OneToOneField("core.StudentProfile", on_delete=models.CASCADE, related_name="battle_stats")
+    wins = models.PositiveIntegerField(default=0)
+    losses = models.PositiveIntegerField(default=0)
+    draws = models.PositiveIntegerField(default=0)
+    current_streak = models.PositiveIntegerField(default=0)
+    best_streak = models.PositiveIntegerField(default=0)
+
+    @property
+    def played(self):
+        return self.wins + self.losses + self.draws
+
+    @property
+    def win_rate(self):
+        return round(100 * self.wins / self.played) if self.played else 0
