@@ -25,7 +25,17 @@ from .simulator_bank_prompts import (
     SOURCE_NOTE_LECTURE, SOURCE_NOTE_SLIDE,
 )
 
-MODEL_NAME = "gemini-3.6-flash"
+MODELS = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"]
+MODEL_NAME = MODELS[0]
+ATTEMPTS_PER_MODEL = 3      # 503 only
+RETRY_WAIT_SECONDS = 20
+ALL_KINDS = ("mcq", "theory", "calculation")
+
+
+class AllModelsUnavailable(RuntimeError):
+    """Every model was overloaded or out of quota."""
+class NoCalculableContent(Exception):
+    """The topic has no numbers or formulas to build calculation questions from."""
 MAX_SOURCE_CHARS = 24000
 CALL_GAP_SECONDS = 3.5
 
@@ -55,43 +65,21 @@ def _is_shared_course(course_code):
 
 
 def resolve_topic_source(course_code, level, topic_name):
-    """Returns (source_type, text). A course taught to several departments uses
-    the slide chunk first, because each department has its own lecture wording.
-    Only without a slide chunk does it fall back to one fixed lecture
-    (the earliest course row), never "whichever was edited last"."""
-    shared = _is_shared_course(course_code)
-
-    def from_lecture():
-        ordering = ("course_id", "-updated_at") if shared else ("-updated_at",)
-        lesson = (
-            PreGeneratedLesson.objects
-            .filter(course__course_code=course_code, topic_title=topic_name,
-                    is_published=True, is_truncated=False)
-            .exclude(content_chunk="")
-            .order_by(*ordering)
-            .first()
-        )
-        if lesson and lesson.content_chunk.strip():
-            return "lecture", _cap_source(lesson.content_chunk)
-        return None
-
-    def from_slide():
-        chunk = (
-            SlideTopicChunk.objects
-            .filter(slide__course_code=course_code, slide__level=level, slide__parsed=True,
-                    topic_name=topic_name, is_empty=False)
-            .order_by("-updated_at")
-            .first()
-        )
-        if chunk and chunk.chunk_text.strip():
-            return "slide", _cap_source(chunk.chunk_text)
-        return None
-
-    order = (from_slide, from_lecture) if shared else (from_lecture, from_slide)
-    for getter in order:
-        found = getter()
-        if found:
-            return found
+    """Questions are made only from a published, complete lesson.
+    There is no slide fallback. Where a course is shared between departments,
+    a lesson built from slides is preferred over one built from the outline,
+    then the earliest course row, never "whichever was edited last"."""
+    ordering = ("-source_type", "course_id", "-updated_at")
+    lesson = (
+        PreGeneratedLesson.objects
+        .filter(course__course_code=course_code, topic_title=topic_name,
+                is_published=True, is_truncated=False)
+        .exclude(content_chunk="")
+        .order_by(*ordering)
+        .first()
+    )
+    if lesson and lesson.content_chunk.strip():
+        return "lecture", _cap_source(lesson.content_chunk)
     return "", ""
 
 
@@ -102,44 +90,47 @@ def _render(template, values):
     return re.sub(r"__([A-Z_]+)__", lambda m: values.get(m.group(1), m.group(0)), template)
 
 
-def _call_model(prompt, max_tokens, temperature, label, attempts=5):
+def _call_model(prompt, max_tokens, temperature, label):
     from .views import simulator_client   # lazy: avoids a circular import
-    last_error = None
-    for attempt in range(attempts):
-        try:
-            response = simulator_client.models.generate_content(
-                model=MODEL_NAME,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    max_output_tokens=max_tokens, temperature=temperature,
-                ),
-            )
-            text = response.text
-            if not text or not text.strip():
-                raise ValueError("Empty response")
-            hit_limit = False
+    reasons = []
+    for model in MODELS:
+        for attempt in range(1, ATTEMPTS_PER_MODEL + 1):
             try:
-                hit_limit = "MAX_TOKENS" in str(response.candidates[0].finish_reason)
-            except Exception:
-                pass
-            time.sleep(CALL_GAP_SECONDS)
-            return text, hit_limit
-        except Exception as e:
-            last_error = e
-            s = str(e)
-            rate_limited = "429" in s or "RESOURCE_EXHAUSTED" in s
-            transient = any(m in s for m in (
-                "503", "UNAVAILABLE", "timeout", "Timeout",
-                "ConnectionError", "RemoteDisconnected",
-            ))
-            if (rate_limited or transient) and attempt < attempts - 1:
-                wait = min(20 * (attempt + 1), 90) if rate_limited else min(15 * (2 ** attempt), 120)
-                print(f"{label}: {'rate limit' if rate_limited else 'server busy'} "
-                      f"(attempt {attempt + 1}/{attempts}) — waiting {wait}s...")
-                time.sleep(wait)
-                continue
-            break
-    raise RuntimeError(f"{label} failed: {last_error}")
+                response = simulator_client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        max_output_tokens=max_tokens, temperature=temperature,
+                    ),
+                )
+                text = response.text
+                if not text or not text.strip():
+                    raise ValueError("Empty response")
+                hit_limit = False
+                try:
+                    hit_limit = "MAX_TOKENS" in str(response.candidates[0].finish_reason)
+                except Exception:
+                    pass
+                time.sleep(CALL_GAP_SECONDS)
+                return text, hit_limit
+            except Exception as e:
+                s = str(e)
+                if "429" in s or "RESOURCE_EXHAUSTED" in s:
+                    print(f"{label}: {model} 429, moving to next model", flush=True)
+                    reasons.append(f"{model}: 429")
+                    break
+                if "503" in s or "UNAVAILABLE" in s:
+                    if attempt < ATTEMPTS_PER_MODEL:
+                        print(f"{label}: {model} 503 (try {attempt}/{ATTEMPTS_PER_MODEL}), "
+                              f"waiting {RETRY_WAIT_SECONDS}s...", flush=True)
+                        time.sleep(RETRY_WAIT_SECONDS)
+                        continue
+                    print(f"{label}: {model} still 503 after {ATTEMPTS_PER_MODEL} tries, "
+                          f"moving to next model", flush=True)
+                    reasons.append(f"{model}: 503 x{ATTEMPTS_PER_MODEL}")
+                    break
+                raise RuntimeError(f"{label} failed on {model}: {e}") from e
+    raise AllModelsUnavailable(f"{label}: all models failed (" + "; ".join(reasons) + ")")
 
 
 # ─── Cleaning / structural validation ─────────────────────────────────────────
@@ -282,7 +273,7 @@ def _verify(kind, source_text, items):
 
 # ─── Generate + verify one kind of question ───────────────────────────────────
 
-def _make_verified(kind, ctx, notes):
+def _make_verified(kind, ctx, notes, long_type=None):
     from .views import _repair_and_parse_json_array   # lazy: avoids a circular import
 
     is_mcq = kind == "mcq"
@@ -298,6 +289,17 @@ def _make_verified(kind, ctx, notes):
             "N": str(n),
             "SOURCE": ctx["source_text"],
         })
+        if long_type:
+            prompt += (
+                f"\n\nIMPORTANT: write ONLY {long_type} questions. "
+                f'Every question must have "type": "{long_type}".'
+            )
+        if long_type == "calculation":
+            prompt += (
+                "\n\nIf the source has no numbers, formulas or quantities that a student "
+                "could calculate with, reply with exactly [] and nothing else. "
+                "Do not force a calculation question out of purely descriptive material."
+            )
         text, hit = _call_model(
             prompt, MCQ_MAX_TOKENS if is_mcq else LONG_MAX_TOKENS,
             0.5, f"{kind} generation — {ctx['topic']}",
@@ -308,14 +310,26 @@ def _make_verified(kind, ctx, notes):
     else:
         raise RuntimeError(f"{kind} generation hit the output limit twice — nothing saved")
 
-    raw = _repair_and_parse_json_array(text)
+    try:
+        raw = _repair_and_parse_json_array(text)
+    except ValueError:
+        # the model answered in words instead of a list: for a calculation-only
+        # run, that means it found nothing to calculate
+        if long_type == "calculation" and "[" not in text:
+            raise NoCalculableContent()
+        raise
     if not isinstance(raw, list):
         raise ValueError(f"{kind} generation did not return a JSON array")
+    if long_type == "calculation" and not raw:
+        raise NoCalculableContent()
 
     cleaner = _clean_mcq if is_mcq else _clean_long
     items = []
     for r in raw:
         item, reason = cleaner(r)
+        if item and long_type and item["question_type"] != long_type:
+            notes.append(f"dropped a {item['question_type']} question (asked for {long_type} only)")
+            continue
         if item:
             items.append(item)
         else:
@@ -346,8 +360,15 @@ def _fresh_connection():
 
 
 def process_topic(course_code, course_title, level, topic,
-                  force=False, auto_approve=False, log=print):
-    """Returns 'completed' | 'skipped' | 'no_source' | 'failed'."""
+                  force=False, auto_approve=False, kinds=None, log=print):
+    """Returns 'completed' | 'skipped' | 'no_source' | 'failed'.
+    kinds: any of "mcq", "theory", "calculation". None means all three."""
+    kinds = [k for k in (kinds or ALL_KINDS) if k in ALL_KINDS] or list(ALL_KINDS)
+    want_mcq = "mcq" in kinds
+    long_kinds = [k for k in ("theory", "calculation") if k in kinds]
+    want_long = bool(long_kinds)
+    long_type = long_kinds[0] if len(long_kinds) == 1 else None   # None = a mix of both
+
     row, _ = SimulatorBankTopic.objects.get_or_create(
         course_code=course_code, level=level, topic_name=topic,
     )
@@ -356,13 +377,18 @@ def process_topic(course_code, course_title, level, topic,
     if not source_type:
         row.status = "NO_SOURCE"
         row.source_type = ""
-        row.error_message = "No published lecture and no non-empty slide chunk for this topic."
+        row.error_message = "No published lesson for this topic."
         row.save()
         log(f"  – {topic}: no source yet (coming soon)")
         return "no_source"
 
     source_hash = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
-    if not force and row.status == "COMPLETED" and row.source_hash == source_hash:
+    already_done = (
+        row.status == "COMPLETED" and row.source_hash == source_hash
+        and (not want_mcq or row.mcq_saved > 0)
+        and (not want_long or row.long_saved > 0)
+    )
+    if not force and already_done:
         log(f"  = {topic}: unchanged, skipped")
         return "skipped"
 
@@ -371,9 +397,18 @@ def process_topic(course_code, course_title, level, topic,
         "topic": topic, "source_type": source_type, "source_text": source_text,
     }
     notes = []
+    no_calc = False
     try:
-        mcqs = _make_verified("mcq", ctx, notes)
-        longs = _make_verified("long", ctx, notes)
+        mcqs = _make_verified("mcq", ctx, notes) if want_mcq else []
+        longs = []
+        if want_long:
+            try:
+                longs = _make_verified("long", ctx, notes, long_type)
+            except NoCalculableContent:
+                no_calc = True
+                notes.append("no calculation questions: this topic has no calculable content")
+    except AllModelsUnavailable:
+        raise   # outage: end the job, leave this topic's row as it was
     except Exception as e:
         _fresh_connection()
         row.status = "FAILED"
@@ -383,7 +418,12 @@ def process_topic(course_code, course_title, level, topic,
         return "failed"
     _fresh_connection()
 
-    if len(mcqs) < MIN_MCQ_TO_SAVE and len(longs) < MIN_LONG_TO_SAVE:
+    if no_calc and not want_mcq:
+        log(f"  – {topic}: no calculable content, so no calculation questions were made")
+        return "no_calculation"
+    mcq_ok = want_mcq and len(mcqs) >= MIN_MCQ_TO_SAVE
+    long_ok = want_long and len(longs) >= MIN_LONG_TO_SAVE
+    if not (mcq_ok or long_ok):
         row.status = "FAILED"
         row.error_message = (
             f"Too few questions survived verification "
@@ -395,9 +435,11 @@ def process_topic(course_code, course_title, level, topic,
         return "failed"
 
     status = "approved" if auto_approve else "pending_review"
+    replaced_types = (["mcq"] if mcqs else []) + (long_kinds if longs else [])
     with transaction.atomic():
         SimulatorQuestion.objects.filter(
             course_code=course_code, level=level, topic_name=topic,
+            question_type__in=replaced_types,
         ).exclude(status="retired").update(status="retired")
         for item in mcqs + longs:
             SimulatorQuestion.objects.create(
@@ -411,8 +453,10 @@ def process_topic(course_code, course_title, level, topic,
         row.status = "COMPLETED"
         row.source_type = source_type
         row.source_hash = source_hash
-        row.mcq_saved = len(mcqs)
-        row.long_saved = len(longs)
+        if mcqs:
+            row.mcq_saved = len(mcqs)
+        if longs:
+            row.long_saved = len(longs)
         row.error_message = " | ".join(notes[:6])[:1000]
         row.save()
 
@@ -423,7 +467,7 @@ def process_topic(course_code, course_title, level, topic,
 # ─── One course ───────────────────────────────────────────────────────────────
 
 def run_bank_generation(course_code, level, topics=None, force=False,
-                        auto_approve=False, limit=None, log=print):
+                        auto_approve=False, kinds=None, limit=None, log=print):
     """Generate the bank for every topic in the course's lecture topic list
     (same list the lectures use). Safe to re-run: finished topics whose
     source hasn't changed are skipped. `limit` caps API-consuming topics
@@ -435,7 +479,7 @@ def run_bank_generation(course_code, level, topics=None, force=False,
 
     targets = [t for t in _get_total_topics_for_course(course_code, level)
                if not topics or t in topics]
-    summary = {"completed": 0, "skipped": 0, "no_source": 0, "failed": 0}
+    summary = {"completed": 0, "skipped": 0, "no_source": 0, "failed": 0, "no_calculation": 0}
     log(f"{course_code} ({level}L): {len(targets)} topic(s)")
 
     used = 0
@@ -444,7 +488,8 @@ def run_bank_generation(course_code, level, topics=None, force=False,
             log("Limit reached — run again to continue.")
             break
         outcome = process_topic(course_code, course_title, level, topic,
-                                force=force, auto_approve=auto_approve, log=log)
+                                force=force, auto_approve=auto_approve,
+                                kinds=kinds, log=log)
         summary[outcome] += 1
         if outcome in ("completed", "failed"):
             used += 1

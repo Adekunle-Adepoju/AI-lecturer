@@ -28,7 +28,7 @@ from django.db.models import F, Count
 from django.db import transaction
 from django_q.tasks import async_task
 from .simulator_draw import draw_test, NotEnoughQuestions, TEST_MODES
-from .simulator_bank import get_topic_availability, process_topic
+from .simulator_bank import get_topic_availability, process_topic, resolve_topic_source
 from .simulator_bank_prompts import SIMULATOR_STRICT_GRADING_PROMPT
 from django_q.models import Task, OrmQ
 from .departments import siwes_applies
@@ -3288,6 +3288,17 @@ def staff_sim_bank_view(request):
             q = get_object_or_404(SimulatorQuestion, id=request.POST.get("question_id"))
             q.status = {"approve": "approved", "unapprove": "pending_review", "retire": "retired"}[action]
             q.save(update_fields=["status", "updated_at"])
+        elif action in ("bulk_approve", "bulk_unapprove", "bulk_retire"):
+            ids = [int(i) for i in request.POST.getlist("question_ids") if i.isdigit()]
+            new_status, label = {
+                "bulk_approve": ("approved", "Approved"),
+                "bulk_unapprove": ("pending_review", "Moved to pending"),
+                "bulk_retire": ("retired", "Retired"),
+            }[action]
+            n = SimulatorQuestion.objects.filter(
+                id__in=ids, course_code=course_code,
+            ).update(status=new_status, updated_at=timezone.now())
+            messages.success(request, f"{label} {n} question(s).")
         elif action == "approve_all":
             n = SimulatorQuestion.objects.filter(
                 course_code=course_code, status="pending_review", verified=True,
@@ -3295,9 +3306,10 @@ def staff_sim_bank_view(request):
             messages.success(request, f"Approved {n} question(s) for {course_code}.")
         elif action == "generate_topic":
             topic = request.POST.get("topic", "")
+            kinds = request.POST.getlist("kinds") or None
             _queue(
                 request, "generate_sim_topic",
-                course_code, topic, request.POST.get("force") == "1",
+                course_code, topic, request.POST.get("force") == "1", kinds,
                 label=f"Sim bank {course_code}: {topic[:60]}",
             )
         return redirect(f"{list_url}?course_code={course_code}&status={status}")
@@ -3323,6 +3335,7 @@ def staff_sim_bank_view(request):
                 "topic": t, "state": states.get(t),
                 "pending": counts.get((t, "pending_review"), 0),
                 "approved": counts.get((t, "approved"), 0),
+                "has_source": bool(resolve_topic_source(course_code, level, t)[0]),
             })
         questions = SimulatorQuestion.objects.filter(
             course_code=course_code, status=status,

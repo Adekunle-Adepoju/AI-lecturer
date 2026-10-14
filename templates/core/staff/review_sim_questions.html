@@ -1,7 +1,7 @@
 {% extends "core/base.html" %}
 {% block title %}Question Bank — Staff{% endblock %}
 {% block content %}
-<div class="page-container">
+<div class="page-container" style="max-width:1100px">
   <h2>Simulator question bank</h2>
 
   {% for message in messages %}
@@ -22,29 +22,58 @@
 
   {% if course_code %}
   <h3>Topics</h3>
-  <div style="overflow-x:auto">
+    <div id="kinds-picker" style="margin:12px 0; font-size:13px">
+    <strong>Question types to generate:</strong>
+    <label style="margin-left:12px"><input type="checkbox" value="mcq" checked> Multiple choice</label>
+    <label style="margin-left:12px"><input type="checkbox" value="theory" checked> Theory</label>
+    <label style="margin-left:12px"><input type="checkbox" value="calculation" checked> Calculation</label>
+  </div>
+  <script>
+  function addKinds(form) {
+    var boxes = document.querySelectorAll('#kinds-picker input:checked');
+    if (!boxes.length) { alert('Pick at least one question type.'); return false; }
+    if (!confirm('Generate the selected types for this topic? It takes about a minute per type.')) return false;
+    form.querySelectorAll('input[name=kinds]').forEach(function (e) { e.remove(); });
+    boxes.forEach(function (b) {
+      var i = document.createElement('input');
+      i.type = 'hidden'; i.name = 'kinds'; i.value = b.value;
+      form.appendChild(i);
+    });
+    return true;
+  }
+  </script>
+    <div style="overflow-x:auto">
   <table style="width:100%; font-size:13px; border-collapse:collapse">
-    <tr style="text-align:left; color:var(--text-muted)"><th>Topic</th><th>State</th><th>Pending</th><th>Approved</th><th>Note</th><th></th></tr>
+    <tr style="text-align:left; color:var(--text-muted)">
+      <th style="padding:8px 12px">Topic</th>
+      <th style="padding:8px 12px; white-space:nowrap">State</th>
+      <th style="padding:8px 12px; text-align:center">Pending</th>
+      <th style="padding:8px 12px; text-align:center">Approved</th>
+      <th style="padding:8px 12px">Note</th>
+      <th style="padding:8px 12px"></th>
+    </tr>
     {% for r in topic_rows %}
     <tr style="border-top:1px solid var(--border)">
-      <td style="padding:8px 6px">{{ r.topic }}</td>
-      <td>{% if r.state %}{{ r.state.status }}{% else %}not generated{% endif %}</td>
-      <td>{{ r.pending }}</td>
-      <td>{{ r.approved }}</td>
-      <td style="max-width:260px; color:var(--text-muted)">{{ r.state.error_message|default:""|truncatechars:90 }}</td>
-      <td>
-        {% if not r.state or r.state.status != "NO_SOURCE" %}
+      <td style="padding:12px; min-width:220px; line-height:1.4">{{ r.topic }}</td>
+      <td style="padding:12px; white-space:nowrap">{% if r.state %}{{ r.state.status }}{% else %}not generated{% endif %}</td>
+      <td style="padding:12px; text-align:center">{{ r.pending }}</td>
+      <td style="padding:12px; text-align:center">{{ r.approved }}</td>
+      <td style="padding:12px; max-width:220px; font-size:12px; color:var(--text-muted)" title="{{ r.state.error_message|default:'' }}">{{ r.state.error_message|default:""|truncatechars:60 }}</td>
+      <td style="padding:12px; white-space:nowrap">
+        {% if r.has_source %}
         <form method="POST" style="margin:0">{% csrf_token %}
           <input type="hidden" name="action" value="generate_topic">
           <input type="hidden" name="course_code" value="{{ course_code }}">
           <input type="hidden" name="status" value="{{ status }}">
           <input type="hidden" name="topic" value="{{ r.topic }}">
           <button class="btn btn-white-outline" style="padding:4px 10px; font-size:12px"
-                  onclick="return confirm('Generate this topic? It takes about a minute.')">
+                  onclick="return addKinds(this.form)">
             {% if r.state and r.state.status == "COMPLETED" %}Regenerate{% else %}Generate{% endif %}
           </button>
           {% if r.state and r.state.status == "COMPLETED" %}<input type="hidden" name="force" value="1">{% endif %}
         </form>
+        {% else %}
+        <span style="font-size:12px; color:var(--text-muted)">No published lesson</span>
         {% endif %}
       </td>
     </tr>
@@ -62,9 +91,30 @@
   {% endif %}
 
   <h3 style="margin-top:24px">Questions — {{ status }} ({{ questions|length }})</h3>
+    {% if questions %}
+  <form method="POST" id="bulk-form" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-md); padding:10px 14px; margin:12px 0">
+    {% csrf_token %}
+    <input type="hidden" name="course_code" value="{{ course_code }}">
+    <input type="hidden" name="status" value="{{ status }}">
+    <label style="font-size:13px; display:flex; gap:6px; align-items:center">
+      <input type="checkbox" id="select-all" style="width:18px; height:18px"> Select all
+    </label>
+    <span id="selected-count" style="font-size:13px; color:var(--text-muted); margin-right:auto">0 selected</span>
+    {% if status != "approved" %}
+    <button name="action" value="bulk_approve" class="btn btn-primary" style="padding:5px 12px; font-size:12px" onclick="return confirmBulk(this)">Approve selected</button>
+    {% endif %}
+    {% if status == "approved" %}
+    <button name="action" value="bulk_unapprove" class="btn btn-white-outline" style="padding:5px 12px; font-size:12px" onclick="return confirmBulk(this)">Move selected to pending</button>
+    {% endif %}
+    {% if status != "retired" %}
+    <button name="action" value="bulk_retire" class="btn btn-white-outline" style="padding:5px 12px; font-size:12px" onclick="return confirmBulk(this)">Retire selected</button>
+    {% endif %}
+  </form>
+  {% endif %}
   {% for q in questions %}
   <div style="background:var(--navy-card); border:1px solid var(--border); border-radius:var(--radius-xl); padding:1.1rem 1.3rem; margin-bottom:12px">
     <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px">
+      <input type="checkbox" class="pick" name="question_ids" value="{{ q.id }}" form="bulk-form" style="width:18px; height:18px; margin-right:8px; vertical-align:middle">
       {{ q.topic_name }} · {{ q.question_type }} · {{ q.cognitive_level }} · {{ q.marks }} marks · from {{ q.source_type }}
     </div>
     <p style="font-weight:600; margin:0 0 10px">{{ q.content.question }}</p>
@@ -112,4 +162,27 @@
   {% endfor %}
   {% endif %}
 </div>
+<script>
+(function () {
+  var all = document.getElementById('select-all');
+  if (!all) return;
+  var picks = document.querySelectorAll('.pick');
+  var counter = document.getElementById('selected-count');
+  function update() {
+    var n = document.querySelectorAll('.pick:checked').length;
+    counter.textContent = n + ' selected';
+    all.checked = n === picks.length && n > 0;
+  }
+  all.addEventListener('change', function () {
+    picks.forEach(function (p) { p.checked = all.checked; });
+    update();
+  });
+  picks.forEach(function (p) { p.addEventListener('change', update); });
+})();
+function confirmBulk(btn) {
+  var n = document.querySelectorAll('.pick:checked').length;
+  if (!n) { alert('Select at least one question first.'); return false; }
+  return confirm(btn.textContent.trim() + ' (' + n + ' question(s))?');
+}
+</script>
 {% endblock %}

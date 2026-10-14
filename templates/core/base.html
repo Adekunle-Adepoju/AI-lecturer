@@ -255,6 +255,21 @@
     @media(prefers-reduced-motion:reduce){
       #sitePreloader .dp-mark,#sitePreloader .dp-bar-fill{animation:none;}
     }
+        /* ---------- in-app dialog (replaces the browser's confirm/alert) ---------- */
+    .rv-dialog-overlay{
+      position:fixed; inset:0; z-index:10001;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.6); backdrop-filter:blur(2px); padding:16px;
+    }
+    .rv-dialog-overlay[hidden]{ display:none !important; }
+    .rv-dialog{
+      background:var(--navy-card); color:var(--text);
+      border:1px solid var(--border); border-radius:14px;
+      padding:24px; width:100%; max-width:380px;
+      box-shadow:0 12px 40px rgba(0,0,0,.35);
+    }
+    .rv-dialog p{ margin:0 0 20px; font-size:.95rem; line-height:1.5; white-space:pre-line; }
+    .rv-dialog-actions{ display:flex; gap:10px; justify-content:flex-end; }
   </style>
 
   <script>
@@ -780,11 +795,14 @@ window.RoveaFocusSprint = (function(){
     }
 
     if (message) {
-      var proceed = confirm(message);
-      if (!proceed) {
-        history.pushState({ roveaBackGuard: true }, '', location.href);
-        return;
-      }
+      roveaConfirm(message).then(function (proceed) {
+        if (!proceed) {
+          history.pushState({ roveaBackGuard: true }, '', location.href);
+          return;
+        }
+        if (backTarget) window.location.replace(backTarget);
+      });
+      return;
     }
 
     if (backTarget) {
@@ -807,6 +825,88 @@ window.RoveaFocusSprint = (function(){
       setTimeout(() => el.remove(), 1150);
     }
   };
+</script>
+<div id="roveaDialog" class="rv-dialog-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="roveaDialogMsg">
+  <div class="rv-dialog">
+    <p id="roveaDialogMsg"></p>
+    <div class="rv-dialog-actions">
+      <button type="button" id="roveaDialogCancel" class="btn btn-white-outline">Cancel</button>
+      <button type="button" id="roveaDialogOk" class="btn btn-primary">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var overlay = document.getElementById('roveaDialog');
+  var msgEl = document.getElementById('roveaDialogMsg');
+  var okBtn = document.getElementById('roveaDialogOk');
+  var cancelBtn = document.getElementById('roveaDialogCancel');
+  var nativeConfirm = window.confirm.bind(window);
+  var onClose = null;
+  var lastFocus = null;
+  var bypass = false;
+
+  function open(message, isAlert, done) {
+    lastFocus = document.activeElement;
+    msgEl.textContent = message == null ? '' : String(message);
+    cancelBtn.style.display = isAlert ? 'none' : '';
+    okBtn.textContent = isAlert ? 'Got it' : 'OK';
+    onClose = done;
+    overlay.hidden = false;
+    okBtn.focus();
+  }
+
+  function close(result) {
+    overlay.hidden = true;
+    var cb = onClose;
+    onClose = null;
+    if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
+    if (cb) cb(result);
+  }
+
+  okBtn.addEventListener('click', function () { close(true); });
+  cancelBtn.addEventListener('click', function () { close(false); });
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) close(false); });
+  document.addEventListener('keydown', function (e) {
+    if (!overlay.hidden && e.key === 'Escape') { e.preventDefault(); close(false); }
+  });
+
+  // For new code: roveaConfirm("Sure?").then(function (ok) { ... })
+  window.roveaConfirm = function (message) {
+    return new Promise(function (resolve) { open(message, false, resolve); });
+  };
+  window.roveaAlert = function (message) {
+    return new Promise(function (resolve) { open(message, true, resolve); });
+  };
+
+  window.alert = function (message) { window.roveaAlert(message); };
+
+  // Existing code asks confirm() and expects an instant answer. The popup can't
+  // answer instantly, so: say "no" for now, show the popup, and if the person
+  // presses OK, repeat their click (or form submit) with the answer already "yes".
+  window.confirm = function (message) {
+    if (bypass) return true;
+    var ev = window.event;
+    var el = ev && (ev.currentTarget || ev.target);
+    var replay = null;
+    if (ev && el && el.nodeType === 1) {
+      if (ev.type === 'submit' && typeof el.requestSubmit === 'function') {
+        var submitter = ev.submitter || undefined;
+        replay = function () { el.requestSubmit(submitter); };
+      } else if (ev.type === 'click' && typeof el.click === 'function') {
+        replay = function () { el.click(); };
+      }
+    }
+    if (!replay) return nativeConfirm(message);   // safety net: nothing breaks
+    open(message, false, function (ok) {
+      if (!ok) return;
+      bypass = true;
+      try { replay(); } finally { bypass = false; }
+    });
+    return false;
+  };
+})();
 </script>
 </body>
 </html>

@@ -398,7 +398,7 @@ def generate_battle_questions(level, department, course_code, retry_failed, limi
     return msg
 
 
-def generate_sim_topic(course_code, topic, force=False):
+def generate_sim_topic(course_code, topic, force=False, kinds=None):
     _fresh_db()
     from .models import CourseDefinition
     from .simulator_bank import process_topic
@@ -409,7 +409,7 @@ def generate_sim_topic(course_code, topic, force=False):
     logs = []
     outcome = process_topic(
         course.course_code, course.course_title, course.level, topic,
-        force=force, log=logs.append,
+        force=force, kinds=kinds, log=logs.append,
     )
     return " ".join(l.strip() for l in logs) or str(outcome)
 
