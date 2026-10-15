@@ -308,33 +308,50 @@
   #sessionRoot .lecture-img{cursor:zoom-in;transition:opacity .15s var(--ease);}
 #sessionRoot .lecture-img:active{opacity:.85;}
 
-#img-lightbox{
-  display:none;position:fixed;inset:0;z-index:9999;
-  background:rgba(0,0,0,.92);
-  align-items:center;justify-content:center;
-  padding:20px;cursor:zoom-out;
-  animation:sFade .15s var(--ease);
+/* ── Zoomable diagrams + viewer ── */
+#sessionRoot .zoomable{position:relative;cursor:zoom-in;border-radius:12px;margin:10px 0;-webkit-tap-highlight-color:transparent;}
+#sessionRoot .zoomable::after{
+  content:"⤢ Tap to zoom";position:absolute;right:8px;bottom:8px;
+  font-size:.68rem;font-weight:600;padding:4px 10px;border-radius:999px;
+  background:rgba(0,0,0,.6);color:#fff;pointer-events:none;
 }
-#img-lightbox.open{display:flex;}
-#img-lightbox img{
-  max-width:100%;max-height:100%;
-  border-radius:8px;
-  object-fit:contain;
+
+.zv{position:fixed;inset:0;z-index:9999;background:rgba(5,10,18,.96);display:flex;animation:sFade .15s var(--ease,ease);}
+.zv[hidden]{display:none;}
+.zv-stage{flex:1;position:relative;overflow:hidden;touch-action:none;cursor:grab;}
+.zv-stage.dragging{cursor:grabbing;}
+.zv-content{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform;}
+.zv-content svg,.zv-content img{display:block;max-width:none !important;border-radius:10px;}
+.zv-bar{
+  position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(18px + env(safe-area-inset-bottom,0px));
+  display:flex;gap:6px;padding:6px;border-radius:999px;
+  background:rgba(255,255,255,.12);backdrop-filter:blur(6px);
 }
-#img-lightbox .lightbox-close{
-  position:fixed;top:16px;right:16px;
-  width:38px;height:38px;border-radius:50%;
-  background:rgba(255,255,255,.12);border:none;
-  color:#fff;font-size:20px;line-height:1;
-  display:flex;align-items:center;justify-content:center;
-  cursor:pointer;
+.zv-bar button,.zv-close{
+  min-width:44px;height:44px;border:none;border-radius:999px;padding:0 14px;
+  background:rgba(255,255,255,.14);color:#fff;font-size:20px;font-weight:600;cursor:pointer;
 }
+.zv-bar button:active,.zv-close:active{background:rgba(255,255,255,.3);}
+.zv-bar #zv-reset{font-size:.85rem;}
+.zv-close{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));right:14px;width:44px;padding:0;font-size:26px;line-height:1;}
+
+/* Tables: scroll sideways instead of squeezing words apart ("Feat/ures") */
+#sessionRoot .msg-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px 0;}
+#sessionRoot .msg-bubble .msg-table{width:max-content;min-width:100%;margin:0;}
+#sessionRoot .msg-bubble .msg-table th,
+#sessionRoot .msg-bubble .msg-table td{min-width:96px;overflow-wrap:normal;word-break:normal;}
 </style>
 
 <div class="page-container" id="sessionRoot" data-theme="dark">
-  <div id="img-lightbox">
-  <button type="button" class="lightbox-close" aria-label="Close">&times;</button>
-  <img id="img-lightbox-img" src="" alt="Full-size illustration">
+  <div id="zoom-viewer" class="zv" hidden role="dialog" aria-modal="true" aria-label="Enlarged view">
+  <div class="zv-stage" id="zv-stage"><div class="zv-content" id="zv-content"></div></div>
+  <div class="zv-bar">
+    <button type="button" id="zv-out" aria-label="Zoom out">−</button>
+    <button type="button" id="zv-reset" aria-label="Fit to screen">Fit</button>
+    <button type="button" id="zv-in" aria-label="Zoom in">+</button>
+  </div>
+  <button type="button" class="zv-close" id="zv-close" aria-label="Close">&times;</button>
 </div> 
 
   <div class="session-header">
@@ -664,19 +681,195 @@
     chatWindow.scrollTop = chatWindow.scrollHeight;
   }
 
-    // ── Lightbox for lecture images ──────────────────────────────────────────
-  const lightbox = document.getElementById("img-lightbox");
-  const lightboxImg = document.getElementById("img-lightbox-img");
+   
+ // ── Zoom viewer: diagrams, charts and lecture images ─────────────────────
+const zv = document.getElementById("zoom-viewer");
+const zvStage = document.getElementById("zv-stage");
+const zvContent = document.getElementById("zv-content");
+const zvState = { s: 1, x: 0, y: 0, w: 1, h: 1, fit: 1 };
+let zvOpen = false, zvSwallowPop = false, zvPrevOverflow = "";
 
-  function openLightbox(src) {
-    lightboxImg.src = src;
-    lightbox.classList.add("open");
+function zvApply() {
+  zvContent.style.transform = `translate(${zvState.x}px, ${zvState.y}px) scale(${zvState.s})`;
+}
+function zvFit() {
+  const r = zvStage.getBoundingClientRect();
+  const s = Math.min(r.width / zvState.w, r.height / zvState.h) * 0.95;
+  zvState.fit = s; zvState.s = s;
+  zvState.x = (r.width - zvState.w * s) / 2;
+  zvState.y = (r.height - zvState.h * s) / 2;
+  zvApply();
+}
+function zvZoomAt(cx, cy, next) {
+  const r = zvStage.getBoundingClientRect();
+  const s = Math.min(Math.max(next, zvState.fit * 0.5), Math.max(zvState.fit * 10, 6));
+  const px = cx - r.left, py = cy - r.top;
+  zvState.x = px - (px - zvState.x) * (s / zvState.s);
+  zvState.y = py - (py - zvState.y) * (s / zvState.s);
+  zvState.s = s;
+  zvApply();
+}
+function zvZoomCenter(factor) {
+  const r = zvStage.getBoundingClientRect();
+  zvZoomAt(r.left + r.width / 2, r.top + r.height / 2, zvState.s * factor);
+}
+function zvToggle(cx, cy) {
+  if (zvState.s < zvState.fit * 1.5) zvZoomAt(cx, cy, Math.max(1, zvState.fit * 2.5));
+  else zvFit();
+}
+
+async function openViewer(src) {
+  if (zvOpen) return;
+  let el, w, h;
+  if (src instanceof SVGElement) {
+    el = src.cloneNode(true);
+    const vb = src.viewBox && src.viewBox.baseVal;
+    const box = src.getBoundingClientRect();
+    w = vb && vb.width ? vb.width : (box.width || 600);
+    h = vb && vb.height ? vb.height : (box.height || 400);
+    el.removeAttribute("style");            // drops Mermaid's max-width cap
+    el.setAttribute("width", w);
+    el.setAttribute("height", h);
+    el.style.background = "#0f1b2d";
+  } else if (src instanceof HTMLCanvasElement) {
+    el = new Image();
+    el.src = src.toDataURL("image/png");
+    w = src.width; h = src.height;
+    el.style.cssText = `width:${w}px;height:${h}px;background:#0f1b2d;`;
+  } else {
+    el = new Image();
+    el.src = src.currentSrc || src.src;
+    try { await el.decode(); } catch (e) {}
+    w = el.naturalWidth || src.naturalWidth || 800;
+    h = el.naturalHeight || src.naturalHeight || 600;
+    el.style.cssText = `width:${w}px;height:${h}px;`;
   }
-  function closeLightbox() {
-    lightbox.classList.remove("open");
-    lightboxImg.src = "";
+  zvContent.replaceChildren(el);
+  zvContent.style.width = w + "px";
+  zvContent.style.height = h + "px";
+  zvState.w = w; zvState.h = h;
+
+  zv.hidden = false;
+  zvOpen = true;
+  zvPrevOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+  history.pushState({ zoomViewer: true }, "", location.href);   // so Back closes the viewer
+  zvFit();
+}
+
+function closeViewer(fromPop) {
+  if (!zvOpen) return;
+  zvOpen = false;
+  zv.hidden = true;
+  zvContent.replaceChildren();
+  document.body.style.overflow = zvPrevOverflow;
+  if (!fromPop) { zvSwallowPop = true; history.back(); }
+}
+
+// Capture phase so this runs before the "Leave this lecture?" back-guard in base.html
+window.addEventListener("popstate", (e) => {
+  if (zvOpen) { e.stopImmediatePropagation(); closeViewer(true); }
+  else if (zvSwallowPop) { zvSwallowPop = false; e.stopImmediatePropagation(); }
+}, true);
+
+document.addEventListener("keydown", (e) => { if (zvOpen && e.key === "Escape") closeViewer(false); });
+document.getElementById("zv-close").addEventListener("click", () => closeViewer(false));
+document.getElementById("zv-in").addEventListener("click", () => zvZoomCenter(1.4));
+document.getElementById("zv-out").addEventListener("click", () => zvZoomCenter(1 / 1.4));
+document.getElementById("zv-reset").addEventListener("click", zvFit);
+
+// Mouse wheel (desktop)
+zvStage.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  zvZoomAt(e.clientX, e.clientY, zvState.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
+}, { passive: false });
+
+// Drag to pan, two fingers to pinch, double-tap to zoom
+const zvPtrs = new Map();
+let zvLastDist = 0, zvLastMid = null, zvDown = null, zvMoved = false, zvLastTap = 0;
+
+zvStage.addEventListener("pointerdown", (e) => {
+  zvStage.setPointerCapture(e.pointerId);
+  zvPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (zvPtrs.size === 1) { zvDown = { x: e.clientX, y: e.clientY }; zvMoved = false; }
+  if (zvPtrs.size === 2) {
+    zvMoved = true;
+    const [a, b] = [...zvPtrs.values()];
+    zvLastDist = Math.hypot(a.x - b.x, a.y - b.y);
+    zvLastMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
-  lightbox.addEventListener("click", closeLightbox);
+  zvStage.classList.add("dragging");
+});
+
+zvStage.addEventListener("pointermove", (e) => {
+  const prev = zvPtrs.get(e.pointerId);
+  if (!prev) return;
+  const cur = { x: e.clientX, y: e.clientY };
+  zvPtrs.set(e.pointerId, cur);
+  if (zvPtrs.size === 1) {
+    if (zvDown && Math.hypot(cur.x - zvDown.x, cur.y - zvDown.y) > 8) zvMoved = true;
+    zvState.x += cur.x - prev.x;
+    zvState.y += cur.y - prev.y;
+    zvApply();
+  } else if (zvPtrs.size === 2) {
+    const [a, b] = [...zvPtrs.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    zvState.x += mid.x - zvLastMid.x;
+    zvState.y += mid.y - zvLastMid.y;
+    if (zvLastDist) zvZoomAt(mid.x, mid.y, zvState.s * d / zvLastDist);
+    zvLastDist = d; zvLastMid = mid;
+  }
+});
+
+function zvEnd(e) {
+  if (!zvPtrs.has(e.pointerId)) return;
+  zvPtrs.delete(e.pointerId);
+  if (zvPtrs.size < 2) zvLastDist = 0;
+  if (zvPtrs.size === 0) {
+    zvStage.classList.remove("dragging");
+    if (e.type === "pointerup" && !zvMoved) {
+      const now = Date.now();
+      if (now - zvLastTap < 300) { zvLastTap = 0; zvToggle(e.clientX, e.clientY); }
+      else zvLastTap = now;
+    }
+  }
+}
+zvStage.addEventListener("pointerup", zvEnd);
+zvStage.addEventListener("pointercancel", zvEnd);
+
+// Wraps any rendered visual so tapping it opens the viewer
+function makeZoomable(node) {
+  if (!node || node.nodeType !== 1) return node;
+  let host = node;
+  if (node.matches("svg, canvas, img")) {
+    host = document.createElement("div");
+    host.appendChild(node);
+  }
+
+  const sync = () => {
+    const has = !!host.querySelector("svg, canvas, img");
+    host.classList.toggle("zoomable", has);
+    host.tabIndex = has ? 0 : -1;
+    if (has) host.setAttribute("role", "button");
+    else host.removeAttribute("role");
+  };
+  sync();
+  new MutationObserver(sync).observe(host, { childList: true, subtree: true });
+
+  const open = () => {
+    const target = host.querySelector("svg, canvas, img");
+    if (target) openViewer(target);
+  };
+  host.addEventListener("click", open);
+  host.addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && host.classList.contains("zoomable")) {
+      e.preventDefault();
+      open();
+    }
+  });
+  return host;
+}
 
   function createLectureImage(url) {
     const img = document.createElement("img");
@@ -684,7 +877,7 @@
     img.alt = "Lecture illustration";
     img.className = "lecture-img";
     img.style.cssText = "max-width:100%;border-radius:12px;margin-top:12px;display:block;";
-    img.addEventListener("click", () => openLightbox(url));
+    img.addEventListener("click", () => openViewer(img));
     return img;
   }
 
@@ -832,6 +1025,7 @@
   html = html.replace(/\u0001TBL\u0001([\s\S]*?)\u0001\/TBL\u0001/g, (_, inner) => `<table class="msg-table">${inner}</table>`);
   html = html.replace(/\u0001CODE\u0001([\s\S]*?)\u0001\/CODE\u0001/g, (_, inner) => `<pre class="msg-code"><code>${inner.replace(/\u0002NL\u0002/g, "\n")}</code></pre>`);
   html = html.replace(/\u0000MATH-(\d+)-\u0000/g, (_, i) => mathSpans[Number(i)]);
+  html = html.replace(/\u0001TBL\u0001([\s\S]*?)\u0001\/TBL\u0001/g, (_, inner) => `<div class="msg-table-wrap"><table class="msg-table">${inner}</table></div>`);
   return html;
 }
 
@@ -872,7 +1066,7 @@ function fillAiBubble(bubble, rawText) {
       if (seg.type === "json_chart") node = renderJsonChart(seg.raw);
       else if (seg.type === "mermaid") node = renderMermaid(seg.raw);
       else if (seg.type === "svg") node = renderSvg(seg.raw);
-      if (node) bubble.appendChild(node);
+      if (node) bubble.appendChild(makeZoomable(node));
     }
   });
 
