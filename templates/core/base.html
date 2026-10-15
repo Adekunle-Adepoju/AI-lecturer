@@ -66,6 +66,7 @@
         background:var(--navy-card); border-top:1px solid var(--border);
         padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
         justify-content:space-around;
+        .nav-drawer-footer{ display:none; }
       }
       #mobileTabBar a{
         display:flex; flex-direction:column; align-items:center; gap:3px;
@@ -826,6 +827,383 @@ window.RoveaFocusSprint = (function(){
     }
   };
 </script>
+{% if user.is_authenticated and user.profile %}
+<style>
+  #rmBtn{
+    position:fixed; right:24px; bottom:80px; z-index:98; width:46px; height:46px;
+    border-radius:50%; border:none; cursor:pointer; background:var(--amber); color:#0D1B2A;
+    font-size:1.2rem; box-shadow:0 4px 12px rgba(0,0,0,.2);
+  }
+  #rmDot{
+    position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 4px;
+    border-radius:99px; background:#e05252; color:#fff; font-size:.65rem; line-height:16px; font-weight:700;
+  }
+  #rmPanel{
+    position:fixed; right:24px; bottom:136px; z-index:98; width:340px; max-width:calc(100vw - 32px);
+    height:460px; max-height:calc(100vh - 160px); display:flex; flex-direction:column;
+    background:var(--navy-card); color:var(--text); border:1px solid var(--border);
+    border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.35); overflow:hidden;
+  }
+  #rmPanel[hidden], #rmRoom[hidden], .rm-tabpane[hidden]{ display:none !important; }
+  @media(max-width:640px){
+    #rmBtn{ right:16px; bottom:132px; }
+    #rmPanel{ left:8px; right:8px; width:auto; max-width:none; bottom:184px; max-height:calc(100vh - 260px); }
+  }
+  .rm-head{ display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--border); }
+  .rm-head strong{ flex:1; font-size:.95rem; }
+  #rmClose{ background:none; border:1px solid var(--border); color:var(--text-secondary); border-radius:50%; width:28px; height:28px; cursor:pointer; }
+  .rm-msg{ padding:8px 14px; font-size:.82rem; background:var(--amber-glow); border-bottom:1px solid var(--border); }
+  .rm-scroll{ overflow-y:auto; padding:14px; flex:1; min-height:0; }
+  .rm-hint{ font-size:.82rem; color:var(--text-muted); margin:0 0 10px; }
+  .rm-row{ display:flex; align-items:center; gap:8px; margin:0 0 8px; font-size:.85rem; }
+  .rm-grow{ flex:1; min-width:0; overflow-wrap:anywhere; }
+  .rm-pill{ font-size:.7rem; padding:2px 8px; border-radius:99px; border:1px solid var(--border); color:var(--text-muted); white-space:nowrap; }
+  .rm-focusing, .rm-finished{ color:#1A9E7A; border-color:#1A9E7A; }
+  .rm-away{ color:var(--amber); border-color:var(--amber); }
+  #rmRoom{ flex:1; min-height:0; display:flex; flex-direction:column; }
+  .rm-tabs{ display:flex; border-bottom:1px solid var(--border); }
+  .rm-tabs button{ flex:1; padding:9px; background:none; border:none; border-bottom:2px solid transparent; color:var(--text-muted); cursor:pointer; font-size:.85rem; }
+  .rm-tabs button.active{ color:var(--amber); border-bottom-color:var(--amber); }
+  .rm-tabpane{ flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+  .rm-chat{ flex:1; overflow-y:auto; padding:12px 14px; font-size:.88rem; }
+  .rm-line{ margin:0 0 6px; overflow-wrap:anywhere; }
+  .rm-line.me b{ color:var(--amber); }
+  .rm-form{ display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--border); }
+  #rmSearchForm{ border-top:none; padding:0; margin-bottom:8px; }
+  .rm-input{ flex:1; min-width:0; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--navy-raised); color:var(--text); font-size:.85rem; }
+  .rm-sub{ margin:14px 0 8px; font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); }
+</style>
+
+<button type="button" id="rmBtn" aria-label="Study rooms">💬<span id="rmDot" hidden></span></button>
+
+<div id="rmPanel" hidden>
+  <div class="rm-head">
+    <strong id="rmTitle">Study rooms</strong>
+    <button type="button" id="rmClose" aria-label="Close">✖</button>
+  </div>
+  <div id="rmMsg" class="rm-msg" hidden></div>
+
+  <div id="rmLobby" class="rm-scroll">
+    <p class="rm-hint">Study with up to 10 classmates. Chat, then run a focus round together.</p>
+    <button type="button" id="rmCreate" class="btn btn-primary" style="width:100%;margin-bottom:14px;">Create a room</button>
+    <div id="rmInvites"></div>
+  </div>
+
+  <div id="rmRoom" hidden>
+    <div class="rm-tabs">
+      <button type="button" data-tab="chat" class="active">Chat</button>
+      <button type="button" data-tab="room">Room</button>
+    </div>
+    <div id="rmTabChat" class="rm-tabpane">
+      <div id="rmChat" class="rm-chat"></div>
+      <form id="rmForm" class="rm-form">
+        <input id="rmInput" class="rm-input" maxlength="500" autocomplete="off" placeholder="Message 😀">
+        <button type="submit" class="btn btn-primary">Send</button>
+      </form>
+    </div>
+    <div id="rmTabRoom" class="rm-tabpane" hidden>
+      <div class="rm-scroll">
+        <div id="rmRound"></div>
+        <div class="rm-sub">People</div>
+        <div id="rmMembers"></div>
+        <div class="rm-sub">Invite someone</div>
+        <form id="rmSearchForm" class="rm-form">
+          <input id="rmSearch" class="rm-input" placeholder="Matric number or name" autocomplete="off">
+          <button type="submit" class="btn btn-white-outline">Search</button>
+        </form>
+        <div id="rmResults"></div>
+        <button type="button" id="rmLeave" class="btn btn-white-outline" style="width:100%;margin-top:14px;">Leave room</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var BASE = "/focus-sprint/";
+  var ERR = {
+    already_in_room: "You're already in a room.", not_in_room: "You're not in a room.",
+    host_only: "Only the host can do that.", room_full: "The room is full (10 people).",
+    room_closed: "That room has closed.", below_minimum_duration: "Rounds must be at least 2 hours.",
+    insufficient_xp: "You don't have enough XP for that stake.", invalid_stake: "Enter a stake above 0.",
+    no_round: "No round is open right now.", join_window_closed: "Joining for this round has closed.",
+    already_joined: "You've already joined this round.", round_in_progress: "A round is still running.",
+    sprint_already_active: "You already have a sprint running.", already_member: "They're already in the room.",
+    student_not_found: "Student not found.", invite_not_found: "That invite is no longer available.",
+    cannot_remove_self: "Use Leave to exit.", not_a_member: "They're not in the room.",
+    invalid_input: "Check what you entered."
+  };
+  var STATUS = { waiting: "not joined", focusing: "focusing", away: "away", finished: "finished ✓", stopped: "stopped" };
+
+  var state = null, invites = [], chatLog = [], unread = 0, roundSig = "";
+  var ws = null, wsCode = null, pingTimer = null;
+
+  function $(id) { return document.getElementById(id); }
+  function csrf() { var m = document.querySelector('meta[name="csrf-token"]'); return m ? m.content : ""; }
+  function mk(tag, text, cls) {
+    var e = document.createElement(tag);
+    if (text != null) e.textContent = text;
+    if (cls) e.className = cls;
+    return e;
+  }
+  function btn(label, fn, cls) {
+    var b = mk("button", label, cls || "btn btn-white-outline");
+    b.type = "button";
+    b.addEventListener("click", fn);
+    return b;
+  }
+  function msg(text) {
+    var b = $("rmMsg");
+    if (!text) { b.hidden = true; return; }
+    b.textContent = text; b.hidden = false;
+  }
+  function errText(r) { return ERR[r.error] || "Something went wrong. Try again."; }
+
+  function api(path, body) {
+    var opts = { credentials: "same-origin" };
+    if (body) {
+      var fd = new FormData();
+      fd.append("csrfmiddlewaretoken", csrf());
+      for (var k in body) fd.append(k, body[k]);
+      opts.method = "POST"; opts.body = fd;
+    }
+    return fetch(BASE + path, opts).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) { j._ok = r.ok; return j; });
+    });
+  }
+
+  function act(path, body, after) {
+    msg("");
+    return api(path, body).then(function (r) {
+      if (!r._ok) msg(errText(r));
+      else if (after) after(r);
+      return refresh();
+    });
+  }
+
+  function refresh() {
+    return api("room/state/").then(function (r) {
+      if (!r._ok) return;
+      var had = !!state;
+      state = r.room || null;
+      invites = r.invites || [];
+      if (!state && had) { chatLog = []; roundSig = ""; }
+      render();
+      if (state) connect(); else disconnect();
+    });
+  }
+
+  function updateDot() {
+    var n = unread + (state ? 0 : invites.length);
+    var d = $("rmDot");
+    d.textContent = n > 9 ? "9+" : String(n);
+    d.hidden = n === 0;
+  }
+
+  function render() {
+    var inRoom = !!state;
+    $("rmLobby").hidden = inRoom;
+    $("rmRoom").hidden = !inRoom;
+    $("rmTitle").textContent = inRoom
+      ? "Room " + state.code + " · " + state.members.length + "/" + state.max_members
+      : "Study rooms";
+    if (inRoom) { renderMembers(); renderRound(); }
+    else renderInvites();
+    updateDot();
+  }
+
+  function renderInvites() {
+    var box = $("rmInvites");
+    box.textContent = "";
+    invites.forEach(function (i) {
+      var row = mk("div", null, "rm-row");
+      row.appendChild(mk("span", i.by + " invited you to room " + i.code, "rm-grow"));
+      row.appendChild(btn("Join", function () { act("room/invites/" + i.id + "/accept/", {}); }, "btn btn-primary"));
+      row.appendChild(btn("No", function () { act("room/invites/" + i.id + "/decline/", {}); }));
+      box.appendChild(row);
+    });
+  }
+
+  function renderMembers() {
+    var box = $("rmMembers");
+    box.textContent = "";
+    var iAmHost = state.host_id === state.me;
+    state.members.forEach(function (m) {
+      var row = mk("div", null, "rm-row");
+      var name = m.name + (m.student_id === state.host_id ? " (host)" : "") + (m.student_id === state.me ? " (you)" : "");
+      row.appendChild(mk("span", name, "rm-grow"));
+      row.appendChild(mk("span", STATUS[m.status] || "", "rm-pill rm-" + m.status));
+      if (iAmHost && m.student_id !== state.me) {
+        row.appendChild(btn("Remove", function () {
+          roveaConfirm("Remove " + m.name + " from the room?").then(function (ok) {
+            if (ok) act("room/remove/", { student_id: m.student_id });
+          });
+        }));
+      }
+      box.appendChild(row);
+    });
+  }
+
+  function renderRound() {
+    var iAmHost = state.host_id === state.me;
+    var sig = [state.round_number, state.round_live, state.can_join_round, iAmHost].join("|");
+    if (sig === roundSig) return;
+    roundSig = sig;
+    var box = $("rmRound");
+    box.textContent = "";
+
+    if (state.can_join_round) {
+      var hrs = Math.round(state.round_duration_seconds / 360) / 10;
+      box.appendChild(mk("p", "A " + hrs + "h focus round has started. Pick your own stake to join.", "rm-hint"));
+      var jr = mk("div", null, "rm-row");
+      var inp = document.createElement("input");
+      inp.type = "number"; inp.min = "1"; inp.placeholder = "Stake (XP)"; inp.className = "rm-input";
+      jr.appendChild(inp);
+      jr.appendChild(btn("Join round", function () {
+        act("room/round/join/", { stake_xp: inp.value }, function () { location.reload(); });
+      }, "btn btn-primary"));
+      box.appendChild(jr);
+    }
+    if (iAmHost) {
+      var hr = mk("div", null, "rm-row");
+      var sel = document.createElement("select");
+      sel.className = "rm-input";
+      [[2, "2 hours"], [3, "3 hours"], [4, "4 hours"], [6, "6 hours"]].forEach(function (o) {
+        var op = document.createElement("option");
+        op.value = String(o[0] * 3600); op.textContent = o[1];
+        sel.appendChild(op);
+      });
+      hr.appendChild(sel);
+      var go = btn(state.round_live ? "Round running" : "Start round", function () {
+        act("room/round/start/", { duration_seconds: sel.value });
+      }, "btn btn-primary");
+      go.disabled = state.round_live;
+      hr.appendChild(go);
+      box.appendChild(hr);
+    } else if (!state.can_join_round) {
+      box.appendChild(mk("p", state.round_live ? "A round is running." : "Waiting for the host to start a round.", "rm-hint"));
+    }
+  }
+
+  // ── chat ──
+  function chatLine(m) {
+    var d = mk("div", null, "rm-line" + (state && m.student_id === state.me ? " me" : ""));
+    d.appendChild(mk("b", m.username + ": "));
+    d.appendChild(mk("span", m.text));
+    return d;
+  }
+  function renderChat() {
+    var box = $("rmChat");
+    box.textContent = "";
+    chatLog.forEach(function (m) { box.appendChild(chatLine(m)); });
+    box.scrollTop = box.scrollHeight;
+  }
+  function addChat(m) {
+    chatLog.push(m);
+    if (chatLog.length > 200) chatLog.shift();
+    var box = $("rmChat");
+    var atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    box.appendChild(chatLine(m));
+    if (atBottom || (state && m.student_id === state.me)) box.scrollTop = box.scrollHeight;
+    if ($("rmPanel").hidden || $("rmTabChat").hidden) { unread++; updateDot(); }
+  }
+
+  function connect() {
+    if (!state || (ws && wsCode === state.code)) return;
+    disconnect();
+    wsCode = state.code;
+    var proto = location.protocol === "https:" ? "wss://" : "ws://";
+    ws = new WebSocket(proto + location.host + "/ws/focus-room/" + state.code + "/");
+    ws.onopen = function () {
+      pingTimer = setInterval(function () {
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "ping" }));
+      }, 30000);
+    };
+    ws.onmessage = function (e) {
+      var m;
+      try { m = JSON.parse(e.data); } catch (x) { return; }
+      if (m.type === "chat") addChat(m);
+      else if (m.type === "history") { chatLog = m.messages || []; renderChat(); }
+      else if (m.type === "refresh") refresh();
+      else if (m.type === "kicked") msg("You were removed from the room.");
+      else if (m.type === "room_closed") msg("The room has closed.");
+      else if (m.type === "error") msg(m.message);
+    };
+    ws.onclose = function (e) {
+      clearInterval(pingTimer);
+      var code = wsCode;
+      ws = null; wsCode = null;
+      if (e.code >= 4000) { refresh(); return; }
+      if (state && state.code === code) setTimeout(connect, 3000);
+    };
+  }
+  function disconnect() {
+    var w = ws;
+    ws = null; wsCode = null;
+    clearInterval(pingTimer);
+    if (w) { w.onclose = null; try { w.close(); } catch (e) {} }
+  }
+
+  // ── wiring ──
+  function setOpen(open) {
+    $("rmPanel").hidden = !open;
+    if (open) { unread = 0; render(); refresh(); }
+  }
+  $("rmBtn").addEventListener("click", function () { setOpen($("rmPanel").hidden); });
+  $("rmClose").addEventListener("click", function () { setOpen(false); });
+  $("rmCreate").addEventListener("click", function () { act("room/create/", {}); });
+  $("rmLeave").addEventListener("click", function () {
+    roveaConfirm("Leave this room?").then(function (ok) { if (ok) act("room/leave/", {}); });
+  });
+
+  var tabBtns = document.querySelectorAll("#rmRoom .rm-tabs button");
+  Array.prototype.forEach.call(tabBtns, function (b) {
+    b.addEventListener("click", function () {
+      var t = b.getAttribute("data-tab");
+      Array.prototype.forEach.call(tabBtns, function (x) { x.classList.toggle("active", x === b); });
+      $("rmTabChat").hidden = t !== "chat";
+      $("rmTabRoom").hidden = t !== "room";
+      if (t === "chat") { unread = 0; updateDot(); var c = $("rmChat"); c.scrollTop = c.scrollHeight; }
+    });
+  });
+
+  $("rmForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var t = $("rmInput").value.trim();
+    if (!t || !ws || ws.readyState !== 1) return;
+    ws.send(JSON.stringify({ type: "chat", text: t }));
+    $("rmInput").value = "";
+  });
+
+  $("rmSearchForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    msg("");
+    var q = $("rmSearch").value.trim();
+    if (q.length < 3) { msg("Type at least 3 characters."); return; }
+    api("room/search/?q=" + encodeURIComponent(q)).then(function (r) {
+      if (!r._ok) { msg(errText(r)); return; }
+      var box = $("rmResults");
+      box.textContent = "";
+      if (!r.results.length) { box.appendChild(mk("p", "No one found.", "rm-hint")); return; }
+      r.results.forEach(function (p) {
+        var row = mk("div", null, "rm-row");
+        row.appendChild(mk("span", p.name + " · " + p.department + " · " + p.level + "L", "rm-grow"));
+        row.appendChild(btn("Invite", function () {
+          api("room/invite/", { student_id: p.id }).then(function (x) {
+            msg(x._ok ? "Invite sent to " + x.name + "." : errText(x));
+          });
+        }));
+        box.appendChild(row);
+      });
+    });
+  });
+
+  setInterval(function () { if (state || !$("rmPanel").hidden) refresh(); }, 30000);
+  refresh();
+})();
+</script>
+{% endif %}
 <div id="roveaDialog" class="rv-dialog-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="roveaDialogMsg">
   <div class="rv-dialog">
     <p id="roveaDialogMsg"></p>

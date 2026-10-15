@@ -8,6 +8,11 @@ from core.models import StudentProfile
 from .models import BattleRoom, BattleParticipant
 from .match_loop import MatchLoop, FORFEIT_GRACE_SECONDS
 from .match_state import MatchState
+import time
+from collections import deque
+
+from django.utils import timezone
+from focus_sprint.models import RoomMember
 
 _background = set()
 
@@ -356,3 +361,94 @@ class BattleConsumer(AsyncJsonWebsocketConsumer):
             # only revealed once the question is over, so spectators can't leak answers
             "correct_index": q["correct_index"] if state["phase"] == "revealing" else None,
         }
+
+    # ── Focus room chat: text and emojis only, memory only, nothing saved to the database ──
+
+_FOCUS_CHAT_HISTORY = {}      # room code -> last messages (this server process only)
+FOCUS_CHAT_MAX_CHARS = 500
+FOCUS_CHAT_HISTORY_SIZE = 50
+
+
+class FocusRoomConsumer(AsyncJsonWebsocketConsumer):
+    async def connect(self):
+        self.code = self.scope["url_route"]["kwargs"]["code"]
+        self.group = f"focus_room_{self.code}"
+        self.joined = False
+        self.sent_at = []
+        await self.accept()
+        try:
+            if not self.scope["user"].is_authenticated:
+                await self.close(code=4001)
+                return
+            member = await self._member()
+            if member is None:
+                await self.close(code=4003)
+                return
+            self.student_id, self.username = member
+            self.joined = True
+            await self.channel_layer.group_add(self.group, self.channel_name)
+            await self._touch()
+            await self.send_json({"type": "history", "messages": list(_FOCUS_CHAT_HISTORY.get(self.code, []))})
+        except Exception:
+            logger.exception("Focus room connect failed in %s", self.code)
+            await self.close(code=4500)
+
+    async def disconnect(self, close_code):
+        if getattr(self, "joined", False):
+            await self.channel_layer.group_discard(self.group, self.channel_name)
+
+    async def receive_json(self, content, **kwargs):
+        if not self.joined:
+            return
+        kind = content.get("type")
+        if kind == "ping":
+            await self._touch()
+            return
+        if kind != "chat":
+            return
+        text = str(content.get("text", "")).strip()[:FOCUS_CHAT_MAX_CHARS]
+        if not text:
+            return
+        now = time.monotonic()
+        self.sent_at = [t for t in self.sent_at if now - t < 10]
+        if len(self.sent_at) >= 5:
+            await self.send_json({"type": "error", "message": "Slow down a little."})
+            return
+        self.sent_at.append(now)
+        msg = {
+            "type": "chat", "student_id": self.student_id, "username": self.username,
+            "text": text, "ts": int(time.time() * 1000),
+        }
+        _FOCUS_CHAT_HISTORY.setdefault(self.code, deque(maxlen=FOCUS_CHAT_HISTORY_SIZE)).append(msg)
+        await self.channel_layer.group_send(self.group, {"type": "room.event", "event": msg})
+
+    async def room_event(self, event):
+        await self.send_json(event["event"])
+
+    async def room_kick(self, event):
+        if event["student_id"] == getattr(self, "student_id", None):
+            await self.send_json({"type": "kicked"})
+            await self.close(code=4003)
+
+    async def room_closed(self, event):
+        _FOCUS_CHAT_HISTORY.pop(self.code, None)
+        await self.send_json({"type": "room_closed"})
+        await self.close(code=4010)
+
+    @database_sync_to_async
+    def _member(self):
+        m = (
+            RoomMember.objects.select_related("student__user")
+            .filter(room__code=self.code, room__status="open",
+                    student__user=self.scope["user"], left_at__isnull=True)
+            .first()
+        )
+        if m is None:
+            return None
+        return m.student_id, (m.student.user.first_name or m.student.user.username)
+
+    @database_sync_to_async
+    def _touch(self):
+        RoomMember.objects.filter(
+            room__code=self.code, student_id=self.student_id, left_at__isnull=True,
+        ).update(last_seen_at=timezone.now())

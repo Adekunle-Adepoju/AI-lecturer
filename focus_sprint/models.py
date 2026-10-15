@@ -5,6 +5,9 @@ from core.models import StudentProfile
 
 AWAY_BUDGET_SECONDS = 10 * 60
 MIN_DURATION_SECONDS = 2 * 60 * 60  # non-admin floor
+ROOM_MAX_MEMBERS = 10
+ROOM_GHOST_SECONDS = 10 * 60        # silent this long -> dropped from the room
+ROOM_JOIN_WINDOW_SECONDS = 10 * 60  # how long after the host starts a round people can still join
 
 
 class FocusSprint(models.Model):
@@ -34,6 +37,9 @@ class FocusSprint(models.Model):
     last_heartbeat_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     final_xp_awarded = models.IntegerField(null=True, blank=True)
+    room = models.ForeignKey(
+        "FocusRoom", null=True, blank=True, on_delete=models.SET_NULL, related_name="sprints",
+    )
 
     class Meta:
         constraints = [
@@ -79,3 +85,53 @@ class FocusSprintEvent(models.Model):
     def __str__(self):
         return f"{self.sprint_id} — {self.event_type}"
 
+class FocusRoom(models.Model):
+    STATUS = [("open", "Open"), ("closed", "Closed")]
+
+    code = models.CharField(max_length=8, unique=True)
+    host = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="hosted_focus_rooms")
+    status = models.CharField(max_length=10, choices=STATUS, default="open")
+    round_number = models.PositiveIntegerField(default=0)
+    round_duration_seconds = models.PositiveIntegerField(default=0)
+    round_started_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Room {self.code} ({self.status})"
+
+
+class RoomMember(models.Model):
+    room = models.ForeignKey(FocusRoom, on_delete=models.CASCADE, related_name="members")
+    student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="focus_room_memberships")
+    joined_at = models.DateTimeField(default=timezone.now)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+    left_at = models.DateTimeField(null=True, blank=True)
+    removed = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["student"], condition=models.Q(left_at__isnull=True),
+                name="uniq_active_room_per_student",
+            )
+        ]
+        indexes = [models.Index(fields=["room", "left_at"])]
+
+
+class RoomInvite(models.Model):
+    STATUS = [("pending", "Pending"), ("accepted", "Accepted"), ("declined", "Declined")]
+
+    room = models.ForeignKey(FocusRoom, on_delete=models.CASCADE, related_name="invites")
+    invited = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="focus_room_invites")
+    invited_by = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="focus_room_invites_sent")
+    status = models.CharField(max_length=10, choices=STATUS, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["room", "invited"], condition=models.Q(status="pending"),
+                name="uniq_pending_invite_per_room_student",
+            )
+        ]
