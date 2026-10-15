@@ -336,11 +336,24 @@
 .zv-bar #zv-reset{font-size:.85rem;}
 .zv-close{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));right:14px;width:44px;padding:0;font-size:26px;line-height:1;}
 
-/* Tables: scroll sideways instead of squeezing words apart ("Feat/ures") */
-#sessionRoot .msg-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px 0;}
-#sessionRoot .msg-bubble .msg-table{width:max-content;min-width:100%;margin:0;}
+/* Chat window must never scroll sideways */
+#sessionRoot #chat-window{overflow-x:hidden;}
+
+/* A bubble holding a table takes the full row width, so the table can't stretch it */
+#sessionRoot .msg-row:has(.msg-table-wrap){width:100%;}
+#sessionRoot .msg-row:has(.msg-table-wrap) .msg-bubble{flex:1 1 0;min-width:0;max-width:100%;}
+
+/* The wrapper reports zero intrinsic width, then fills the bubble and scrolls inside it */
+#sessionRoot .msg-table-wrap{
+  width:0;min-width:100%;max-width:100%;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px 0;
+}
+#sessionRoot .msg-bubble .msg-table{width:max-content;min-width:100%;max-width:none;margin:0;}
 #sessionRoot .msg-bubble .msg-table th,
-#sessionRoot .msg-bubble .msg-table td{min-width:96px;overflow-wrap:normal;word-break:normal;}
+#sessionRoot .msg-bubble .msg-table td{
+  min-width:110px;max-width:240px;
+  overflow-wrap:break-word;word-break:normal;
+}
 </style>
 
 <div class="page-container" id="sessionRoot" data-theme="dark">
