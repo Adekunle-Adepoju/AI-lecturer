@@ -9,6 +9,9 @@ from django.shortcuts import get_object_or_404
 
 from .models import FocusSprint
 from . import service
+from battle.consumers import push_to_user
+from core.models import StudentProfile
+from django.core.cache import cache
 
 
 @login_required
@@ -118,6 +121,7 @@ def _refresh_nudge(code):
 
 def _after_departure(room, outcome, student_id):
     service.notify_room(room.code, "room.kick", student_id=student_id)
+    push_to_user(StudentProfile.objects.get(id=student_id).user_id, {"type": "refresh"})
     if outcome == "closed":
         service.notify_room(room.code, "room.closed")
     else:
@@ -175,6 +179,7 @@ def room_search_view(request, profile):
 @_api
 def room_invite_view(request, profile):
     room, invite = service.invite_student(profile, int(request.POST.get("student_id", 0)))
+    push_to_user(invite.invited.user_id, {"type": "invite"})
     return JsonResponse({"ok": True, "name": service.display_name(invite.invited)})
 
 
@@ -211,3 +216,17 @@ def room_round_join_view(request, profile):
     sprint = service.join_round(profile, int(request.POST.get("stake_xp", 0)))
     _refresh_nudge(sprint.room.code)
     return JsonResponse({"ok": True, "sprint_id": sprint.id})
+
+@login_required
+@require_POST
+@_api
+def room_join_view(request, profile):
+    # Room codes act like passwords, so limit guessing to 10 tries a minute
+    key = f"roomjoin:{profile.id}"
+    tries = cache.get(key, 0)
+    if tries >= 10:
+        raise service.SprintError("too_many_attempts")
+    cache.set(key, tries + 1, 60)
+    room = service.join_by_code(profile, request.POST.get("code", ""))
+    _refresh_nudge(room.code)
+    return JsonResponse({"ok": True, "code": room.code})

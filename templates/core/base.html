@@ -838,6 +838,10 @@ window.RoveaFocusSprint = (function(){
     position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 4px;
     border-radius:99px; background:#e05252; color:#fff; font-size:.65rem; line-height:16px; font-weight:700;
   }
+  #rmDot{ box-shadow:0 0 0 2px var(--navy-card); }
+  #rmDot.pop{ animation:rmDotPop .45s cubic-bezier(.2,.9,.3,1.4); }
+  @keyframes rmDotPop{ 0%{transform:scale(.4);} 60%{transform:scale(1.35);} 100%{transform:scale(1);} }
+  @media(prefers-reduced-motion:reduce){ #rmDot.pop{ animation:none; } }
   #rmPanel{
     position:fixed; right:24px; bottom:136px; z-index:98; width:340px; max-width:calc(100vw - 32px);
     height:460px; max-height:calc(100vh - 160px); display:flex; flex-direction:column;
@@ -872,6 +876,19 @@ window.RoveaFocusSprint = (function(){
   #rmSearchForm{ border-top:none; padding:0; margin-bottom:8px; }
   .rm-input{ flex:1; min-width:0; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--navy-raised); color:var(--text); font-size:.85rem; }
   .rm-sub{ margin:14px 0 8px; font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); }
+    .rm-copy{ display:inline-flex; align-items:center; gap:4px; height:28px; padding:0 8px;
+    background:none; border:1px solid var(--border); color:var(--text-secondary);
+    border-radius:8px; cursor:pointer; font-size:.75rem; white-space:nowrap; }
+  .rm-copy:hover{ border-color:var(--amber); color:var(--text); }
+  .rm-copy.ok{ color:#1A9E7A; border-color:#1A9E7A; }
+  .rm-copy svg{ width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:2; }
+  .rm-copy[hidden]{ display:none !important; }
+    .rm-spin{ display:inline-block; width:14px; height:14px; margin-right:8px; vertical-align:-2px;
+    border:2px solid currentColor; border-right-color:transparent; border-radius:50%;
+    animation:rmSpin .7s linear infinite; }
+  @keyframes rmSpin{ to{ transform:rotate(360deg); } }
+  @media(prefers-reduced-motion:reduce){ .rm-spin{ animation-duration:1.8s; } }
+  #rmPanel button:disabled{ opacity:.7; cursor:wait; }
 </style>
 
 <button type="button" id="rmBtn" aria-label="Study rooms">💬<span id="rmDot" hidden></span></button>
@@ -879,6 +896,9 @@ window.RoveaFocusSprint = (function(){
 <div id="rmPanel" hidden>
   <div class="rm-head">
     <strong id="rmTitle">Study rooms</strong>
+    <button type="button" id="rmCopy" class="rm-copy" aria-label="Copy room link" hidden>
+      <svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy link
+    </button>
     <button type="button" id="rmClose" aria-label="Close">✖</button>
   </div>
   <div id="rmMsg" class="rm-msg" hidden></div>
@@ -904,6 +924,8 @@ window.RoveaFocusSprint = (function(){
     <div id="rmTabRoom" class="rm-tabpane" hidden>
       <div class="rm-scroll">
         <div id="rmRound"></div>
+        <div class="rm-sub" id="rmRoomInvTitle" hidden>Invites</div>
+        <div id="rmRoomInvites"></div>
         <div class="rm-sub">People</div>
         <div id="rmMembers"></div>
         <div class="rm-sub">Invite someone</div>
@@ -932,14 +954,56 @@ window.RoveaFocusSprint = (function(){
     sprint_already_active: "You already have a sprint running.", already_member: "They're already in the room.",
     student_not_found: "Student not found.", invite_not_found: "That invite is no longer available.",
     cannot_remove_self: "Use Leave to exit.", not_a_member: "They're not in the room.",
-    invalid_input: "Check what you entered."
+    invalid_input: "Check what you entered.",
+    room_not_found: "That room doesn't exist.",
+    too_many_attempts: "Too many tries. Wait a minute and try again."
   };
   var STATUS = { waiting: "not joined", focusing: "focusing", away: "away", finished: "finished ✓", stopped: "stopped" };
 
-  var state = null, invites = [], chatLog = [], unread = 0, roundSig = "";
+  var state = null, invites = [], chatLog = [], roundSig = "";
+  var unread = 0;
+  try { unread = parseInt(sessionStorage.getItem("rmUnread") || "0", 10) || 0; } catch (e) {}
   var ws = null, wsCode = null, pingTimer = null;
 
   function $(id) { return document.getElementById(id); }
+    // ── sounds (Web Audio, no files) ──
+  var audioCtx = null, lastMsgSound = 0;
+  function unlockAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    } catch (e) {}
+  }
+  ["pointerdown", "keydown"].forEach(function (ev) {
+    document.addEventListener(ev, unlockAudio, { passive: true });
+  });
+  function tone(freq, start, dur, vol, type) {
+    if (!audioCtx || audioCtx.state !== "running") return;
+    var t0 = audioCtx.currentTime + start;
+    var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || "sine";
+    o.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+  function playMessageSound() {            // short, soft two-note pop
+    var now = Date.now();
+    if (now - lastMsgSound < 600) return;  // don't machine-gun on bursts
+    lastMsgSound = now;
+    tone(880, 0, 0.12, 0.15); tone(1175, 0.09, 0.16, 0.12);
+  }
+  function playInviteSound() {             // rising three-note chime, clearly different
+    tone(523, 0, 0.18, 0.18, "triangle");
+    tone(659, 0.16, 0.18, 0.18, "triangle");
+    tone(784, 0.32, 0.35, 0.20, "triangle");
+  }
+  function popDot() {
+    var d = $("rmDot");
+    d.classList.remove("pop"); void d.offsetWidth; d.classList.add("pop");
+  }
   function csrf() { var m = document.querySelector('meta[name="csrf-token"]'); return m ? m.content : ""; }
   function mk(tag, text, cls) {
     var e = document.createElement(tag);
@@ -981,46 +1045,77 @@ window.RoveaFocusSprint = (function(){
       return refresh();
     });
   }
+    // Shows a spinner + label on a button until the promise settles.
+  function withBusy(b, label, promise) {
+    var original = b.innerHTML;
+    b.disabled = true;
+    b.textContent = "";
+    b.appendChild(mk("span", null, "rm-spin"));
+    b.appendChild(document.createTextNode(label));
+    function done() { b.disabled = false; b.innerHTML = original; }
+    return promise.then(function (x) { done(); return x; },
+                        function (e) { done(); throw e; });
+  }
 
+      var seenInvites = null;
   function refresh() {
     return api("room/state/").then(function (r) {
       if (!r._ok) return;
       var had = !!state;
       state = r.room || null;
       invites = r.invites || [];
+      var ids = invites.map(function (i) { return i.id; });
+      var fresh = seenInvites ? ids.filter(function (id) { return seenInvites.indexOf(id) === -1; }) : [];
+      seenInvites = ids;
+      if (!state) unread = 0;
       if (!state && had) { chatLog = []; roundSig = ""; }
       render();
+      if (fresh.length) { playInviteSound(); popDot(); }
       if (state) connect(); else disconnect();
     });
   }
 
-  function updateDot() {
-    var n = unread + (state ? 0 : invites.length);
+    function updateDot() {
+    var n = unread + invites.length;   // invites count even when you're in a room
+    try { sessionStorage.setItem("rmUnread", String(unread)); } catch (e) {}
     var d = $("rmDot");
     d.textContent = n > 9 ? "9+" : String(n);
     d.hidden = n === 0;
   }
 
-  function render() {
+    function render() {
     var inRoom = !!state;
     $("rmLobby").hidden = inRoom;
     $("rmRoom").hidden = !inRoom;
+    $("rmCopy").hidden = !inRoom;
     $("rmTitle").textContent = inRoom
       ? "Room " + state.code + " · " + state.members.length + "/" + state.max_members
       : "Study rooms";
     if (inRoom) { renderMembers(); renderRound(); }
-    else renderInvites();
+    renderInvites();
     updateDot();
   }
 
   function renderInvites() {
-    var box = $("rmInvites");
+    var inRoom = !!state;
+    var box = $(inRoom ? "rmRoomInvites" : "rmInvites");
+    $(inRoom ? "rmInvites" : "rmRoomInvites").textContent = "";
     box.textContent = "";
+    $("rmRoomInvTitle").hidden = !(inRoom && invites.length);
+    if (inRoom && invites.length) {
+      box.appendChild(mk("p", "Leave your current room if you want to accept one.", "rm-hint"));
+    }
     invites.forEach(function (i) {
       var row = mk("div", null, "rm-row");
       row.appendChild(mk("span", i.by + " invited you to room " + i.code, "rm-grow"));
-      row.appendChild(btn("Join", function () { act("room/invites/" + i.id + "/accept/", {}); }, "btn btn-primary"));
-      row.appendChild(btn("No", function () { act("room/invites/" + i.id + "/decline/", {}); }));
+      if (!inRoom) {
+        row.appendChild(btn("Join", function () {
+          withBusy(this, "Joining…", act("room/invites/" + i.id + "/accept/", {}));
+        }, "btn btn-primary"));
+      }
+      row.appendChild(btn("Decline", function () {
+        withBusy(this, "Declining…", act("room/invites/" + i.id + "/decline/", {}));
+      }));
       box.appendChild(row);
     });
   }
@@ -1076,7 +1171,7 @@ window.RoveaFocusSprint = (function(){
       });
       hr.appendChild(sel);
       var go = btn(state.round_live ? "Round running" : "Start round", function () {
-        act("room/round/start/", { duration_seconds: sel.value });
+        withBusy(this, "Starting…", act("room/round/start/", { duration_seconds: sel.value }));
       }, "btn btn-primary");
       go.disabled = state.round_live;
       hr.appendChild(go);
@@ -1106,7 +1201,10 @@ window.RoveaFocusSprint = (function(){
     var atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
     box.appendChild(chatLine(m));
     if (atBottom || (state && m.student_id === state.me)) box.scrollTop = box.scrollHeight;
-    if ($("rmPanel").hidden || $("rmTabChat").hidden) { unread++; updateDot(); }
+    var hiddenNow = $("rmPanel").hidden || $("rmTabChat").hidden;
+    var mine = state && m.student_id === state.me;
+    if (hiddenNow && !mine) { unread++; updateDot(); popDot(); }
+    if (!mine && (hiddenNow || document.hidden)) playMessageSound();
   }
 
   function connect() {
@@ -1148,11 +1246,20 @@ window.RoveaFocusSprint = (function(){
   // ── wiring ──
   function setOpen(open) {
     $("rmPanel").hidden = !open;
-    if (open) { unread = 0; render(); refresh(); }
+    if (open) {
+      if (!$("rmTabChat").hidden) unread = 0;
+      render(); refresh();
+    }
   }
   $("rmBtn").addEventListener("click", function () { setOpen($("rmPanel").hidden); });
   $("rmClose").addEventListener("click", function () { setOpen(false); });
-  $("rmCreate").addEventListener("click", function () { act("room/create/", {}); });
+  $("rmCreate").addEventListener("click", function () {
+    var b = this;
+    if (b.disabled) return;
+    withBusy(b, "Creating room…", act("room/create/", {})).catch(function () {
+      msg("Couldn't reach the server. Check your connection and try again.");
+    });
+  });
   $("rmLeave").addEventListener("click", function () {
     roveaConfirm("Leave this room?").then(function (ok) { if (ok) act("room/leave/", {}); });
   });
@@ -1199,8 +1306,100 @@ window.RoveaFocusSprint = (function(){
     });
   });
 
-  setInterval(function () { if (state || !$("rmPanel").hidden) refresh(); }, 30000);
+  function pollLoop() {   // slow safety net only; pushes do the real work
+    setTimeout(function () { refresh().then(pollLoop, pollLoop); }, document.hidden ? 120000 : 60000);
+  }
+  pollLoop();
+
+  // ── personal push socket: invites arrive instantly ──
+  var nws = null, nTimer = null, nDelay = 1000;
+  function connectNotify() {
+    if (nws) return;
+    var proto = location.protocol === "https:" ? "wss://" : "ws://";
+    try { nws = new WebSocket(proto + location.host + "/ws/notify/"); } catch (e) { nws = null; return; }
+    nws.onopen = function () {
+      nDelay = 1000;
+      refresh();   // catch anything that arrived while we were disconnected
+      nTimer = setInterval(function () {
+        if (nws && nws.readyState === 1) nws.send(JSON.stringify({ type: "ping" }));
+      }, 30000);
+    };
+    nws.onmessage = function (e) {
+      var m;
+      try { m = JSON.parse(e.data); } catch (x) { return; }
+      if (m.type === "invite" || m.type === "refresh") refresh();
+    };
+    nws.onclose = function (e) {
+      clearInterval(nTimer);
+      nws = null;
+      if (e.code === 4001) return;            // not logged in: don't retry
+      setTimeout(connectNotify, nDelay);
+      nDelay = Math.min(nDelay * 2, 30000);   // back off on repeated failures
+    };
+  }
+  connectNotify();
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
   refresh();
+    // ── copy room link ──
+  var copyBtn = $("rmCopy"), copyHTML = copyBtn.innerHTML, copyTimer = null;
+  function roomLink() {
+    return location.origin + "/dashboard/?room=" + encodeURIComponent(state.code);
+  }
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    return new Promise(function (resolve, reject) {      // fallback for restricted browsers
+      var t = document.createElement("textarea");
+      t.value = text; t.setAttribute("readonly", "");
+      t.style.cssText = "position:fixed;opacity:0;top:0;left:0;";
+      document.body.appendChild(t); t.select();
+      var ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(t);
+      ok ? resolve() : reject();
+    });
+  }
+  copyBtn.addEventListener("click", function () {
+    if (!state) return;
+    var link = roomLink();
+    copyText(link).then(function () {
+      clearTimeout(copyTimer);
+      copyBtn.classList.add("ok");
+      copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Copied!';
+      copyTimer = setTimeout(function () {
+        copyBtn.classList.remove("ok");
+        copyBtn.innerHTML = copyHTML;
+      }, 2000);
+    }, function () {
+      msg("Couldn't copy automatically. Copy this link: " + link);
+    });
+  });
+
+  // ── open a shared link: /dashboard/?room=CODE ──
+  function handleJoinLink() {
+    var code = "";
+    try { code = (new URLSearchParams(location.search).get("room") || "").trim().toUpperCase(); } catch (e) {}
+    if (!/^[A-Z0-9]{4,8}$/.test(code)) return;
+    try {   // clear it from the address bar so a refresh doesn't ask again
+      var u = new URL(location.href);
+      u.searchParams.delete("room");
+      history.replaceState(null, "", u.pathname + u.search + u.hash);
+    } catch (e) {}
+    refresh().then(function () {
+      if (state && state.code === code) { setOpen(true); return; }
+      if (state) {
+        roveaAlert("You're already in a room. Leave it first if you want to join room " + code + ".");
+        return;
+      }
+      roveaConfirm("Join study room " + code + "?").then(function (ok) {
+        if (!ok) return;
+        api("room/join/", { code: code }).then(function (r) {
+          if (!r._ok) { roveaAlert(errText(r)); return; }
+          setOpen(true);
+        });
+      });
+    });
+  }
+  handleJoinLink();
 })();
 </script>
 {% endif %}

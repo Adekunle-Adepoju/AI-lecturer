@@ -313,6 +313,28 @@ def accept_invite(profile, invite_id):
         invite.save(update_fields=["status"])
     return room
 
+def join_by_code(profile, code):
+    """Join an open room from a shared link. Same rules as accepting an invite."""
+    code = (code or "").strip().upper()
+    if not code:
+        raise SprintError("room_not_found")
+    with transaction.atomic():
+        room = FocusRoom.objects.select_for_update().filter(code=code).first()
+        if room is None:
+            raise SprintError("room_not_found")
+        if room.status != "open":
+            raise SprintError("room_closed")
+        mine = active_membership(profile)
+        if mine:
+            if mine.room_id == room.id:
+                return room            # already in this room, nothing to do
+            raise SprintError("already_in_room")
+        if room.members.filter(left_at__isnull=True).count() >= ROOM_MAX_MEMBERS:
+            raise SprintError("room_full")
+        RoomMember.objects.create(room=room, student=profile)
+        RoomInvite.objects.filter(room=room, invited=profile, status="pending").update(status="accepted")
+    return room
+
 
 def decline_invite(profile, invite_id):
     n = RoomInvite.objects.filter(pk=invite_id, invited=profile, status="pending").update(status="declined")

@@ -19,4 +19,5 @@ urlpatterns = [
     path("room/invites/<int:invite_id>/decline/", views.room_decline_view, name="focus_room_decline"),
     path("room/round/start/", views.room_round_start_view, name="focus_room_round_start"),
     path("room/round/join/", views.room_round_join_view, name="focus_room_round_join"),
+    path("room/join/", views.room_join_view, name="focus_room_join"),
 ]

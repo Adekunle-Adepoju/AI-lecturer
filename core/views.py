@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 import re
 import math
 import time
+from django.utils.http import url_has_allowed_host_and_scheme
 import hashlib
 
 from django.contrib import messages
@@ -273,6 +274,11 @@ def login_view(request):
         if form.is_valid():
             user = form.get_user()
             login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+            nxt = request.POST.get("next") or request.GET.get("next", "")
+            if nxt and url_has_allowed_host_and_scheme(
+                nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+            ):
+                return redirect(nxt)
             return redirect("dashboard")
     else:
         form = EmailOrUsernameAuthenticationForm()

@@ -13,9 +13,45 @@ from collections import deque
 
 from django.utils import timezone
 from focus_sprint.models import RoomMember
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 _background = set()
 
+class UserNotifyConsumer(AsyncJsonWebsocketConsumer):
+    """One personal connection per logged-in user, so the server can push
+    things like new invites straight to their browser."""
+
+    async def connect(self):
+        self.group = None
+        await self.accept()
+        user = self.scope["user"]
+        if not user.is_authenticated:
+            await self.close(code=4001)
+            return
+        self.group = f"user_notify_{user.id}"
+        await self.channel_layer.group_add(self.group, self.channel_name)
+
+    async def disconnect(self, close_code):
+        if self.group:
+            await self.channel_layer.group_discard(self.group, self.channel_name)
+
+    async def receive_json(self, content, **kwargs):
+        pass  # the client's ping just keeps the connection alive
+
+    async def user_event(self, event):
+        await self.send_json(event["event"])
+
+
+def push_to_user(user_id, payload):
+    """Call from normal (sync) Django views. Never raises, so a Redis
+    problem can't break the request that called it."""
+    try:
+        async_to_sync(get_channel_layer().group_send)(
+            f"user_notify_{user_id}", {"type": "user.event", "event": payload}
+        )
+    except Exception:
+        logger.exception("push_to_user failed for user %s", user_id)
 
 def _spawn(coro):
     t = asyncio.create_task(coro)
