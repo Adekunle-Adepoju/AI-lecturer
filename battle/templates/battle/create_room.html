@@ -87,6 +87,18 @@
   .howto-in ol,.howto-in ul{margin:0;padding-left:20px;font-size:16px;line-height:1.5;color:#cfd8e3}
   .howto-x{float:right;background:none;border:0;color:#9fb3c8;font-size:26px;cursor:pointer}
 
+    .avs{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .av{width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
+    background:#122238;border:2px solid #1A9E7A;color:#e8eef6;font-weight:700;font-size:15px;text-transform:uppercase}
+  .av.more{border-color:rgba(255,255,255,.2);color:#9fb3c8;font-size:13px}
+  .rank{width:22px;color:#f5a623;font-weight:700}
+  .tier-pill{font-size:12px;letter-spacing:.1em;color:#f5a623;text-transform:uppercase}
+  .empty a{color:#f5a623;text-decoration:none;font-weight:700}
+    /* quick match */
+  .quick{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;max-width:760px;margin:16px auto 0}
+  .quick form{margin:0}
+  .quick-btn{width:auto;padding:12px 28px;background:linear-gradient(135deg,#1fd3a0,#1a9e7a);color:#03130d}
+  .quick span{font-size:15px;color:#9fb3c8}
   @media(max-width:640px){.doors{grid-template-columns:1fr}.arena-title{font-size:36px}}
   @media(prefers-reduced-motion:reduce){.ember,.emblem{animation:none}.ember{display:none}.door{transition:none}}
 </style>
@@ -120,7 +132,7 @@
     </div>
 
     <div class="doors">
-      <div class="door host">
+      <div class="door host" id="host-door">
         <h2>Host a battle</h2>
         <p>Open a room, pick your squad and share the code.</p>
         <form method="POST">
@@ -140,6 +152,14 @@
           <button type="submit" class="door-btn">Join Room →</button>
         </form>
       </div>
+    </div>
+
+        <div class="quick">
+      <form method="POST" action="{% url 'battle_quick_match' %}">
+        {% csrf_token %}
+        <button type="submit" class="door-btn quick-btn">Quick match →</button>
+      </form>
+      <span>No code? Jump into an open public room, or we'll open one for you.</span>
     </div>
 
     {% if battle_stats %}
@@ -163,7 +183,7 @@
           <form method="POST" action="{% url 'battle_join_room' %}">{% csrf_token %}
             <input type="hidden" name="code" value="{{ r.code }}"><button class="mini">Spectate</button></form>
         </div>
-        {% empty %}<p class="empty">No battles in progress.</p>{% endfor %}
+        {% empty %}<p class="empty">No battles in progress. <a href="#host-door">Start one</a> and let others spectate.</p>{% endfor %}
       </section>
 
       <section class="panel">
@@ -177,8 +197,43 @@
           <form method="POST" action="{% url 'battle_join_room' %}">{% csrf_token %}
             <input type="hidden" name="code" value="{{ r.code }}"><button class="mini amber">Join</button></form>
         </div>
-        {% empty %}<p class="empty">No open rooms. Tick "Show in Live Rooms" when hosting.</p>{% endfor %}
+        {% empty %}<p class="empty">No open rooms. <a href="#host-door">Be the first, host one now</a> and tick "Show in Live Rooms".</p>{% endfor %}
       </section>
+
+      <section class="panel">
+        <h3>Online now{% if active_players.total %} · {{ active_players.total }}{% endif %}</h3>
+        {% if active_players.shown %}
+        <div class="avs">
+          {% for n in active_players.shown %}<span class="av" title="{{ n }}">{{ n|slice:":1" }}</span>{% endfor %}
+          {% if active_players.more %}<span class="av more">+{{ active_players.more }}</span>{% endif %}
+        </div>
+        {% else %}<p class="empty">Nobody else is online right now.</p>{% endif %}
+      </section>
+
+      <section class="panel">
+        <h3>Top players</h3>
+        {% for t in top_players %}
+        <div class="row">
+          <div class="row-main">
+            <div class="vs"><span class="rank">{{ t.rank }}</span>{{ t.name }}</div>
+            <small>{{ t.wins }} win{{ t.wins|pluralize }} · {{ t.win_rate }}% win rate</small>
+          </div>
+          <span class="tier-pill">{{ t.tier }}</span>
+        </div>
+        {% empty %}<p class="empty">No wins yet. The first winner takes the top spot.</p>{% endfor %}
+      </section>
+
+            {% if dept_name %}
+      <section class="panel">
+        <h3>This week · {{ dept_name }}</h3>
+        {% for r in dept_ladder %}
+        <div class="row">
+          <div class="row-main"><div class="vs"><span class="rank">{{ r.rank }}</span>{{ r.name }}</div></div>
+          <span class="tier-pill">{{ r.wins }} win{{ r.wins|pluralize }}</span>
+        </div>
+        {% empty %}<p class="empty">No wins in your department yet this week. Take the first one.</p>{% endfor %}
+      </section>
+      {% endif %}
 
       <section class="panel wide">
         <h3>Your history</h3>
@@ -204,6 +259,7 @@
         <li>The host creates a room and shares the code. Friends join with it.</li>
         <li>Pick Alpha or Bravo in the lobby. Up to 5 players per team, plus spectators.</li>
         <li>The host picks the mode and starts. Once it starts, nobody new can play. Late arrivals can only watch.</li>
+                <li>Everyone except the host taps <b>Ready</b> before the host can start. The host can also pick which course the questions come from.</li>
         <li>Questions come from your department, at levels below your own. In a mixed room, the lowest level decides.</li>
         <li>If a whole team disconnects for 45 seconds, the other team wins.</li>
         <li>Every player on the winning team earns a win. Winners get up to 200 XP (less after 2 wins today or rematching the same opponents). Everyone else gets 10.</li>
@@ -217,4 +273,25 @@
     </div>
   </dialog>
 </div>
+<script>
+(function () {
+  var busy = false;
+  function swap() {
+    if (document.hidden || busy) return;
+    busy = true;
+    fetch(location.href, { credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (html) {
+        if (!html) return;
+        var doc = new DOMParser().parseFromString(html, "text/html");
+        var fresh = doc.querySelector(".hub"), cur = document.querySelector(".hub");
+        if (fresh && cur) cur.innerHTML = fresh.innerHTML;
+      })
+      .catch(function () {})
+      .then(function () { busy = false; });
+  }
+  setInterval(swap, 10000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) swap(); });
+})();
+</script>
 {% endblock %}

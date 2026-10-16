@@ -8,6 +8,11 @@ from .models import BattleRoom
 from .landing import landing_context
 from .models import BattleRoom, BattleStats
 from .tiers import tier_for
+import time
+from django.core.cache import cache
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+from .consumers import push_to_user, PRESENCE_KEY, PRESENCE_TTL
 
 
 def _generate_room_code():
@@ -65,3 +70,58 @@ def room_lobby_view(request, room_code):
         "student_id": request.user.profile.id,
     })
 
+@login_required
+def online_players_view(request):
+    from .landing import _active_players
+    data = _active_players(limit=50, exclude_id=request.user.id)
+    return JsonResponse({"players": data["players"]})
+
+@login_required
+@require_POST
+def invite_online_view(request):
+    profile = getattr(request.user, "profile", None)
+    if profile is None:
+        return JsonResponse({"error": "invalid"}, status=400)
+    room = BattleRoom.objects.filter(leader=profile, status="waiting").order_by("-id").first()
+    if room is None:
+        return JsonResponse({"error": "no_room"}, status=400)
+    try:
+        target_id = int(request.POST.get("user_id", 0))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "invalid"}, status=400)
+    if target_id == request.user.id:
+        return JsonResponse({"error": "invalid"}, status=400)
+
+    seen = (cache.get(PRESENCE_KEY) or {}).get(target_id)
+    if not seen or time.time() - seen[0] > PRESENCE_TTL:
+        return JsonResponse({"error": "not_online"}, status=400)
+
+    key = f"battleinv:{request.user.id}:{target_id}"
+    if cache.get(key):
+        return JsonResponse({"error": "cooldown"}, status=400)
+    cache.set(key, 1, 60)
+
+    name = request.user.first_name or request.user.username
+    push_to_user(target_id, {"type": "battle_invite", "by": name, "code": room.code})
+    return JsonResponse({"ok": True})
+
+@login_required
+@require_POST
+def quick_match_view(request):
+    profile = getattr(request.user, "profile", None)
+    if profile is None:
+        return redirect("onboarding")
+    mine = BattleRoom.objects.filter(leader=profile, status="waiting").order_by("-id").first()
+    if mine:
+        return redirect("battle_room_lobby", room_code=mine.code)
+    candidates = (BattleRoom.objects.filter(is_public=True, status="waiting",
+                                            participants__connection_status="connected")
+                  .distinct().order_by("-id")[:20])
+    for room in candidates:
+        if room.participants.filter(role="player").count() < 10:
+            return redirect("battle_room_lobby", room_code=room.code)
+    code = _generate_room_code()
+    while BattleRoom.objects.filter(code=code).exists():
+        code = _generate_room_code()
+    room = BattleRoom.objects.create(code=code, leader=profile, is_public=True)
+    return redirect("battle_room_lobby", room_code=room.code)

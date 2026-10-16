@@ -20,4 +20,5 @@ urlpatterns = [
     path("room/round/start/", views.room_round_start_view, name="focus_room_round_start"),
     path("room/round/join/", views.room_round_join_view, name="focus_room_round_join"),
     path("room/join/", views.room_join_view, name="focus_room_join"),
+    path("room/nudge/", views.room_nudge_view, name="focus_room_nudge"),
 ]

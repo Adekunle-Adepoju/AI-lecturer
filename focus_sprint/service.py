@@ -16,6 +16,7 @@ from .models import (
     AWAY_BUDGET_SECONDS, MIN_DURATION_SECONDS,
     ROOM_MAX_MEMBERS, ROOM_GHOST_SECONDS, ROOM_JOIN_WINDOW_SECONDS,
 )
+from django.core.cache import cache
 
 
 class SprintError(Exception):
@@ -341,6 +342,25 @@ def decline_invite(profile, invite_id):
     if not n:
         raise SprintError("invite_not_found")
 
+def nudge_target(profile, student_id):
+    """Checks a nudge is allowed and returns the target's StudentProfile."""
+    mine = active_membership(profile)
+    if mine is None:
+        raise SprintError("not_in_room")
+    if student_id == profile.id:
+        raise SprintError("invalid_input")
+    member = (
+        RoomMember.objects.select_related("student")
+        .filter(room_id=mine.room_id, student_id=student_id, left_at__isnull=True)
+        .first()
+    )
+    if member is None:
+        raise SprintError("not_a_member")
+    key = f"nudge:{profile.id}:{student_id}"
+    if cache.get(key):
+        raise SprintError("nudge_cooldown")
+    cache.set(key, 1, 120)
+    return member.student
 
 def pending_invites(profile):
     qs = RoomInvite.objects.filter(
@@ -466,7 +486,23 @@ def room_state(profile):
         and profile.id not in sprint_by_student
         and not FocusSprint.objects.filter(student=profile, status="active").exists()
     )
+    now = timezone.now()
+    mine_sprint = sprint_by_student.get(profile.id)
+    counts = {}
+    for m in members:
+        k = label(m)
+        counts[k] = counts.get(k, 0) + 1
+    join_closes_at = None
+    if in_window:
+        join_closes_at = (room.round_started_at + timedelta(seconds=ROOM_JOIN_WINDOW_SECONDS)).isoformat()
     return {
+        "server_now": now.isoformat(),
+        "join_closes_at": join_closes_at,
+        "my_ends_at": (
+            mine_sprint.target_ends_at.isoformat()
+            if mine_sprint and mine_sprint.status == "active" else None
+        ),
+        "counts": counts,
         "code": room.code,
         "me": profile.id,
         "host_id": room.host_id,

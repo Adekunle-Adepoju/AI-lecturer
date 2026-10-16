@@ -83,6 +83,7 @@ class BattleQuestion(models.Model):
         return ""
     question_type = models.CharField(max_length=10, choices=QUESTION_TYPE_CHOICES, default="static")
     stem = models.TextField()
+    explanation = models.TextField(blank=True)
     status = models.CharField(max_length=15, choices=QUESTION_STATUS_CHOICES, default="pending_review")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -196,6 +197,7 @@ class BattleRoom(models.Model):
     status = models.CharField(max_length=15, choices=ROOM_STATUS_CHOICES, default="waiting")
     created_at = models.DateTimeField(auto_now_add=True)
     is_public = models.BooleanField(default=False)
+    course_code = models.CharField(max_length=10, blank=True, default="")
 
     class Meta:
         ordering = ["-created_at"]

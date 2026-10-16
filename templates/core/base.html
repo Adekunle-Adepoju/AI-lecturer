@@ -936,6 +936,12 @@ window.RoveaFocusSprint = (function(){
     #rmPanel{ max-height:calc(100dvh - 160px); }
     @media(max-width:640px){ #rmPanel{ max-height:calc(100dvh - 260px); } }
   }
+
+    .rm-strip{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 14px;
+    font-size:.78rem; background:var(--amber-glow); border-bottom:1px solid var(--border); }
+  .rm-strip b{ font-variant-numeric:tabular-nums; }
+  .rm-strip .rm-counts{ color:var(--text-muted); white-space:nowrap; }
+  .rm-strip[hidden]{ display:none !important; }
 </style>
 
 <button type="button" id="rmBtn" aria-label="Study rooms"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span id="rmDot" hidden></span></button>
@@ -962,6 +968,7 @@ window.RoveaFocusSprint = (function(){
       <button type="button" data-tab="chat" class="active">Chat</button>
       <button type="button" data-tab="room">Room</button>
     </div>
+    <div id="rmRoundCard" class="rm-strip" hidden></div>
     <div id="rmTabChat" class="rm-tabpane">
       <div id="rmChat" class="rm-chat"></div>
       <button type="button" id="rmJump" class="rm-jump" hidden>↓ New messages</button>
@@ -1006,7 +1013,8 @@ window.RoveaFocusSprint = (function(){
     cannot_remove_self: "Use Leave to exit.", not_a_member: "They're not in the room.",
     invalid_input: "Check what you entered.",
     room_not_found: "That room doesn't exist.",
-    too_many_attempts: "Too many tries. Wait a minute and try again."
+    too_many_attempts: "Too many tries. Wait a minute and try again.",
+    nudge_cooldown: "You already nudged them. Give it a couple of minutes."
   };
   var STATUS = { waiting: "not joined", focusing: "focusing", away: "away", finished: "finished ✓", stopped: "stopped" };
 
@@ -1118,6 +1126,7 @@ window.RoveaFocusSprint = (function(){
       if (!r._ok) return;
       var had = !!state;
       state = r.room || null;
+      if (state) clockSkew = Date.parse(state.server_now) - Date.now();
       invites = r.invites || [];
       var ids = invites.map(function (i) { return i.id; });
       var fresh = seenInvites ? ids.filter(function (id) { return seenInvites.indexOf(id) === -1; }) : [];
@@ -1148,6 +1157,7 @@ window.RoveaFocusSprint = (function(){
       : "Study rooms";
     if (inRoom) { renderMembers(); renderRound(); }
     renderInvites();
+    paintCard();
     updateDot();
   }
 
@@ -1175,10 +1185,11 @@ window.RoveaFocusSprint = (function(){
     });
   }
 
-    function renderMembers() {
+      function renderMembers() {
     var box = $("rmMembers");
     box.textContent = "";
     var iAmHost = state.host_id === state.me;
+    var joinOpen = !!state.join_closes_at && Date.now() + clockSkew < Date.parse(state.join_closes_at);
     state.members.forEach(function (m) {
       var row = mk("div", null, "rm-row");
       row.appendChild(mk("span", (m.name || "?").charAt(0).toUpperCase(), "rm-av rm-" + m.status));
@@ -1189,6 +1200,17 @@ window.RoveaFocusSprint = (function(){
       sub.push(STATUS[m.status] || "");
       info.appendChild(mk("div", sub.join(" · "), "rm-sub2 rm-" + m.status));
       row.appendChild(info);
+      if (m.student_id !== state.me && (m.status === "away" || (m.status === "waiting" && joinOpen))) {
+        row.appendChild(btn("Nudge 👋", function () {
+          var b = this;
+          if (b.disabled) return;
+          b.disabled = true;
+          api("room/nudge/", { student_id: m.student_id }).then(function (x) {
+            if (x._ok) { b.textContent = "Nudged ✓"; b.classList.add("rm-done"); }
+            else { b.disabled = false; msg(errText(x)); }
+          }, function () { b.disabled = false; msg("Couldn't reach the server. Try again."); });
+        }));
+      }
       if (iAmHost && m.student_id !== state.me) {
         row.appendChild(btn("Remove", function () {
           roveaConfirm("Remove " + m.name + " from the room?").then(function (ok) {
@@ -1415,6 +1437,16 @@ window.RoveaFocusSprint = (function(){
       var m;
       try { m = JSON.parse(e.data); } catch (x) { return; }
       if (m.type === "invite" || m.type === "refresh") refresh();
+      else if (m.type === "battle_invite") {
+        playInviteSound(); popDot();
+        roveaConfirm((m.by || "Someone") + " invited you to a battle (room " + m.code + "). Join now?").then(function (ok) {
+          if (ok) window.location.href = "/battle/room/" + encodeURIComponent(m.code) + "/";
+        });
+      }
+      else if (m.type === "nudge") {
+        playInviteSound(); popDot();
+        roveaAlert((m.by || "Someone") + " is waiting for you in the study room 👋 Come back and focus!");
+      }
     };
     nws.onclose = function (e) {
       clearInterval(nTimer);
@@ -1466,6 +1498,42 @@ window.RoveaFocusSprint = (function(){
     setOpen(false);
     $("rmBtn").focus();
   });
+    // ── live round strip ──
+  var clockSkew = 0;
+  function fmtClock(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    var ss = String(s).padStart(2, "0");
+    return h ? h + ":" + String(m).padStart(2, "0") + ":" + ss : m + ":" + ss;
+  }
+  function paintCard() {
+    var el = $("rmRoundCard");
+    if (!state || !state.round_number) { el.hidden = true; return; }
+    var now = Date.now() + clockSkew, c = state.counts || {};
+    var left = mk("span");
+    function part(label, val) {
+      left.appendChild(document.createTextNode(label));
+      if (val != null) left.appendChild(mk("b", val));
+    }
+    var mine = state.my_ends_at ? (Date.parse(state.my_ends_at) - now) / 1000 : null;
+    var closes = state.join_closes_at ? (Date.parse(state.join_closes_at) - now) / 1000 : null;
+    if (mine !== null) {
+      if (mine > 0) part("Your focus: ", fmtClock(mine) + " left"); else part("Finishing up…");
+    } else if (closes !== null && closes > 0) {
+      part("Round open · joining closes in ", fmtClock(closes));
+    } else if (state.round_live) {
+      part("Round running");
+    } else {
+      part("Round over");
+    }
+    el.textContent = "";
+    el.appendChild(left);
+    el.appendChild(mk("span",
+      (c.focusing || 0) + " focusing · " + (c.away || 0) + " away · " + (c.finished || 0) + " done",
+      "rm-counts"));
+    el.hidden = false;
+  }
+  setInterval(function () { if (state && !$("rmPanel").hidden) paintCard(); }, 1000);
   refresh();
     // ── copy room link ──
   var copyBtn = $("rmCopy"), copyHTML = copyBtn.innerHTML, copyTimer = null;

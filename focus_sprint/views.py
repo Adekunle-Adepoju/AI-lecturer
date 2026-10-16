@@ -230,3 +230,11 @@ def room_join_view(request, profile):
     room = service.join_by_code(profile, request.POST.get("code", ""))
     _refresh_nudge(room.code)
     return JsonResponse({"ok": True, "code": room.code})
+
+@login_required
+@require_POST
+@_api
+def room_nudge_view(request, profile):
+    target = service.nudge_target(profile, int(request.POST.get("student_id", 0)))
+    push_to_user(target.user_id, {"type": "nudge", "by": service.display_name(profile)})
+    return JsonResponse({"ok": True})

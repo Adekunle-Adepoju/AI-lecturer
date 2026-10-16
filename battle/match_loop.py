@@ -2,6 +2,7 @@ import asyncio
 import random
 import time
 import logging
+from .tiers import tier_for, next_tier
 
 from channels.db import database_sync_to_async
 from django.utils import timezone
@@ -134,6 +135,7 @@ class MatchLoop:
         levels = levels_for_room(raw_levels)
         questions = await database_sync_to_async(select_match_questions)(
             all_ids, total_questions, levels=levels, departments=departments,
+            course_codes=[room.course_code] if room.course_code else None,
         )
 
 
@@ -154,6 +156,7 @@ class MatchLoop:
         state["phase"] = "intro"
         state["levels"] = list(levels)
         state["departments"] = departments
+        state["course_codes"] = [room.course_code] if room.course_code else []
         await self.state.save(state)
         await self._broadcast({
             "type": "match_intro", "mode": mode,
@@ -255,7 +258,7 @@ class MatchLoop:
                 await self._broadcast({
                     "type": "no_buzz_penalty",
                     "team_a_score": state["team_a_score"], "team_b_score": state["team_b_score"],
-                    "correct_index": self._correct_index(state),
+                    "correct_index": self._reveal(state),
                 })
                 await self._advance(state)
             elif state["mode"] == "buzzer" and expected_phase == "awaiting_answer":
@@ -332,7 +335,7 @@ class MatchLoop:
             await self._broadcast({
                 "type": "question_resolved", "correct": True, "team": team, "points": 5,
                 "timed_out": timed_out, "answer_index": option_index,
-                "correct_index": self._correct_index(state),
+                "correct_index": self._reveal(state),
             })
             await self._log_question(state, answering_team=team, correct=True, points=5)
             await self._advance(state)
@@ -353,7 +356,7 @@ class MatchLoop:
             await self._broadcast({
                 "type": "question_resolved", "correct": True, "team": team, "points": 5,
                 "timed_out": timed_out, "answer_index": option_index,
-                "correct_index": self._correct_index(state),
+                "correct_index": self._reveal(state),
             })
             await self._log_question(state, answering_team=team, correct=True, points=5)
             await self._advance(state)
@@ -385,7 +388,7 @@ class MatchLoop:
         await self._broadcast({
             "type": "bonus_resolved", "correct": correct, "team": team,
             "points": 2 if correct else 0, "timed_out": timed_out,
-            "answer_index": option_index, "correct_index": self._correct_index(state),
+            "answer_index": option_index, "correct_index": self._reveal(state),
         })
         await self._advance(state)
 
@@ -396,6 +399,8 @@ class MatchLoop:
             "answering_team": answering_team,
             "correct": correct,
             "points": points,
+            "points": points,
+            "student_id": state.get("answering_student_id"),
         })
 
     async def _advance(self, state):
@@ -426,6 +431,7 @@ class MatchLoop:
             state["team_a_players"] + state["team_b_players"], 1,
             levels=tuple(state.get("levels", ("100",))),
             departments=state.get("departments"), exclude_ids=used,
+            course_codes=state.get("course_codes") or None,
         )
         if not extra:
             await self._finalize(state)
@@ -446,10 +452,14 @@ class MatchLoop:
             winner = None
 
         await self._persist_match(state, winner)
+        all_ids = state["team_a_players"] + state["team_b_players"]
+        names = await database_sync_to_async(self._names_sync)(all_ids)
+        results = self._build_results(state, names)
         await self._broadcast({
             "type": "match_finished", "team_a_score": state["team_a_score"],
             "team_b_score": state["team_b_score"], "winner": winner,
             "forfeit": forced_winner is not None,
+            "results": results,
         })
         await self.state.clear()
         task = _timer_tasks.pop(self.room_code, None)
@@ -457,8 +467,14 @@ class MatchLoop:
             task.cancel()
         _room_locks.pop(self.room_code, None)
 
+        progress = await self._persist_match(state, winner)
+        all_ids = state["team_a_players"] + state["team_b_players"]
+        names = await database_sync_to_async(self._names_sync)(all_ids)
+        results = self._build_results(state, names)
+        results["progress"] = {str(k): v for k, v in progress.items()}
+
     async def _persist_match(self, state, winner):
-        await database_sync_to_async(self._persist_match_sync)(state, winner)
+        return await database_sync_to_async(self._persist_match_sync)(state, winner)
 
     def _persist_match_sync(self, state, winner):
         room = BattleRoom.objects.get(code=self.room_code)
@@ -477,6 +493,7 @@ class MatchLoop:
                 answering_team=entry["answering_team"],
                 correct=entry["correct"], points_awarded=entry["points"],
                 resolved_at=timezone.now(),
+                answering_student_id=entry.get("student_id"),
             )
 
         # Exposure tracking for every question actually served, seen or not.
@@ -490,21 +507,20 @@ class MatchLoop:
                 exposure.last_seen_at = timezone.now()
                 exposure.save(update_fields=["times_seen", "last_seen_at"])
 
-        self._award_xp(state, winner)
-        self._record_stats(match, state, winner)
+        xp_map = self._award_xp(state, winner)
+        progress = self._record_stats(match, state, winner, xp_map)
         room.status = "finished"
         room.save(update_fields=["status"])
+        return progress
 
     def _lagos_day_start(self):
         now = timezone.now().astimezone(ZoneInfo("Africa/Lagos"))
         return now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     def _award_xp(self, state, winner):
-        """Winners: 200 XP, or 20 once they already have 2 wins today or have
-        beaten any of these opponents today. Losers: 10. Runs BEFORE this
-        match's player rows are saved, so 'today' only counts earlier matches."""
+        xp_map = {}
         if winner is None:
-            return
+            return xp_map
         winning_ids = state["team_a_players"] if winner == "A" else state["team_b_players"]
         losing_ids = state["team_b_players"] if winner == "A" else state["team_a_players"]
         day_start = self._lagos_day_start()
@@ -518,17 +534,23 @@ class MatchLoop:
             ).exists()
             xp = 20 if (my_wins_today.count() >= 2 or beat_them_today) else 200
             StudentProfile.objects.filter(id=sid).update(xp=F_xp(xp))
+            xp_map[sid] = xp
 
         for sid in losing_ids:
             StudentProfile.objects.filter(id=sid).update(xp=F_xp(10))
+            xp_map[sid] = 10
+        return xp_map
 
-    def _record_stats(self, match, state, winner):
+    def _record_stats(self, match, state, winner, xp_map):
+        progress = {}
         for team, ids in (("A", state["team_a_players"]), ("B", state["team_b_players"])):
             for sid in ids:
                 won = (winner == team)
-                BattleMatchPlayer.objects.create(match=match, student_id=sid, team=team, won=won)
+                xp = xp_map.get(sid, 0)
+                BattleMatchPlayer.objects.create(match=match, student_id=sid, team=team, won=won, xp_awarded=xp)
                 stats, _ = BattleStats.objects.get_or_create(student_id=sid)
-                if winner is None:          # draw: counts as played, streak pauses
+                before = tier_for(stats.wins)
+                if winner is None:
                     stats.draws += 1
                 elif won:
                     stats.wins += 1
@@ -538,6 +560,11 @@ class MatchLoop:
                     stats.losses += 1
                     stats.current_streak = 0
                 stats.save()
+                after = tier_for(stats.wins)
+                nxt = next_tier(stats.wins)
+                progress[sid] = {"xp": xp, "tier": after, "tier_up": after != before,
+                                 "next": list(nxt) if nxt else None}
+        return progress
 
     async def _broadcast(self, payload):
         await self.consumer.channel_layer.group_send(
@@ -557,6 +584,59 @@ class MatchLoop:
             if sid in connected:
                 return sid, start_turn + step + 1
         return None, start_turn + 1
+
+    def _names_sync(self, ids):
+        return {
+            p.id: p.user.username
+            for p in StudentProfile.objects.filter(id__in=ids).select_related("user")
+        }
+
+    def _build_results(self, state, names):
+        team_a = set(state["team_a_players"])
+        per = {}
+        for e in state["match_log"]:
+            sid = e.get("student_id")
+            if sid is None:
+                continue
+            row = per.setdefault(sid, {"answered": 0, "correct": 0})
+            row["answered"] += 1
+            if e["correct"]:
+                row["correct"] += 1
+
+        players = sorted(
+            (
+                {
+                    "student_id": sid,
+                    "username": names.get(sid, "Player"),
+                    "team": "A" if sid in team_a else "B",
+                    **row,
+                }
+                for sid, row in per.items()
+            ),
+            key=lambda p: (-p["correct"], p["answered"]),
+        )
+        mvp = players[0]["student_id"] if players and players[0]["correct"] > 0 else None
+
+        review = []
+        for e in state["match_log"]:
+            if e["correct"]:
+                continue
+            q = state["questions"][e["index"]]
+            review.append({
+                "number": e["index"] + 1,
+                "stem": q["stem"],
+                "options": q["options"],
+                "correct_index": q["correct_index"],
+                "team": e["answering_team"],
+                "topic": q.get("topic", ""),
+            })
+
+        return {"players": players, "mvp": mvp, "review": review}
+    
+    def _reveal(self, state):
+        q = state["questions"][state["current_index"]]
+        return {"correct_index": q["correct_index"], "topic": q.get("topic", ""),
+                "explanation": q.get("explanation", "")}
 
 
 def F_xp(amount):
