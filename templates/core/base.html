@@ -876,6 +876,38 @@ window.RoveaFocusSprint = (function(){
   #rmSearchForm{ border-top:none; padding:0; margin-bottom:8px; }
   .rm-input{ flex:1; min-width:0; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--navy-raised); color:var(--text); font-size:.85rem; }
   .rm-sub{ margin:14px 0 8px; font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); }
+    #rmBtn{ display:flex; align-items:center; justify-content:center; }
+  #rmBtn:focus-visible, .rm-ico:focus-visible, .rm-copy:focus-visible{ outline:2px solid var(--amber); outline-offset:2px; }
+  .rm-head strong{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rm-ico{ background:none; border:1px solid var(--border); color:var(--text-secondary); border-radius:50%;
+    width:28px; height:28px; flex:none; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+  .rm-ico:hover{ border-color:var(--amber); color:var(--text); }
+
+  #rmPanel:not([hidden]){ animation:rmIn .18s ease-out; }
+  @keyframes rmIn{ from{ opacity:0; transform:translateY(8px) scale(.98); } to{ opacity:1; transform:none; } }
+  @media(prefers-reduced-motion:reduce){ #rmPanel:not([hidden]){ animation:none; } }
+
+  .rm-chat{ display:flex; flex-direction:column; }
+  .rm-msgrow{ display:flex; margin-top:2px; }
+  .rm-msgrow.first{ margin-top:10px; }
+  .rm-msgrow.me{ justify-content:flex-end; }
+  .rm-bubble{ max-width:82%; padding:7px 11px; border-radius:14px; border-bottom-left-radius:4px;
+    background:var(--navy-raised); color:var(--text); font-size:.88rem; line-height:1.4; overflow-wrap:anywhere; }
+  .rm-msgrow.me .rm-bubble{ background:var(--amber); color:#0D1B2A; border-bottom-left-radius:14px; border-bottom-right-radius:4px; }
+  .rm-who{ font-size:.72rem; font-weight:700; color:var(--amber); margin-bottom:2px; }
+  .rm-time{ display:block; text-align:right; margin-top:2px; font-size:.65rem; opacity:.6; }
+  .rm-empty{ margin:auto; text-align:center; color:var(--text-muted); font-size:.85rem; padding:20px; }
+
+  .rm-av{ width:32px; height:32px; border-radius:50%; flex:none; display:inline-flex; align-items:center; justify-content:center;
+    background:var(--navy-raised); color:var(--text); font-weight:700; font-size:.82rem; border:2px solid var(--border); }
+  .rm-av.rm-focusing, .rm-av.rm-finished{ border-color:#1A9E7A; }
+  .rm-av.rm-away{ border-color:var(--amber); }
+  .rm-name{ font-size:.88rem; }
+  .rm-sub2{ font-size:.72rem; color:var(--text-muted); }
+  .rm-sub2.rm-focusing, .rm-sub2.rm-finished{ color:#1A9E7A; border:none; }
+  .rm-sub2.rm-away{ color:var(--amber); border:none; }
+
+  @media(max-width:640px){ .rm-input{ font-size:16px; } }   /* stops iPhone zoom-on-tap */
     .rm-copy{ display:inline-flex; align-items:center; gap:4px; height:28px; padding:0 8px;
     background:none; border:1px solid var(--border); color:var(--text-secondary);
     border-radius:8px; cursor:pointer; font-size:.75rem; white-space:nowrap; }
@@ -891,7 +923,7 @@ window.RoveaFocusSprint = (function(){
   #rmPanel button:disabled{ opacity:.7; cursor:wait; }
 </style>
 
-<button type="button" id="rmBtn" aria-label="Study rooms">💬<span id="rmDot" hidden></span></button>
+<button type="button" id="rmBtn" aria-label="Study rooms"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span id="rmDot" hidden></span></button>
 
 <div id="rmPanel" hidden>
   <div class="rm-head">
@@ -899,6 +931,7 @@ window.RoveaFocusSprint = (function(){
     <button type="button" id="rmCopy" class="rm-copy" aria-label="Copy room link" hidden>
       <svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy link
     </button>
+    <button type="button" id="rmMute" class="rm-ico" aria-label="Mute sounds" title="Sounds on"></button>
     <button type="button" id="rmClose" aria-label="Close">✖</button>
   </div>
   <div id="rmMsg" class="rm-msg" hidden></div>
@@ -928,6 +961,7 @@ window.RoveaFocusSprint = (function(){
         <div id="rmRoomInvites"></div>
         <div class="rm-sub">People</div>
         <div id="rmMembers"></div>
+        <button type="button" id="rmWhatsapp" class="btn btn-white-outline" style="width:100%;margin:14px 0 4px;">Share on WhatsApp</button>
         <div class="rm-sub">Invite someone</div>
         <form id="rmSearchForm" class="rm-form">
           <input id="rmSearch" class="rm-input" placeholder="Matric number or name" autocomplete="off">
@@ -989,13 +1023,15 @@ window.RoveaFocusSprint = (function(){
     o.connect(g); g.connect(audioCtx.destination);
     o.start(t0); o.stop(t0 + dur + 0.05);
   }
-  function playMessageSound() {            // short, soft two-note pop
+  function playMessageSound() {           // short, soft two-note pop
+    if (muted) return;
     var now = Date.now();
     if (now - lastMsgSound < 600) return;  // don't machine-gun on bursts
     lastMsgSound = now;
     tone(880, 0, 0.12, 0.15); tone(1175, 0.09, 0.16, 0.12);
   }
   function playInviteSound() {             // rising three-note chime, clearly different
+    if (muted) return;
     tone(523, 0, 0.18, 0.18, "triangle");
     tone(659, 0.16, 0.18, 0.18, "triangle");
     tone(784, 0.32, 0.35, 0.20, "triangle");
@@ -1120,15 +1156,20 @@ window.RoveaFocusSprint = (function(){
     });
   }
 
-  function renderMembers() {
+    function renderMembers() {
     var box = $("rmMembers");
     box.textContent = "";
     var iAmHost = state.host_id === state.me;
     state.members.forEach(function (m) {
       var row = mk("div", null, "rm-row");
-      var name = m.name + (m.student_id === state.host_id ? " (host)" : "") + (m.student_id === state.me ? " (you)" : "");
-      row.appendChild(mk("span", name, "rm-grow"));
-      row.appendChild(mk("span", STATUS[m.status] || "", "rm-pill rm-" + m.status));
+      row.appendChild(mk("span", (m.name || "?").charAt(0).toUpperCase(), "rm-av rm-" + m.status));
+      var info = mk("div", null, "rm-grow");
+      info.appendChild(mk("div", m.name + (m.student_id === state.me ? " (you)" : ""), "rm-name"));
+      var sub = [];
+      if (m.student_id === state.host_id) sub.push("Host");
+      sub.push(STATUS[m.status] || "");
+      info.appendChild(mk("div", sub.join(" · "), "rm-sub2 rm-" + m.status));
+      row.appendChild(info);
       if (iAmHost && m.student_id !== state.me) {
         row.appendChild(btn("Remove", function () {
           roveaConfirm("Remove " + m.name + " from the room?").then(function (ok) {
@@ -1182,24 +1223,37 @@ window.RoveaFocusSprint = (function(){
   }
 
   // ── chat ──
-  function chatLine(m) {
-    var d = mk("div", null, "rm-line" + (state && m.student_id === state.me ? " me" : ""));
-    d.appendChild(mk("b", m.username + ": "));
-    d.appendChild(mk("span", m.text));
-    return d;
+    function fmtTime(ts) {
+    try { return new Date(ts || Date.now()).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }
+    catch (e) { return ""; }
   }
-  function renderChat() {
+  function chatLine(m, prev) {
+    var mine = !!(state && m.student_id === state.me);
+    var first = !prev || prev.student_id !== m.student_id;
+    var row = mk("div", null, "rm-msgrow" + (mine ? " me" : "") + (first ? " first" : ""));
+    var bub = mk("div", null, "rm-bubble");
+    if (first && !mine) bub.appendChild(mk("div", m.username, "rm-who"));
+    bub.appendChild(mk("span", m.text));
+    bub.appendChild(mk("span", fmtTime(m.ts), "rm-time"));
+    row.appendChild(bub);
+    return row;
+  }
+    function renderChat() {
     var box = $("rmChat");
     box.textContent = "";
-    chatLog.forEach(function (m) { box.appendChild(chatLine(m)); });
+    if (!chatLog.length) { box.appendChild(mk("div", "No messages yet. Say hi 👋", "rm-empty")); return; }
+    chatLog.forEach(function (m, i) { box.appendChild(chatLine(m, chatLog[i - 1])); });
     box.scrollTop = box.scrollHeight;
   }
   function addChat(m) {
+    var prev = chatLog[chatLog.length - 1];
     chatLog.push(m);
     if (chatLog.length > 200) chatLog.shift();
     var box = $("rmChat");
+    var empty = box.querySelector(".rm-empty");
+    if (empty) empty.remove();
     var atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-    box.appendChild(chatLine(m));
+    box.appendChild(chatLine(m, prev));
     if (atBottom || (state && m.student_id === state.me)) box.scrollTop = box.scrollHeight;
     var hiddenNow = $("rmPanel").hidden || $("rmTabChat").hidden;
     var mine = state && m.student_id === state.me;
@@ -1339,6 +1393,29 @@ window.RoveaFocusSprint = (function(){
   }
   connectNotify();
   document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
+    // ── mute toggle ──
+  var muted = false;
+  try { muted = localStorage.getItem("rmMuted") === "1"; } catch (e) {}
+  var BELL = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>';
+  function paintMute() {
+    var b = $("rmMute");
+    b.innerHTML = BELL + (muted ? '<path d="M3 3l18 18"/>' : "") + "</svg>";
+    b.title = muted ? "Sounds off" : "Sounds on";
+    b.setAttribute("aria-label", b.title);
+  }
+  $("rmMute").addEventListener("click", function () {
+    muted = !muted;
+    try { localStorage.setItem("rmMuted", muted ? "1" : "0"); } catch (e) {}
+    paintMute();
+    if (!muted) { unlockAudio(); playMessageSound(); }   // quick preview
+  });
+  paintMute();
+
+  // ── WhatsApp share ──
+  $("rmWhatsapp").addEventListener("click", function () {
+    if (!state) return;
+    window.open("https://wa.me/?text=" + encodeURIComponent("Join my study room on Rovea: " + roomLink()), "_blank", "noopener");
+  });
   refresh();
     // ── copy room link ──
   var copyBtn = $("rmCopy"), copyHTML = copyBtn.innerHTML, copyTimer = null;
