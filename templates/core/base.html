@@ -921,6 +921,21 @@ window.RoveaFocusSprint = (function(){
   @keyframes rmSpin{ to{ transform:rotate(360deg); } }
   @media(prefers-reduced-motion:reduce){ .rm-spin{ animation-duration:1.8s; } }
   #rmPanel button:disabled{ opacity:.7; cursor:wait; }
+    /* Invited ✓ state */
+  #rmPanel button.rm-done:disabled{ cursor:default; opacity:1; color:#1A9E7A; border-color:#1A9E7A; }
+
+  /* "New messages" pill */
+  #rmTabChat{ position:relative; }
+  .rm-jump{ position:absolute; left:50%; bottom:64px; transform:translateX(-50%); padding:6px 14px;
+    border-radius:99px; border:none; background:var(--amber); color:#0D1B2A; font-size:.78rem;
+    font-weight:700; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,.3); }
+  .rm-jump[hidden]{ display:none !important; }
+
+  /* Phone address bar: use dynamic viewport height where supported */
+  @supports (height:100dvh){
+    #rmPanel{ max-height:calc(100dvh - 160px); }
+    @media(max-width:640px){ #rmPanel{ max-height:calc(100dvh - 260px); } }
+  }
 </style>
 
 <button type="button" id="rmBtn" aria-label="Study rooms"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span id="rmDot" hidden></span></button>
@@ -949,6 +964,7 @@ window.RoveaFocusSprint = (function(){
     </div>
     <div id="rmTabChat" class="rm-tabpane">
       <div id="rmChat" class="rm-chat"></div>
+      <button type="button" id="rmJump" class="rm-jump" hidden>↓ New messages</button>
       <form id="rmForm" class="rm-form">
         <input id="rmInput" class="rm-input" maxlength="500" autocomplete="off" placeholder="Message 😀">
         <button type="submit" class="btn btn-primary">Send</button>
@@ -1053,10 +1069,13 @@ window.RoveaFocusSprint = (function(){
     b.addEventListener("click", fn);
     return b;
   }
-  function msg(text) {
+  var msgTimer = null;
+  function msg(text, ms) {
     var b = $("rmMsg");
+    clearTimeout(msgTimer);
     if (!text) { b.hidden = true; return; }
     b.textContent = text; b.hidden = false;
+    msgTimer = setTimeout(function () { b.hidden = true; }, ms || 6000);
   }
   function errText(r) { return ERR[r.error] || "Something went wrong. Try again."; }
 
@@ -1245,7 +1264,7 @@ window.RoveaFocusSprint = (function(){
     chatLog.forEach(function (m, i) { box.appendChild(chatLine(m, chatLog[i - 1])); });
     box.scrollTop = box.scrollHeight;
   }
-  function addChat(m) {
+    function addChat(m) {
     var prev = chatLog[chatLog.length - 1];
     chatLog.push(m);
     if (chatLog.length > 200) chatLog.shift();
@@ -1255,6 +1274,7 @@ window.RoveaFocusSprint = (function(){
     var atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
     box.appendChild(chatLine(m, prev));
     if (atBottom || (state && m.student_id === state.me)) box.scrollTop = box.scrollHeight;
+    else $("rmJump").hidden = false;
     var hiddenNow = $("rmPanel").hidden || $("rmTabChat").hidden;
     var mine = state && m.student_id === state.me;
     if (hiddenNow && !mine) { unread++; updateDot(); popDot(); }
@@ -1351,8 +1371,21 @@ window.RoveaFocusSprint = (function(){
         var row = mk("div", null, "rm-row");
         row.appendChild(mk("span", p.name + " · " + p.department + " · " + p.level + "L", "rm-grow"));
         row.appendChild(btn("Invite", function () {
+          var b = this;
+          if (b.disabled) return;
+          b.disabled = true;
           api("room/invite/", { student_id: p.id }).then(function (x) {
-            msg(x._ok ? "Invite sent to " + x.name + "." : errText(x));
+            if (x._ok) {
+              b.textContent = "Invited ✓";
+              b.classList.add("rm-done");
+              msg("Invite sent to " + x.name + ".");
+            } else {
+              b.disabled = false;
+              msg(errText(x));
+            }
+          }, function () {
+            b.disabled = false;
+            msg("Couldn't reach the server. Try again.");
           });
         }));
         box.appendChild(row);
@@ -1416,6 +1449,23 @@ window.RoveaFocusSprint = (function(){
     if (!state) return;
     window.open("https://wa.me/?text=" + encodeURIComponent("Join my study room on Rovea: " + roomLink()), "_blank", "noopener");
   });
+    // ── "New messages" pill ──
+  $("rmJump").addEventListener("click", function () {
+    var c = $("rmChat");
+    c.scrollTop = c.scrollHeight;
+    this.hidden = true;
+  });
+  $("rmChat").addEventListener("scroll", function () {
+    if (this.scrollHeight - this.scrollTop - this.clientHeight < 40) $("rmJump").hidden = true;
+  });
+
+  // ── Esc closes the panel ──
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape" || $("rmPanel").hidden) return;
+    if (!$("roveaDialog").hidden) return;   // a confirm dialog is open; it handles its own Esc
+    setOpen(false);
+    $("rmBtn").focus();
+  });
   refresh();
     // ── copy room link ──
   var copyBtn = $("rmCopy"), copyHTML = copyBtn.innerHTML, copyTimer = null;
@@ -1447,7 +1497,7 @@ window.RoveaFocusSprint = (function(){
         copyBtn.innerHTML = copyHTML;
       }, 2000);
     }, function () {
-      msg("Couldn't copy automatically. Copy this link: " + link);
+      msg("Couldn't copy automatically. Copy this link: " + link, 30000);
     });
   });
 
