@@ -74,6 +74,23 @@ RETRY_WAIT_SECONDS = 20
 class AllModelsUnavailable(RuntimeError):
     """Every model in MODELS was overloaded or out of quota."""
 
+QUESTIONS_SCHEMA = {
+    "type": "ARRAY",
+    "items": {
+        "type": "OBJECT",
+        "properties": {
+            "question": {"type": "STRING"},
+            "correct_answer": {"type": "STRING"},
+            "distractors": {
+                "type": "ARRAY",
+                "items": {"type": "STRING"},
+                "minItems": 3,
+                "maxItems": 3,
+            },
+        },
+        "required": ["question", "correct_answer", "distractors"],
+    },
+}
 
 def _call_with_retry(client, prompt, log):
     reasons = []
@@ -83,7 +100,11 @@ def _call_with_retry(client, prompt, log):
                 response = client.models.generate_content(
                     model=model,
                     contents=prompt,
-                    config=types.GenerateContentConfig(max_output_tokens=4000),
+                    config=types.GenerateContentConfig(
+                        max_output_tokens=8000,
+                        response_mime_type="application/json",
+                        response_schema=QUESTIONS_SCHEMA,
+                    ),
                 )
                 if not response.text or not response.text.strip():
                     raise ValueError("Empty response from model")
@@ -127,7 +148,7 @@ def eligible_lessons(level, department, course_code=None):
 
 def run_battle_question_generation(
     level, department, per_chunk=8, sleep_seconds=3.5, course_filter=None,
-    retry_failed=False, limit=10, log=print,
+    retry_failed=False, limit=10, include_completed=False, log=print,
 ):
     client = genai.Client(api_key=settings.GEMINI_API_KEY_BATTLE)
 
@@ -137,12 +158,22 @@ def run_battle_question_generation(
     )
 
     done_statuses = ["COMPLETED"] if retry_failed else ["COMPLETED", "FAILED"]
+    if include_completed:
+        done_statuses = [] if retry_failed else ["FAILED"]
     done_ids = set(
         BattleQuestionGenerationChunk.objects.filter(
             source_lesson_id__in=[l.id for l in lessons], status__in=done_statuses,
         ).values_list("source_lesson_id", flat=True)
     )
     pending = [l for l in lessons if l.id not in done_ids]
+    if include_completed:
+        from django.db.models import Count
+        counts = dict(
+            BattleQuestion.objects.filter(source_lesson_id__in=[l.id for l in pending])
+            .exclude(status="retired")
+            .values_list("source_lesson_id").annotate(n=Count("id"))
+        )
+        pending.sort(key=lambda l: counts.get(l.id, 0))   # fewest questions first
     if limit:
         pending = pending[:limit]
 
@@ -164,20 +195,36 @@ def run_battle_question_generation(
             target_count=per_chunk,
             slide_context=_VISUAL_FENCE_RE.sub("[diagram]", lesson.content_chunk)[:MAX_LESSON_CHARS],
         )
+        existing = list(
+            BattleQuestion.objects.filter(source_lesson=lesson)
+            .values_list("stem", flat=True)[:80]
+        )
+        if existing:
+            prompt += (
+                "\n\nQUESTIONS ALREADY WRITTEN FOR THIS LESSON. Do not repeat or reword any of "
+                "them. Test different facts, concepts or calculations from the lesson:\n"
+                + "\n".join(f"- {s}" for s in existing)
+            )
+        seen = {re.sub(r"\W+", " ", s).strip().lower() for s in existing}
         log(f"  {course.course_code} — {lesson.topic_title} ...")
 
         try:
-            response_text = _call_with_retry(client, prompt, log)
-            close_old_connections()   # the model call can outlive the DB connection
-            try:
-                questions_data = _repair_and_parse_json_array(response_text)
-            except (json.JSONDecodeError, ValueError) as parse_error:
+            questions_data = None
+            response_text = ""
+            parse_error = None
+            for parse_try in (1, 2):
+                response_text = _call_with_retry(client, prompt, log)
+                close_old_connections()
+                try:
+                    questions_data = _repair_and_parse_json_array(response_text)
+                    break
+                except (json.JSONDecodeError, ValueError) as e:
+                    parse_error = e
+                    log(f"    unparseable reply (try {parse_try}/2): {e}")
+            if questions_data is None:
                 raise ValueError(
                     f"{parse_error}\n\nRAW RESPONSE (truncated):\n{response_text[:1500]}"
                 ) from parse_error
-
-            if not isinstance(questions_data, list) or not questions_data:
-                raise ValueError(f"Model returned no usable questions\n\nRAW RESPONSE (truncated):\n{response_text[:1500]}")
 
             created = 0
             skipped_references = 0
@@ -191,6 +238,10 @@ def run_battle_question_generation(
                 if SOURCE_REFERENCE_RE.search(stem):
                     skipped_references += 1
                     continue
+                norm = re.sub(r"\W+", " ", stem).strip().lower()
+                if norm in seen:
+                    continue
+                seen.add(norm)
 
                 question = BattleQuestion.objects.create(
                     course_code=course.course_code,

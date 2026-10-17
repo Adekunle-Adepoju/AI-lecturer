@@ -366,7 +366,7 @@ def parse_past_questions(pq_id):
 
 # ─── Battle + simulator bank ──────────────────────────────────────────────────
 
-def generate_battle_questions(level, department, course_code, retry_failed, limit):
+def generate_battle_questions(level, department, course_code, retry_failed, limit, include_completed=False):
     _fresh_db()
     from battle.generation import run_battle_question_generation
 
@@ -382,14 +382,14 @@ def generate_battle_questions(level, department, course_code, retry_failed, limi
         department=department,
         per_chunk=8, sleep_seconds=3.5,
         course_filter=course_code or None,
-        retry_failed=retry_failed, limit=capped, log=live_log,
+        retry_failed=retry_failed, limit=capped, include_completed=include_completed, log=live_log,
     )
     if result["chunks_processed"] == 0:
         return (
             f"WARNING: no lessons to generate from for {department} {level}L"
             + (f" {course_code}" if course_code else "")
             + ". Generate the lessons first, or everything is already done "
-              "(tick 'Retry failed' to redo failures)."
+            + "(tick 'Retry failed' to redo failures, or 'Add more questions' to generate more from finished lessons)."
         )
     ok = result["chunks_processed"] - result["chunks_failed"]
     msg = f"{result['questions_generated']} question(s) from {ok} lesson(s) (pending_review)"

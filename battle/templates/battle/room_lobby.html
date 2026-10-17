@@ -245,12 +245,16 @@
   .res-progress .promo{margin-left:auto;font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;background:var(--gold);color:#1a1204;border-radius:6px;padding:3px 10px}
 
   @media(max-width:560px){
-    .teams,.mode-row,.skel-teams{grid-template-columns:1fr}
+    .teams,.mode-row,.skel-teams{grid-template-columns:minmax(0,1fr)}
+    .team-card,.mode-card{min-width:0}
+    .slot{min-width:0;flex-wrap:wrap}
+    .tier-tag,.ready-tick,.you-tag{flex:none;margin-left:0}
     .skel-card{height:160px}
     .vs-score{font-size:46px}.room-code{font-size:28px}.intro-title{font-size:28px}
     .loadout-option{min-height:52px}
     #buzz-btn{padding:24px}
   }
+    .slot .nm{flex:1 1 0}
   @media(prefers-reduced-motion:reduce){
     #buzz-btn.pulse,#timer-num.urgent,.spinner,.skel-card{animation:none}
   }

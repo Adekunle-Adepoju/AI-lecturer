@@ -2467,6 +2467,7 @@ def staff_generate_battle_questions_view(request):
         department = request.POST.get("department", "")
         course_code = request.POST.get("course_code", "") or None
         retry_failed = request.POST.get("retry_failed") == "on"
+        include_completed = request.POST.get("include_completed") == "on"
         try:
             limit = max(1, min(int(request.POST.get("limit", 10)), 200))
         except ValueError:
@@ -2477,7 +2478,7 @@ def staff_generate_battle_questions_view(request):
         else:
             _queue(
                 request, "generate_battle_questions",
-                level, department, course_code, retry_failed, limit,
+                level, department, course_code, retry_failed, limit, include_completed,
                 label=f"Generate battle questions {department} {level}L",
             )
             return redirect(f"{request.path}?{urlencode({'level': level, 'department': department})}")
@@ -3750,8 +3751,11 @@ def staff_review_battle_questions_view(request):
             if question.source_chunk:
                 BattleQuestionGenerationChunk.objects.filter(source_chunk=question.source_chunk).delete()
                 result_message = "Retired — source chunk reset for regeneration."
+            elif question.source_lesson_id:
+                BattleQuestionGenerationChunk.objects.filter(source_lesson_id=question.source_lesson_id).delete()
+                result_message = "Retired — lesson reset. Run the generator again to make new questions for it."
             else:
-                result_message = "Retired — no source chunk to regenerate."
+                result_message = "Retired — no source to regenerate."
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return JsonResponse({"ok": True, "message": result_message})
